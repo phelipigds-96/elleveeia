@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { login } from '../actions'
+import { signup } from '../actions'
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -12,7 +12,7 @@ export default function LoginPage() {
     setIsLoading(true)
     setError(null)
     
-    const result = await login(formData)
+    const result = await signup(formData)
     
     if (result?.error) {
       setError(result.error)
@@ -21,12 +21,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 p-4 py-12">
       <div className="w-full max-w-sm space-y-6 rounded-lg border bg-card p-8 shadow-sm">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Ellevee IA</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Criar Conta</h1>
           <p className="text-sm text-muted-foreground">
-            Entre na sua conta para continuar
+            Comece a usar a Ellevee IA agora mesmo
           </p>
         </div>
         
@@ -37,6 +37,20 @@ export default function LoginPage() {
         )}
 
         <form action={onSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium leading-none" htmlFor="fullName">
+              Nome Completo
+            </label>
+            <input
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              id="fullName"
+              name="fullName"
+              placeholder="Seu Nome"
+              type="text"
+              required
+              disabled={isLoading}
+            />
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium leading-none" htmlFor="email">
               E-mail
@@ -64,19 +78,32 @@ export default function LoginPage() {
               disabled={isLoading}
             />
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium leading-none" htmlFor="confirmPassword">
+              Confirme sua Senha
+            </label>
+            <input
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              required
+              disabled={isLoading}
+            />
+          </div>
           <button
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
             type="submit"
             disabled={isLoading}
           >
-            {isLoading ? 'Entrando...' : 'Entrar'}
+            {isLoading ? 'Criando conta...' : 'Cadastrar'}
           </button>
         </form>
 
         <div className="text-center text-sm text-muted-foreground">
-          Não tem uma conta?{' '}
-          <Link href="/signup" className="underline underline-offset-4 hover:text-primary">
-            Cadastre-se
+          Já tem uma conta?{' '}
+          <Link href="/login" className="underline underline-offset-4 hover:text-primary">
+            Faça login
           </Link>
         </div>
       </div>

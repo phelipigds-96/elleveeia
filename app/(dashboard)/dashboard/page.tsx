@@ -1,11 +1,33 @@
 import { MessageSquare, Users, Clock, ArrowRightLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  let profile = null
+  let company = null
+
+  if (user) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*, companies(*)')
+      .eq('id', user.id)
+      .single()
+      
+    if (profileData) {
+      profile = profileData
+      company = profileData.companies
+    }
+  }
+
+  const greetingName = profile?.full_name ? profile.full_name.split(' ')[0] : 'Usuário'
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Visão geral do seu atendimento.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Olá, {greetingName}!</h1>
+        <p className="text-muted-foreground">Visão geral do atendimento da sua empresa <strong>{company?.name}</strong>.</p>
       </div>
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

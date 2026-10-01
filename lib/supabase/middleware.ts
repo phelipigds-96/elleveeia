@@ -63,6 +63,7 @@ export async function updateSession(request: NextRequest) {
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
+    !request.nextUrl.pathname.startsWith('/signup') &&
     !request.nextUrl.pathname.startsWith('/auth')
   ) {
     const url = request.nextUrl.clone()
@@ -71,7 +72,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Redirect to dashboard if logged in and visiting home or login
-  if (user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/login')) {
+  if (user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

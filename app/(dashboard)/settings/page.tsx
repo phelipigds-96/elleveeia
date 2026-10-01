@@ -1,4 +1,23 @@
-export default function SettingsPage() {
+import { createClient } from '@/lib/supabase/server'
+
+export default async function SettingsPage() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  let company = null
+
+  if (user) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('company_id, role, companies(*)')
+      .eq('id', user.id)
+      .single()
+      
+    if (profileData) {
+      company = profileData.companies
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -22,8 +41,19 @@ export default function SettingsPage() {
                 </label>
                 <input
                   id="companyName"
-                  defaultValue="Empresa Teste"
+                  defaultValue={company?.name || ''}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium leading-none" htmlFor="companySlug">
+                  Slug (URL)
+                </label>
+                <input
+                  id="companySlug"
+                  defaultValue={company?.slug || ''}
+                  disabled
+                  className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
               <button
@@ -44,7 +74,7 @@ export default function SettingsPage() {
           </div>
           <div className="p-6">
             <div className="text-sm text-muted-foreground mb-4">
-              Apenas o administrador atual está cadastrado.
+              Apenas o administrador atual está cadastrado. Funcionalidade de convite em breve.
             </div>
             <button
               type="button"
