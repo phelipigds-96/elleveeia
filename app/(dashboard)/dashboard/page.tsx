@@ -17,7 +17,7 @@ export default async function DashboardPage() {
       
     if (profileData) {
       profile = profileData
-      company = profileData.companies
+      company = profileData.companies as any
     }
   }
 

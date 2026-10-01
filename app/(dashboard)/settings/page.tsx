@@ -14,7 +14,7 @@ export default async function SettingsPage() {
       .single()
       
     if (profileData) {
-      company = profileData.companies
+      company = profileData.companies as any
     }
   }
 

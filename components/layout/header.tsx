@@ -18,7 +18,7 @@ export async function Header() {
       
     if (profileData) {
       profile = profileData
-      company = profileData.companies
+      company = profileData.companies as any
     }
   }
 
