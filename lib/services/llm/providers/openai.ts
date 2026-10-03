@@ -1,4 +1,5 @@
 import { LLMProvider, LLMRequest, LLMResponse } from '../types'
+import { InternalToolCall } from '../../agent/tools'
 
 export class OpenAIProvider implements LLMProvider {
   async generateResponse(request: LLMRequest): Promise<LLMResponse> {
@@ -8,10 +9,48 @@ export class OpenAIProvider implements LLMProvider {
       throw new Error('A chave OPENAI_API_KEY não está configurada neste ambiente.')
     }
 
+    // Mapear mensagens do formato interno genérico para o formato OpenAI
+    const openAIMessages = request.messages.map(msg => {
+      if (msg.role === 'tool' && msg.tool_result) {
+        return {
+          role: 'tool',
+          tool_call_id: msg.tool_result.callId,
+          content: JSON.stringify(msg.tool_result)
+        }
+      }
+
+      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+        return {
+          role: 'assistant',
+          content: msg.content || null,
+          tool_calls: msg.tool_calls.map(tc => ({
+            id: tc.callId,
+            type: 'function',
+            function: {
+              name: tc.toolName,
+              arguments: JSON.stringify(tc.arguments)
+            }
+          }))
+        }
+      }
+
+      return {
+        role: msg.role,
+        content: msg.content
+      }
+    })
+
     const payload: any = {
       model: request.model,
-      messages: request.messages,
+      messages: openAIMessages,
       temperature: request.temperature ?? 0.7,
+    }
+
+    if (request.tools && request.tools.length > 0) {
+      payload.tools = request.tools.map(tool => ({
+        type: 'function',
+        function: tool
+      }))
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -34,17 +73,36 @@ export class OpenAIProvider implements LLMProvider {
       throw new Error('OpenAI retornou uma resposta vazia.')
     }
 
-    const choice = data.choices[0]
+    const choice = data.choices[0].message
+    
+    // Extrair tool_calls no formato interno
+    let internalToolCalls: InternalToolCall[] | undefined = undefined
+    if (choice.tool_calls && choice.tool_calls.length > 0) {
+      internalToolCalls = choice.tool_calls.map((tc: any) => {
+        let args = {}
+        try {
+          args = JSON.parse(tc.function.arguments)
+        } catch (e) {
+          // Argumentos mal formatados
+        }
+        return {
+          callId: tc.id,
+          toolName: tc.function.name,
+          arguments: args
+        }
+      })
+    }
     
     return {
-      content: choice.message.content || '',
+      content: choice.content || null,
       provider: 'openai',
       model: request.model,
       usage: {
         prompt_tokens: data.usage?.prompt_tokens || 0,
         completion_tokens: data.usage?.completion_tokens || 0,
         total_tokens: data.usage?.total_tokens || 0
-      }
+      },
+      tool_calls: internalToolCalls
     }
   }
 }

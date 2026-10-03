@@ -16,12 +16,33 @@ Uma empresa poderá ter um ou múltiplos agentes no futuro. Cada agente possui s
 
 Isso previne que a plataforma se torne um monólito acoplado a uma única regra de negócio. Um agente de Consultório terá a Tool de `Agendamento`, enquanto o agente de Loja possuirá a Tool de `Estoque`. As `Conversations` vinculam-se a esse `agent_id` garantindo rastreabilidade perfeita.
 
-## Agent Engine
-O coração do sistema fica na pasta `lib/services/agent/`.
-Ele é dividido em:
-- **Context Builder**: Carrega o Agent, extrai instructions, personality e segment, monta a lista controlada de History e garante o handoff (bloqueando respostas de IA se o status for human).
-- **Engine**: Coordena as transações, salva mensagens, aciona o LLM Provider e registra o consumo em `agent_runs`.
-- **Tools (Futuro)**: Abstrações criadas para o ToolRegistry.
+## Tool Engine (Function Calling)
+A arquitetura do Ellevee IA suporta **Function Calling genérico** e agnóstico a provedor (OpenAI / Gemini).
+As ferramentas são registradas e executadas seguindo o fluxo:
+
+```text
+Agent Engine
+     ↓
+LLM Provider (OpenAI/Gemini)
+     ↓
+Tool Call (InternalToolCall)
+     ↓
+Tool Registry (Busca definição e Schema Zod)
+     ↓
+Tool Executor (Valida inputs, executa com Contexto Seguro)
+     ↓
+Tool (ex: get_current_datetime)
+     ↓
+Tool Result (InternalToolResult)
+     ↓
+Agent Engine Loop (Até 5 iterações)
+     ↓
+LLM Provider
+     ↓
+Resposta Final (Persistida e devolvida)
+```
+
+**Segurança:** O Agent Engine passa um `ToolExecutionContext` com `companyId`, `agentId` e `conversationId` validados do backend. O LLM não tem acesso para falsificar o tenant, e todas as entradas de função são obrigatoriamente validadas via **Zod**.
 
 ## LLM Provider Abstraction
 O Ellevee IA suporta nativamente **Múltiplos Provedores de IA**, estruturados em `lib/services/llm/`:
