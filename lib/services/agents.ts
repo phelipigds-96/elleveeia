@@ -2,11 +2,17 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { getCompanyId } from '@/lib/services/conversations'
+
+async function getCompanyId(supabase: any) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single()
+  return profile?.company_id
+}
 
 export async function listAgents() {
   const supabase = createClient()
-  const companyId = await getCompanyId()
+  const companyId = await getCompanyId(supabase)
   if (!companyId) return []
 
   const { data, error } = await supabase
@@ -25,7 +31,7 @@ export async function listAgents() {
 
 export async function getAgent(id: string) {
   const supabase = createClient()
-  const companyId = await getCompanyId()
+  const companyId = await getCompanyId(supabase)
   if (!companyId) return null
 
   const { data, error } = await supabase
@@ -50,25 +56,29 @@ export async function createAgent(params: {
   instructions: string
   is_active: boolean
 }) {
-  const supabase = createClient()
-  const companyId = await getCompanyId()
-  if (!companyId) throw new Error('Não autorizado')
+  try {
+    const supabase = createClient()
+    const companyId = await getCompanyId(supabase)
+    if (!companyId) return { error: 'Sessão inválida ou empresa não localizada.' }
 
-  if (!params.name.trim()) throw new Error('O nome do agente é obrigatório.')
+    if (!params.name.trim()) return { error: 'O nome do agente é obrigatório.' }
 
-  const { data, error } = await supabase.from('agents').insert({
-    company_id: companyId,
-    name: params.name,
-    segment: params.segment,
-    personality: params.personality,
-    instructions: params.instructions,
-    is_active: params.is_active
-  }).select().single()
+    const { data, error } = await supabase.from('agents').insert({
+      company_id: companyId,
+      name: params.name,
+      segment: params.segment || null,
+      personality: params.personality || null,
+      instructions: params.instructions || null,
+      is_active: params.is_active
+    }).select().single()
 
-  if (error) throw new Error(`Falha ao criar agente: ${error.message}`)
+    if (error) return { error: `Falha no Supabase: ${error.message}` }
 
-  revalidatePath('/agent')
-  return data
+    revalidatePath('/agent')
+    return { data }
+  } catch (err: any) {
+    return { error: `Erro interno: ${err.message}` }
+  }
 }
 
 export async function updateAgent(id: string, params: {
@@ -78,58 +88,72 @@ export async function updateAgent(id: string, params: {
   instructions: string
   is_active: boolean
 }) {
-  const supabase = createClient()
-  const companyId = await getCompanyId()
-  if (!companyId) throw new Error('Não autorizado')
+  try {
+    const supabase = createClient()
+    const companyId = await getCompanyId(supabase)
+    if (!companyId) return { error: 'Não autorizado' }
 
-  if (!params.name.trim()) throw new Error('O nome do agente é obrigatório.')
+    if (!params.name.trim()) return { error: 'O nome do agente é obrigatório.' }
 
-  const { data, error } = await supabase.from('agents').update({
-    name: params.name,
-    segment: params.segment,
-    personality: params.personality,
-    instructions: params.instructions,
-    is_active: params.is_active,
-    updated_at: new Date().toISOString()
-  })
-  .eq('id', id)
-  .eq('company_id', companyId)
-  .select().single()
+    const { data, error } = await supabase.from('agents').update({
+      name: params.name,
+      segment: params.segment || null,
+      personality: params.personality || null,
+      instructions: params.instructions || null,
+      is_active: params.is_active,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .select().single()
 
-  if (error) throw new Error(`Falha ao atualizar agente: ${error.message}`)
+    if (error) return { error: `Falha no Supabase: ${error.message}` }
 
-  revalidatePath('/agent')
-  return data
+    revalidatePath('/agent')
+    return { data }
+  } catch (err: any) {
+    return { error: `Erro interno: ${err.message}` }
+  }
 }
 
 export async function toggleAgentStatus(id: string, currentStatus: boolean) {
-  const supabase = createClient()
-  const companyId = await getCompanyId()
-  if (!companyId) throw new Error('Não autorizado')
+  try {
+    const supabase = createClient()
+    const companyId = await getCompanyId(supabase)
+    if (!companyId) return { error: 'Não autorizado' }
 
-  const { error } = await supabase.from('agents').update({
-    is_active: !currentStatus,
-    updated_at: new Date().toISOString()
-  })
-  .eq('id', id)
-  .eq('company_id', companyId)
-
-  if (error) throw new Error(`Falha ao alterar status do agente: ${error.message}`)
-
-  revalidatePath('/agent')
-}
-
-export async function deleteAgent(id: string) {
-  const supabase = createClient()
-  const companyId = await getCompanyId()
-  if (!companyId) throw new Error('Não autorizado')
-
-  const { error } = await supabase.from('agents')
-    .delete()
+    const { error } = await supabase.from('agents').update({
+      is_active: !currentStatus,
+      updated_at: new Date().toISOString()
+    })
     .eq('id', id)
     .eq('company_id', companyId)
 
-  if (error) throw new Error(`Falha ao excluir agente: ${error.message}`)
+    if (error) return { error: `Falha no Supabase: ${error.message}` }
 
-  revalidatePath('/agent')
+    revalidatePath('/agent')
+    return { success: true }
+  } catch (err: any) {
+    return { error: `Erro interno: ${err.message}` }
+  }
+}
+
+export async function deleteAgent(id: string) {
+  try {
+    const supabase = createClient()
+    const companyId = await getCompanyId(supabase)
+    if (!companyId) return { error: 'Não autorizado' }
+
+    const { error } = await supabase.from('agents')
+      .delete()
+      .eq('id', id)
+      .eq('company_id', companyId)
+
+    if (error) return { error: `Falha no Supabase: ${error.message}` }
+
+    revalidatePath('/agent')
+    return { success: true }
+  } catch (err: any) {
+    return { error: `Erro interno: ${err.message}` }
+  }
 }

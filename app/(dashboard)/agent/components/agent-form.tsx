@@ -54,10 +54,12 @@ export function AgentForm({ initialData }: { initialData?: any }) {
 
     try {
       if (isEditing) {
-        await updateAgent(initialData.id, payload)
+        const res = await updateAgent(initialData.id, payload)
+        if (res?.error) throw new Error(res.error)
         setSuccess('Agente atualizado com sucesso.')
       } else {
-        await createAgent(payload)
+        const res = await createAgent(payload)
+        if (res?.error) throw new Error(res.error)
         setSuccess('Agente criado com sucesso.')
         router.push('/agent')
       }

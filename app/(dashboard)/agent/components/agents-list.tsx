@@ -12,7 +12,8 @@ export function AgentsList({ initialAgents }: { initialAgents: any[] }) {
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
     setIsProcessing(id)
     try {
-      await toggleAgentStatus(id, currentStatus)
+      const res = await toggleAgentStatus(id, currentStatus)
+      if (res?.error) throw new Error(res.error)
       setAgents(prev => prev.map(a => a.id === id ? { ...a, is_active: !currentStatus } : a))
     } catch (error: any) {
       alert(error.message)
@@ -28,7 +29,8 @@ export function AgentsList({ initialAgents }: { initialAgents: any[] }) {
     
     setIsProcessing(id)
     try {
-      await deleteAgent(id)
+      const res = await deleteAgent(id)
+      if (res?.error) throw new Error(res.error)
       setAgents(prev => prev.filter(a => a.id !== id))
     } catch (error: any) {
       alert(error.message)
