@@ -47,6 +47,14 @@ export async function signup(formData: FormData) {
     return { error: signUpError.message }
   }
 
+  // Chama a RPC para criar a empresa e o perfil usando a sessão recém-criada
+  const { error: rpcError } = await supabase.rpc('create_tenant', { full_name: fullName })
+  
+  if (rpcError) {
+    console.error('Falha ao criar tenant:', rpcError)
+    return { error: 'Conta criada, mas falha ao provisionar empresa. Contate o suporte.' }
+  }
+
   revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
