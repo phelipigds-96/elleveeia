@@ -5,16 +5,19 @@ import { runAgentEngine } from './engine'
 import { getCompanyId } from '@/lib/services/conversations'
 
 export async function testAgentEngine(agentId: string, conversationId: string, message: string) {
-  const companyId = await getCompanyId()
-  if (!companyId) throw new Error('Não autorizado')
+  try {
+    const companyId = await getCompanyId()
+    if (!companyId) return { success: false, error: 'Sessão inválida ou empresa não localizada. Refaça o login.' }
 
-  // Chama o engine diretamente (wrapper)
-  return await runAgentEngine({
-    companyId,
-    agentId,
-    conversationId,
-    userMessage: message
-  })
+    return await runAgentEngine({
+      companyId,
+      agentId,
+      conversationId,
+      userMessage: message
+    })
+  } catch (err: any) {
+    return { success: false, error: `Erro no servidor: ${err.message}`, details: err.stack }
+  }
 }
 
 export async function getTestContext() {
