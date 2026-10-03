@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { testAgentEngine } from '@/lib/services/agent/actions'
 import { Loader2, Bot, MessageSquare, Activity } from 'lucide-react'
 
-export function TestPlayground({ agents, conversations }: { agents: any[], conversations: any[] }) {
-  const [selectedAgent, setSelectedAgent] = useState(agents[0]?.id || '')
+export function TestPlayground({ agents, conversations, defaultAgentId }: { agents: any[], conversations: any[], defaultAgentId?: string }) {
+  const [selectedAgent, setSelectedAgent] = useState(defaultAgentId || agents[0]?.id || '')
   const [selectedConv, setSelectedConv] = useState(conversations[0]?.id || '')
   const [message, setMessage] = useState('')
   

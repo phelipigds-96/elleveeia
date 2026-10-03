@@ -8,7 +8,7 @@ const mainLinks = [
 ]
 
 const agentLinks = [
-  { href: '/agent', label: 'Agente IA', icon: Bot },
+  { href: '/agent', label: 'Agentes', icon: Bot },
   { href: '#', label: 'Conhecimento (Em breve)', icon: BookOpen, disabled: true },
   { href: '#', label: 'Ferramentas (Em breve)', icon: Wrench, disabled: true },
 ]
