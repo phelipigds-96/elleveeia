@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { CompanyForm } from './components/company-form'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -34,35 +35,7 @@ export default async function SettingsPage() {
             <p className="text-sm text-muted-foreground">Dados cadastrais do seu tenant.</p>
           </div>
           <div className="p-6">
-            <form className="space-y-4">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium leading-none" htmlFor="companyName">
-                  Nome da Empresa
-                </label>
-                <input
-                  id="companyName"
-                  defaultValue={company?.name || ''}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium leading-none" htmlFor="companySlug">
-                  Slug (URL)
-                </label>
-                <input
-                  id="companySlug"
-                  defaultValue={company?.slug || ''}
-                  disabled
-                  className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-              >
-                Salvar Empresa
-              </button>
-            </form>
+            <CompanyForm company={company} />
           </div>
         </div>
 
