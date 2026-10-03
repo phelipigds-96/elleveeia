@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/service'
 
 export async function login(formData: FormData) {
   const supabase = createClient()
@@ -47,12 +48,38 @@ export async function signup(formData: FormData) {
     return { error: signUpError.message }
   }
 
-  // Chama a RPC para criar a empresa e o perfil usando a sessão recém-criada
-  const { error: rpcError } = await supabase.rpc('create_tenant', { full_name: fullName })
-  
-  if (rpcError) {
-    console.error('Falha ao criar tenant:', rpcError)
-    return { error: 'Conta criada, mas falha ao provisionar empresa. Contate o suporte.' }
+  // Provisionar a empresa contornando a falta de permissões caso a sessão não inicie
+  if (data.user) {
+    const adminClient = createAdminClient()
+    const firstName = fullName.split(' ')[0]
+    const companyName = `Empresa de ${firstName}`
+    const slug = `${companyName.toLowerCase().replace(/\W+/g, '-')}-${Date.now()}`
+
+    const { data: company, error: companyError } = await adminClient
+      .from('companies')
+      .insert({ name: companyName, slug })
+      .select()
+      .single()
+
+    if (companyError || !company) {
+      console.error('Falha ao criar company:', companyError)
+      return { error: 'Conta criada, mas falha ao provisionar empresa. Contate o suporte.' }
+    }
+
+    const { error: profileError } = await adminClient
+      .from('profiles')
+      .insert({
+        id: data.user.id,
+        company_id: company.id,
+        full_name: fullName,
+        email: email,
+        role: 'admin'
+      })
+
+    if (profileError) {
+      console.error('Falha ao criar profile:', profileError)
+      return { error: 'Conta criada, mas falha ao provisionar perfil. Contate o suporte.' }
+    }
   }
 
   revalidatePath('/', 'layout')
