@@ -77,6 +77,7 @@ export async function sendMessage(conversationId: string, content: string) {
   const companyId = await getCompanyId()
   if (!companyId) return null
 
+  // 1. Persist local message
   const { data: message, error } = await supabase.from('messages').insert({
     company_id: companyId,
     conversation_id: conversationId,
@@ -95,6 +96,30 @@ export async function sendMessage(conversationId: string, content: string) {
   await supabase.from('conversations')
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', conversationId)
+
+  // 2. Fetch customer details to build the outbound payload
+  const { data: conv } = await supabase.from('conversations').select('*, customers(phone)').eq('id', conversationId).single()
+
+  // 3. Dispatch to n8n (Outbound)
+  // We use dynamic import so it doesn't break if not available, but since we created it, it is.
+  const { sendOutboundMessage } = await import('@/lib/services/n8n-service')
+  
+  const outboundPayload = {
+    event_id: `outbound-${message.id}`,
+    event_type: 'message.send',
+    channel: conv?.channel || 'whatsapp',
+    conversation_id: conversationId,
+    customer: {
+      phone: conv?.customers?.phone
+    },
+    message: {
+      content: content,
+      message_type: 'text'
+    },
+    metadata: {}
+  }
+  
+  await sendOutboundMessage(companyId, outboundPayload)
 
   revalidatePath('/conversations')
   return message
