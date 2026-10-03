@@ -20,7 +20,7 @@ export async function listAgents() {
     return []
   }
 
-  return data
+  return data || []
 }
 
 export async function getAgent(id: string) {

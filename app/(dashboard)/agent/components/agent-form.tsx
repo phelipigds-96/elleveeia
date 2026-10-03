@@ -9,17 +9,6 @@ export function AgentForm({ initialData }: { initialData?: any }) {
   const router = useRouter()
   const isEditing = !!initialData
 
-  const [name, setName] = useState(initialData?.name || '')
-  const [segment, setSegment] = useState(initialData?.segment || '')
-  const [customSegment, setCustomSegment] = useState('')
-  const [personality, setPersonality] = useState(initialData?.personality || '')
-  const [instructions, setInstructions] = useState(initialData?.instructions || '')
-  const [isActive, setIsActive] = useState<boolean>(initialData?.is_active ?? true)
-
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-
   const segments = [
     'Consultório / Clínica',
     'Salão de festas / Eventos',
@@ -31,15 +20,21 @@ export function AgentForm({ initialData }: { initialData?: any }) {
     'Outro'
   ]
 
+  const initialDbSegment = initialData?.segment || ''
+  const isCustomInitial = initialDbSegment && !segments.includes(initialDbSegment)
+
+  const [name, setName] = useState(initialData?.name || '')
+  const [segment, setSegment] = useState(isCustomInitial ? 'Outro' : initialDbSegment)
+  const [customSegment, setCustomSegment] = useState(isCustomInitial ? initialDbSegment : '')
+  const [personality, setPersonality] = useState(initialData?.personality || '')
+  const [instructions, setInstructions] = useState(initialData?.instructions || '')
+  const [isActive, setIsActive] = useState<boolean>(initialData?.is_active ?? true)
+
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
   const isCustomSegment = segment === 'Outro'
-  
-  // Initialize segment state correctly if it's a custom one loaded from DB
-  useState(() => {
-    if (initialData?.segment && !segments.includes(initialData.segment)) {
-      setSegment('Outro')
-      setCustomSegment(initialData.segment)
-    }
-  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
