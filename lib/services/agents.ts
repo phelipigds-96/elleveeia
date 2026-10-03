@@ -54,6 +54,8 @@ export async function createAgent(params: {
   segment: string
   personality: string
   instructions: string
+  provider: string
+  model: string
   is_active: boolean
 }) {
   try {
@@ -69,6 +71,8 @@ export async function createAgent(params: {
       segment: params.segment || null,
       personality: params.personality || null,
       instructions: params.instructions || null,
+      provider: params.provider || 'openai',
+      model: params.model || 'gpt-4o-mini',
       is_active: params.is_active
     }).select().single()
 
@@ -86,6 +90,8 @@ export async function updateAgent(id: string, params: {
   segment: string
   personality: string
   instructions: string
+  provider: string
+  model: string
   is_active: boolean
 }) {
   try {
@@ -100,6 +106,8 @@ export async function updateAgent(id: string, params: {
       segment: params.segment || null,
       personality: params.personality || null,
       instructions: params.instructions || null,
+      provider: params.provider || 'openai',
+      model: params.model || 'gpt-4o-mini',
       is_active: params.is_active,
       updated_at: new Date().toISOString()
     })

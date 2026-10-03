@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { testAgentEngine } from '@/lib/services/agent/actions'
-import { Loader2, Bot, MessageSquare, Activity } from 'lucide-react'
+import { Loader2, Bot, MessageSquare, Activity, Cpu } from 'lucide-react'
 
 export function TestPlayground({ agents, conversations, defaultAgentId }: { agents: any[], conversations: any[], defaultAgentId?: string }) {
   const [selectedAgent, setSelectedAgent] = useState(defaultAgentId || agents[0]?.id || '')
@@ -11,6 +11,8 @@ export function TestPlayground({ agents, conversations, defaultAgentId }: { agen
   
   const [isRunning, setIsRunning] = useState(false)
   const [result, setResult] = useState<any>(null)
+
+  const activeAgentData = agents.find(a => a.id === selectedAgent)
 
   const handleTest = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,7 +50,7 @@ export function TestPlayground({ agents, conversations, defaultAgentId }: { agen
             >
               <option value="">Selecione...</option>
               {agents.map(a => (
-                <option key={a.id} value={a.id}>{a.name} ({a.model})</option>
+                <option key={a.id} value={a.id}>{a.name} ({a.provider} - {a.model})</option>
               ))}
             </select>
           </div>
@@ -88,7 +90,7 @@ export function TestPlayground({ agents, conversations, defaultAgentId }: { agen
             className="w-full h-10 inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground font-medium disabled:opacity-50 transition-colors hover:bg-primary/90"
           >
             {isRunning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isRunning ? 'Processando (OpenAI)...' : 'Executar Agent Engine'}
+            {isRunning ? 'Processando...' : 'Executar Agent Engine'}
           </button>
         </form>
       </div>
@@ -104,7 +106,9 @@ export function TestPlayground({ agents, conversations, defaultAgentId }: { agen
             {result.success ? (
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <span className="text-xs font-semibold uppercase text-muted-foreground">Resposta do LLM:</span>
+                  <span className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1 mb-2">
+                    <Cpu className="h-3 w-3" /> Provedor: {activeAgentData?.provider} ({activeAgentData?.model})
+                  </span>
                   <div className="p-4 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap leading-relaxed border">
                     {result.message}
                   </div>
@@ -143,7 +147,7 @@ export function TestPlayground({ agents, conversations, defaultAgentId }: { agen
         ) : (
           <div className="p-12 border rounded-xl border-dashed flex flex-col items-center justify-center text-center text-muted-foreground opacity-60">
             <Bot className="h-12 w-12 mb-4" />
-            <p className="text-sm">Preencha o formulário e clique em Executar para testar a comunicação com a OpenAI.</p>
+            <p className="text-sm">Preencha o formulário e clique em Executar para testar a comunicação com a IA.</p>
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createAgent, updateAgent } from '@/lib/services/agents'
 import { Loader2 } from 'lucide-react'
+import { LLM_MODELS } from '@/lib/services/llm/factory'
+import { LLMProviderType } from '@/lib/services/llm/types'
 
 export function AgentForm({ initialData }: { initialData?: any }) {
   const router = useRouter()
@@ -28,6 +30,10 @@ export function AgentForm({ initialData }: { initialData?: any }) {
   const [customSegment, setCustomSegment] = useState(isCustomInitial ? initialDbSegment : '')
   const [personality, setPersonality] = useState(initialData?.personality || '')
   const [instructions, setInstructions] = useState(initialData?.instructions || '')
+  
+  const [provider, setProvider] = useState<LLMProviderType>((initialData?.provider as LLMProviderType) || 'openai')
+  const [model, setModel] = useState<string>(initialData?.model || 'gpt-4o-mini')
+
   const [isActive, setIsActive] = useState<boolean>(initialData?.is_active ?? true)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,6 +41,14 @@ export function AgentForm({ initialData }: { initialData?: any }) {
   const [success, setSuccess] = useState<string | null>(null)
 
   const isCustomSegment = segment === 'Outro'
+
+  const handleProviderChange = (newProvider: LLMProviderType) => {
+    setProvider(newProvider)
+    const availableModels = LLM_MODELS[newProvider]
+    if (availableModels && availableModels.length > 0) {
+      setModel(availableModels[0].id)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,6 +63,8 @@ export function AgentForm({ initialData }: { initialData?: any }) {
       segment: finalSegment,
       personality,
       instructions,
+      provider,
+      model,
       is_active: isActive
     }
 
@@ -97,6 +113,37 @@ export function AgentForm({ initialData }: { initialData?: any }) {
             placeholder="Ex: Luna"
             className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium leading-none">
+              Provedor de IA
+            </label>
+            <select
+              value={provider}
+              onChange={e => handleProviderChange(e.target.value as LLMProviderType)}
+              className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-sm font-medium leading-none">
+              Modelo
+            </label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {LLM_MODELS[provider]?.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="grid gap-2">
