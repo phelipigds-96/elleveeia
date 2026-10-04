@@ -5,6 +5,7 @@ const mainLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/conversations', label: 'Conversas', icon: MessageSquare },
   { href: '/customers', label: 'Clientes', icon: Users },
+  { href: '/catalog', label: 'Catálogo', icon: BookOpen },
 ]
 
 const agentLinks = [

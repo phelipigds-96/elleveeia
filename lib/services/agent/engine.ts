@@ -4,6 +4,8 @@ import { getLLMProvider } from '../llm/factory'
 import { LLMProviderType, LLMRequestMessage } from '../llm/types'
 import { ToolRegistry, ToolExecutor } from './tools'
 import { getCurrentDatetimeTool } from './tools/get-current-datetime'
+import { buscarProdutoTool } from './tools/buscar-produto'
+import { consultarPrecoTool } from './tools/consultar-preco'
 
 const MAX_TOOL_ITERATIONS = 5
 
@@ -49,7 +51,10 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     // Configurar Registry e Executor
     const registry = new ToolRegistry()
-    registry.register(getCurrentDatetimeTool) // Registro global da ferramenta de teste
+    registry.register(getCurrentDatetimeTool) 
+    registry.register(buscarProdutoTool)
+    registry.register(consultarPrecoTool)
+    
     const executor = new ToolExecutor(registry)
     const availableTools = registry.getProviderPayload()
 

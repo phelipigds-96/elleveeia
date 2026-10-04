@@ -16,6 +16,25 @@ Uma empresa poderá ter um ou múltiplos agentes no futuro. Cada agente possui s
 
 Isso previne que a plataforma se torne um monólito acoplado a uma única regra de negócio. Um agente de Consultório terá a Tool de `Agendamento`, enquanto o agente de Loja possuirá a Tool de `Estoque`. As `Conversations` vinculam-se a esse `agent_id` garantindo rastreabilidade perfeita.
 
+## Business Data Architecture
+
+A arquitetura de dados do negócio opera sob o seguinte padrão estrito:
+
+```text
+Company
+ ↓
+Business Data (Products, Prices, Inventory, etc.)
+ ↓
+Tools (Validadas e isoladas por companyId)
+ ↓
+Agent Engine
+ ↓
+LLM Provider
+```
+
+- **Isolamento de Tenant**: Os dados de negócios (`products`, `product_prices`, etc.) pertencem rigidamente a uma `company`. Um Agent Engine jamais trafega um catálogo inteiro no prompt, e as `Tools` injetam o `companyId` no nível do servidor (via `ToolExecutionContext`).
+- **Independência de Segmento**: O Agent Engine **não conhece regras específicas** de nenhum varejo (ex: Sumel). Ele simplesmente aciona a `buscar_produto` se o LLM desejar e responde de volta, permitindo que a mesma infraestrutura atenda Clínicas, Oficinas ou Restaurantes.
+
 ## Tool Engine (Function Calling)
 A arquitetura do Ellevee IA suporta **Function Calling genérico** e agnóstico a provedor (OpenAI / Gemini).
 As ferramentas são registradas e executadas seguindo o fluxo:
