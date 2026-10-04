@@ -19,9 +19,8 @@ export class GeminiProvider implements LLMProvider {
       if (msg.role === 'system') {
         systemInstruction += msg.content + '\n'
       } else if (msg.role === 'tool' && msg.tool_result) {
-        // Formato Gemini para resultado de tool
         contents.push({
-          role: 'user', // Gemini SDK pode exigir role user contendo a part functionResponse
+          role: 'user',
           parts: [{
             functionResponse: {
               name: msg.tool_result.toolName,
@@ -30,13 +29,20 @@ export class GeminiProvider implements LLMProvider {
           }]
         })
       } else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        // Formato Gemini para assistant solicitando tool
-        const functionCallParts = msg.tool_calls.map(tc => ({
-          functionCall: {
-            name: tc.toolName,
-            args: tc.arguments
+        // Restaurar as chamadas de função com suas respectivas thoughtSignatures (obrigatório no Gemini 3+)
+        const functionCallParts = msg.tool_calls.map(tc => {
+          const part: any = {
+            functionCall: {
+              name: tc.toolName,
+              args: tc.arguments
+            }
           }
-        }))
+          if (tc.providerMetadata?.thoughtSignature) {
+            part.thoughtSignature = tc.providerMetadata.thoughtSignature
+          }
+          return part
+        })
+
         contents.push({
           role: 'model',
           parts: functionCallParts
@@ -58,7 +64,6 @@ export class GeminiProvider implements LLMProvider {
     }
 
     if (request.tools && request.tools.length > 0) {
-      // Mapear o payload genérico para o functionDeclarations do Gemini
       config.tools = [{
         functionDeclarations: request.tools.map(tool => ({
           name: tool.name,
@@ -78,11 +83,18 @@ export class GeminiProvider implements LLMProvider {
     let internalToolCalls: InternalToolCall[] | undefined = undefined
     let contentText = ''
 
-    if (response.functionCalls && response.functionCalls.length > 0) {
-      internalToolCalls = response.functionCalls.map((fc: any, index: number) => ({
-        callId: `call_${index}`, // Gemini não usa ID único para a call como a OpenAI
-        toolName: fc.name,
-        arguments: fc.args || {}
+    // Extrair function calls diretamente das parts para capturar a thoughtSignature
+    const candidateParts = response.candidates?.[0]?.content?.parts || []
+    const functionCallParts = candidateParts.filter(p => p.functionCall)
+
+    if (functionCallParts.length > 0) {
+      internalToolCalls = functionCallParts.map((part: any, index: number) => ({
+        callId: `call_${index}`,
+        toolName: part.functionCall.name,
+        arguments: part.functionCall.args || {},
+        providerMetadata: {
+          thoughtSignature: part.thoughtSignature
+        }
       }))
     }
 

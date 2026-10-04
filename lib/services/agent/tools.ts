@@ -11,6 +11,7 @@ export interface InternalToolCall {
   callId: string
   toolName: string
   arguments: any
+  providerMetadata?: any
 }
 
 export interface InternalToolResult {
