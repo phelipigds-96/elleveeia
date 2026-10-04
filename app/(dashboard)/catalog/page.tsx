@@ -3,6 +3,9 @@ import { getCompanyId } from '@/lib/services/conversations'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+
 export default async function CatalogPage() {
   const supabase = createClient()
   const companyId = await getCompanyId()
@@ -29,11 +32,16 @@ export default async function CatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Catálogo de Produtos</h2>
-        <p className="text-muted-foreground">
-          Gerencie os produtos da sua empresa que o Agente utilizará para responder os clientes.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Catálogo de Produtos</h2>
+          <p className="text-muted-foreground">
+            Gerencie os produtos da sua empresa que o Agente utilizará para responder os clientes.
+          </p>
+        </div>
+        <Link href="/catalog/import">
+          <Button>Importar CSV</Button>
+        </Link>
       </div>
 
       <Card>

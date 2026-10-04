@@ -35,6 +35,31 @@ LLM Provider
 - **Isolamento de Tenant**: Os dados de negócios (`products`, `product_prices`, etc.) pertencem rigidamente a uma `company`. Um Agent Engine jamais trafega um catálogo inteiro no prompt, e as `Tools` injetam o `companyId` no nível do servidor (via `ToolExecutionContext`).
 - **Independência de Segmento**: O Agent Engine **não conhece regras específicas** de nenhum varejo (ex: Sumel). Ele simplesmente aciona a `buscar_produto` se o LLM desejar e responde de volta, permitindo que a mesma infraestrutura atenda Clínicas, Oficinas ou Restaurantes.
 
+## Catalog Import Pipeline
+
+O Ellevee permite a ingestão assíncrona/batch de produtos, de maneira idempotente e amarrada a tenants.
+
+```text
+CSV
+ ↓
+Parser (Server Action manual via Node buffer)
+ ↓
+Validation (Ignora linhas vazias ou de rodapé)
+ ↓
+Normalization (Usa função agnóstica de texto)
+ ↓
+Preview (UI exibe amostra)
+ ↓
+Confirmation
+ ↓
+Import Service (Supabase UPSERT constraint)
+ ↓
+Products / Brands / Categories / Prices
+```
+- **Identificadores**: Para garantir a idempotência e atualizações parciais de catálogos grandes, utilizamos a restrição `UNIQUE (company_id, sku)`. Na importação via CSV, o `código` atua como SKU confiável da loja.
+- **Tratamento de Preços**: A coluna de vendas do CSV é persistida dinamicamente na sub-tabela `product_prices` sob o tipo `retail`, suportando a expansão futura para atacados e promoções de quantidade sem alterar a modelagem principal.
+- **Código de Barras**: Mapeado sempre em formato String para blindar perdas de Zeros-à-Esquerda ou notações científicas (`E+12`) provindas de exportações corrompidas de planilhas de terceiros.
+
 ## Tool Engine (Function Calling)
 A arquitetura do Ellevee IA suporta **Function Calling genérico** e agnóstico a provedor (OpenAI / Gemini).
 As ferramentas são registradas e executadas seguindo o fluxo:

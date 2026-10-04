@@ -2,114 +2,97 @@ import { createAdminClient } from '@/lib/supabase/service'
 import { normalizeCatalogText } from './normalization'
 
 export interface CatalogImportRow {
-  name: string
-  sku?: string
-  barcode?: string
-  brandName?: string
-  categoryName?: string
-  priceRetail?: number
+  codigo: string
+  barras: string | null
+  nome: string
+  preco: number | null
+}
+
+export interface CatalogImportResult {
+  successCount: number
+  errorCount: number
+  errors: string[]
 }
 
 /**
- * Função utilitária para importar produtos. (Mock/Estrutura preparada)
- * Em uma próxima fase, essa função pode ser chamada por um Webhook ou upload de CSV.
+ * Serviço genérico para importar produtos de um arquivo.
+ * Recebe o formato limpo validado pelo Server Action.
+ * Utiliza o ID externo (código/sku) como chave de idempotência.
  */
-export async function importProductsCSV(companyId: string, rows: CatalogImportRow[]) {
+export async function importProductsBatch(companyId: string, rows: CatalogImportRow[]): Promise<CatalogImportResult> {
   const supabase = createAdminClient()
+  
   let successCount = 0
   let errorCount = 0
+  const errors: string[] = []
 
-  for (const row of rows) {
-    try {
-      // 1. Resolve ou cria Marca (se fornecida)
-      let brandId = null
-      if (row.brandName) {
-        const normalizedBrand = normalizeCatalogText(row.brandName)
-        const { data: brand } = await supabase
-          .from('product_brands')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('normalized_name', normalizedBrand)
-          .single()
-        
-        if (brand) {
-          brandId = brand.id
-        } else {
-          const { data: newBrand } = await supabase
-            .from('product_brands')
-            .insert({
-              company_id: companyId,
-              name: row.brandName,
-              normalized_name: normalizedBrand
-            })
-            .select('id')
-            .single()
-          brandId = newBrand?.id
-        }
-      }
+  // Processa em lotes (batches) de 500 para não estourar memória / limite da API
+  const BATCH_SIZE = 500
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE)
+    
+    // 1. Mapear Produtos para UPSERT
+    const productsPayload = batch.map(row => ({
+      company_id: companyId,
+      external_id: row.codigo, // Usamos o código como external_id
+      sku: row.codigo,         // E também como SKU (chave única com company_id)
+      barcode: row.barras || null,
+      name: row.nome,
+      normalized_name: normalizeCatalogText(row.nome),
+      active: true,
+      updated_at: new Date().toISOString()
+    }))
 
-      // 2. Resolve ou cria Categoria (se fornecida)
-      let categoryId = null
-      if (row.categoryName) {
-        const normalizedCat = normalizeCatalogText(row.categoryName)
-        const { data: cat } = await supabase
-          .from('product_categories')
-          .select('id')
-          .eq('company_id', companyId)
-          .eq('normalized_name', normalizedCat)
-          .single()
-        
-        if (cat) {
-          categoryId = cat.id
-        } else {
-          const { data: newCat } = await supabase
-            .from('product_categories')
-            .insert({
-              company_id: companyId,
-              name: row.categoryName,
-              normalized_name: normalizedCat
-            })
-            .select('id')
-            .single()
-          categoryId = newCat?.id
-        }
-      }
+    // Faz o Upsert dos Produtos
+    const { data: upsertedProducts, error: prodErr } = await supabase
+      .from('products')
+      .upsert(productsPayload, { 
+        onConflict: 'company_id,sku', 
+        ignoreDuplicates: false 
+      })
+      .select('id, sku')
 
-      // 3. Cria Produto
-      const { data: product, error: prodErr } = await supabase
-        .from('products')
-        .insert({
-          company_id: companyId,
-          name: row.name,
-          normalized_name: normalizeCatalogText(row.name),
-          sku: row.sku || null,
-          barcode: row.barcode || null,
-          brand_id: brandId,
-          category_id: categoryId
-        })
-        .select('id')
-        .single()
-      
-      if (prodErr || !product) throw prodErr
-
-      // 4. Cria Preço (se fornecido)
-      if (row.priceRetail !== undefined && row.priceRetail > 0) {
-        await supabase
-          .from('product_prices')
-          .insert({
-            company_id: companyId,
-            product_id: product.id,
-            price_type: 'retail',
-            price: row.priceRetail
-          })
-      }
-
-      successCount++
-    } catch (error) {
-      console.error('[importProductsCSV] Falha ao importar linha:', row.name, error)
-      errorCount++
+    if (prodErr || !upsertedProducts) {
+      errorCount += batch.length
+      errors.push(`Erro ao importar lote ${i/BATCH_SIZE + 1}: ${prodErr?.message}`)
+      continue
     }
+
+    // 2. Mapear Preços para UPSERT
+    const pricesPayload = []
+    for (const row of batch) {
+      if (row.preco !== null && row.preco > 0) {
+        // Encontra o ID interno gerado/retornado pelo Upsert do Produto
+        const productDb = upsertedProducts.find(p => p.sku === row.codigo)
+        if (productDb) {
+          pricesPayload.push({
+            company_id: companyId,
+            product_id: productDb.id,
+            price_type: 'retail', // Assumimos retail como padrão para essa carga genérica
+            price: row.preco,
+            active: true,
+            updated_at: new Date().toISOString()
+          })
+        }
+      }
+    }
+
+    if (pricesPayload.length > 0) {
+      const { error: priceErr } = await supabase
+        .from('product_prices')
+        .upsert(pricesPayload, {
+          onConflict: 'company_id,product_id,price_type',
+          ignoreDuplicates: false
+        })
+
+      if (priceErr) {
+        errors.push(`Erro ao importar preços do lote ${i/BATCH_SIZE + 1}: ${priceErr.message}`)
+        // Não incrementa errorCount total porque o produto salvou, apenas falhou o preço
+      }
+    }
+
+    successCount += batch.length
   }
 
-  return { successCount, errorCount }
+  return { successCount, errorCount, errors }
 }
