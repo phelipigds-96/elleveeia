@@ -11,7 +11,7 @@ const InputSchema = z.object({
 export const calcularPrecoProdutoTool: ToolDefinition = {
   name: 'calcular_preco_produto',
   description: 'Calcula o preço de um produto de acordo com a quantidade solicitada, retornando o preço unitário aplicável, subtotal e regras respeitadas.',
-  inputSchema: InputSchema,
+  schema: InputSchema,
   execute: async (input, context) => {
     const { product_id, quantity, price_type } = input as z.infer<typeof InputSchema>
 

@@ -12,14 +12,14 @@ const InputSchema = z.object({
 export const gerarOrcamentoTool: ToolDefinition = {
   name: 'gerar_orcamento',
   description: 'Gera um orçamento oficial contendo um ou múltiplos produtos e quantidades. O sistema calcula automaticamente os preços unitários, os subtotais e o valor total final, salvando o registro histórico.',
-  inputSchema: InputSchema,
+  schema: InputSchema,
   execute: async (input, context) => {
     const { items } = input as z.infer<typeof InputSchema>
 
     try {
       const result = await createQuote({
         companyId: context.companyId,
-        customerId: context.customerId, // Passamos o customerId do contexto se existir
+        customerId: (context as any).customerId, // Passamos o customerId do contexto se existir
         items: items.map(i => ({
           productId: i.product_id,
           quantity: i.quantity
