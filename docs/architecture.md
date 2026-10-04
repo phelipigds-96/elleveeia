@@ -60,6 +60,30 @@ Products / Brands / Categories / Prices
 - **Tratamento de Preços**: A coluna de vendas do CSV é persistida dinamicamente na sub-tabela `product_prices` sob o tipo `retail`, suportando a expansão futura para atacados e promoções de quantidade sem alterar a modelagem principal.
 - **Código de Barras**: Mapeado sempre em formato String para blindar perdas de Zeros-à-Esquerda ou notações científicas (`E+12`) provindas de exportações corrompidas de planilhas de terceiros.
 
+## Motor de Orçamento e Regras Comerciais
+
+A Plataforma determina preços de maneira estritamente server-side. O LLM **não tem permissão** para calcular matemática financeira de forma autônoma como fonte de verdade para pedidos.
+
+```text
+Agent Engine
+ ↓
+Tool: gerar_orcamento / calcular_preco_produto
+ ↓
+Commercial Service Layer
+ ↓
+Consulta Preços (Por quantidade mínima, prioridade de volume)
+ ↓
+Validação Zod e Cálculo Exato (Math.round para evitar floating points)
+ ↓
+Tabelas: quotes & quote_items (Preserva histórico)
+ ↓
+LLM recebe os valores finais
+```
+
+- **Isolamento e Segurança**: O `companyId` sempre flui do `AgentContext` no backend. O LLM não pode forjar preços nem manipular `companyId`.
+- **Preservação de Histórico**: Um `quote_item` clona o `unit_price` e `subtotal` vigentes na hora da cotação. Mudanças futuras no catálogo não afetam orçamentos passados.
+- **Eficiência de Tools**: As Tools comerciais (`gerar_orcamento`) abstraem a montagem do "carrinho" inteiro para o LLM num único hit, reduzindo custo de tokens e protegendo o cálculo em massa.
+
 ## Tool Engine (Function Calling)
 A arquitetura do Ellevee IA suporta **Function Calling genérico** e agnóstico a provedor (OpenAI / Gemini).
 As ferramentas são registradas e executadas seguindo o fluxo:
