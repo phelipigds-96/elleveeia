@@ -67,14 +67,22 @@ export default async function CatalogPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => (
+                  {products.map((product: any) => (
                     <tr key={product.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{product.name}</td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {product.sku || product.barcode || '-'}
                       </td>
-                      <td className="px-4 py-3">{product.product_brands?.name || '-'}</td>
-                      <td className="px-4 py-3">{product.product_categories?.name || '-'}</td>
+                      <td className="px-4 py-3">
+                        {Array.isArray(product.product_brands) 
+                          ? product.product_brands[0]?.name 
+                          : product.product_brands?.name || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {Array.isArray(product.product_categories) 
+                          ? product.product_categories[0]?.name 
+                          : product.product_categories?.name || '-'}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${product.active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}`}>
                           {product.active ? 'Ativo' : 'Inativo'}
