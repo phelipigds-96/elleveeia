@@ -1,10 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCompanyId } from '@/lib/services/conversations'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 
 export default async function CatalogPage() {
   const supabase = createClient()
@@ -40,18 +36,18 @@ export default async function CatalogPage() {
           </p>
         </div>
         <Link href="/catalog/import">
-          <Button>Importar CSV</Button>
+          <button className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium">Importar CSV</button>
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Produtos Ativos</CardTitle>
-          <CardDescription>
+      <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="flex flex-col space-y-1.5 p-6">
+          <h3 className="font-semibold leading-none tracking-tight">Produtos Ativos</h3>
+          <p className="text-sm text-muted-foreground">
             {products?.length || 0} produtos encontrados (limitado a 50 nesta visualização).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div className="p-6 pt-0">
           {error ? (
             <div className="text-destructive">Erro ao carregar catálogo: {error.message}</div>
           ) : !products || products.length === 0 ? (
@@ -80,9 +76,9 @@ export default async function CatalogPage() {
                       <td className="px-4 py-3">{product.product_brands?.name || '-'}</td>
                       <td className="px-4 py-3">{product.product_categories?.name || '-'}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={product.active ? 'default' : 'secondary'}>
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${product.active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}`}>
                           {product.active ? 'Ativo' : 'Inativo'}
-                        </Badge>
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -90,8 +86,8 @@ export default async function CatalogPage() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

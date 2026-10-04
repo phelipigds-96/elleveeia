@@ -2,10 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { parseCsvFileAction, confirmImportAction } from './actions'
 import type { CatalogImportRow } from '@/lib/services/catalog/import-products'
 import { Loader2, UploadCloud, CheckCircle2 } from 'lucide-react'
@@ -74,40 +70,40 @@ export default function CatalogImportPage() {
       </div>
 
       {errorMsg && (
-        <Alert variant="destructive">
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{errorMsg}</AlertDescription>
-        </Alert>
+        <div className="rounded-lg border border-destructive/50 text-destructive px-4 py-3">
+          <h5 className="mb-1 font-medium leading-none tracking-tight">Erro</h5>
+          <div className="text-sm opacity-90">{errorMsg}</div>
+        </div>
       )}
 
       {step === 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Etapa 1: Enviar Arquivo</CardTitle>
-            <CardDescription>O arquivo deve estar no formato CSV, separado por ponto-e-vírgula (;).</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 p-6">
+            <h3 className="font-semibold leading-none tracking-tight">Etapa 1: Enviar Arquivo</h3>
+            <p className="text-sm text-muted-foreground">O arquivo deve estar no formato CSV, separado por ponto-e-vírgula (;).</p>
+          </div>
+          <div className="p-6 pt-0 space-y-4">
             <div className="grid w-full max-w-sm items-center gap-1.5">
-              <Input id="file" type="file" accept=".csv" onChange={handleFileChange} />
+              <input id="file" type="file" accept=".csv" onChange={handleFileChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleAnalyze} disabled={!file || loading}>
+          </div>
+          <div className="flex items-center p-6 pt-0">
+            <button className="inline-flex items-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50" onClick={handleAnalyze} disabled={!file || loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Analisar Arquivo
-            </Button>
-          </CardFooter>
-        </Card>
+            </button>
+          </div>
+        </div>
       )}
 
       {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Etapa 2: Prévia e Validação</CardTitle>
-            <CardDescription>Resumo dos dados encontrados no arquivo {file?.name}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg space-y-2">
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 p-6">
+            <h3 className="font-semibold leading-none tracking-tight">Etapa 2: Prévia e Validação</h3>
+            <p className="text-sm text-muted-foreground">Resumo dos dados encontrados no arquivo {file?.name}</p>
+          </div>
+          <div className="p-6 pt-0 space-y-4">
+            <div className="p-4 bg-muted rounded-lg space-y-2 text-sm">
               <p><strong>Total de registros lidos:</strong> {parsedData.length}</p>
               <p><strong>Ação:</strong> Os produtos serão criados ou atualizados. Chave de identificação: Código (SKU).</p>
             </div>
@@ -139,29 +135,29 @@ export default function CatalogImportPage() {
                 </div>
               )}
             </div>
-          </CardContent>
-          <CardFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(1)} disabled={loading}>Voltar</Button>
-            <Button onClick={handleConfirm} disabled={loading}>
+          </div>
+          <div className="flex items-center gap-2 p-6 pt-0">
+            <button className="inline-flex items-center border hover:bg-muted px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50" onClick={() => setStep(1)} disabled={loading}>Voltar</button>
+            <button className="inline-flex items-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50" onClick={handleConfirm} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar Importação
-            </Button>
-          </CardFooter>
-        </Card>
+            </button>
+          </div>
+        </div>
       )}
 
       {step === 3 && importResult && (
-        <Card>
-          <CardHeader>
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 p-6">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
               <div>
-                <CardTitle>Importação Concluída</CardTitle>
-                <CardDescription>O catálogo foi atualizado com sucesso.</CardDescription>
+                <h3 className="font-semibold leading-none tracking-tight">Importação Concluída</h3>
+                <p className="text-sm text-muted-foreground">O catálogo foi atualizado com sucesso.</p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="p-6 pt-0 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 border rounded-lg bg-green-50/50 dark:bg-green-950/20">
                 <p className="text-sm font-medium text-muted-foreground">Produtos Processados (Sucesso)</p>
@@ -179,11 +175,11 @@ export default function CatalogImportPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-          <CardFooter>
-            <Button onClick={() => router.push('/catalog')}>Ir para Catálogo</Button>
-          </CardFooter>
-        </Card>
+          </div>
+          <div className="flex items-center p-6 pt-0">
+            <button className="inline-flex items-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium" onClick={() => router.push('/catalog')}>Ir para Catálogo</button>
+          </div>
+        </div>
       )}
     </div>
   )
