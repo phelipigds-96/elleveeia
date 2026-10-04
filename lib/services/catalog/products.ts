@@ -27,6 +27,9 @@ export async function searchProducts(companyId: string, query: string, limit: nu
   // Realiza a busca considerando Barcode, SKU ou nome normalizado
   // A busca usa ilike '%query%' no nome normalizado, permitindo matches parciais.
   // IMPORTANTE: company_id é obrigatoriamente filtrado.
+  // Aumentamos o limite para poder filtrar os produtos de balança localmente
+  const fetchLimit = maxLimit * 4
+
   const { data, error } = await supabase
     .from('products')
     .select(`
@@ -42,14 +45,21 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     .eq('company_id', companyId)
     .eq('active', true)
     .or(`barcode.eq."${query}",sku.ilike."%${query}%",normalized_name.ilike."%${normalizedQuery}%"`)
-    .limit(maxLimit)
+    .limit(fetchLimit)
 
   if (error) {
     console.error('[searchProducts] Erro na busca de produtos:', error.message)
     return []
   }
 
-  return (data || []).map((row: any) => ({
+  // Filtra produtos de balança (produtos que têm "KG" solto no nome, sem número colado como 1.01KG)
+  const isBulkRegex = /(?:^|[^0-9])\s+KG(?:\s|$)/i
+
+  const validProducts = (data || []).filter((row: any) => {
+    return !isBulkRegex.test(row.name)
+  })
+
+  return validProducts.slice(0, maxLimit).map((row: any) => ({
     id: row.id,
     name: row.name,
     sku: row.sku,
