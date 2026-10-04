@@ -67,10 +67,10 @@ export default function CatalogImportPage() {
           allErrors.push(`Erro crítico no lote ${i / CHUNK_SIZE + 1}: ${res.error}`)
           totalError += chunk.length
         } else {
-          totalSuccess += res.successCount
-          totalError += res.errorCount
-          if (res.errors && res.errors.length > 0) {
-            allErrors = [...allErrors, ...res.errors]
+          totalSuccess += (res as any).successCount || 0
+          totalError += (res as any).errorCount || 0
+          if ((res as any).errors && (res as any).errors.length > 0) {
+            allErrors = [...allErrors, ...(res as any).errors]
           }
         }
       } catch (err: any) {
