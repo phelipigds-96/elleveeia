@@ -45,19 +45,48 @@ export default function CatalogImportPage() {
     }
   }
 
+  const [progressInfo, setProgressInfo] = useState<string | null>(null)
+
   const handleConfirm = async () => {
     setLoading(true)
     setErrorMsg(null)
 
-    const res = await confirmImportAction(parsedData)
-    setLoading(false)
+    let totalSuccess = 0
+    let totalError = 0
+    let allErrors: string[] = []
 
-    if (!res.success) {
-      setErrorMsg(res.error || 'Falha ao confirmar importação.')
-    } else {
-      setImportResult(res)
-      setStep(3)
+    const CHUNK_SIZE = 500 // Tamanho seguro para payload e timeout da Vercel
+
+    for (let i = 0; i < parsedData.length; i += CHUNK_SIZE) {
+      const chunk = parsedData.slice(i, i + CHUNK_SIZE)
+      setProgressInfo(`Importando ${Math.min(i + CHUNK_SIZE, parsedData.length)} de ${parsedData.length} produtos...`)
+      
+      try {
+        const res = await confirmImportAction(chunk)
+        if (!res.success) {
+          allErrors.push(`Erro crítico no lote ${i / CHUNK_SIZE + 1}: ${res.error}`)
+          totalError += chunk.length
+        } else {
+          totalSuccess += res.successCount
+          totalError += res.errorCount
+          if (res.errors && res.errors.length > 0) {
+            allErrors = [...allErrors, ...res.errors]
+          }
+        }
+      } catch (err: any) {
+        allErrors.push(`Falha de rede no lote ${i / CHUNK_SIZE + 1}: ${err.message}`)
+        totalError += chunk.length
+      }
     }
+
+    setLoading(false)
+    setProgressInfo(null)
+    setImportResult({
+      successCount: totalSuccess,
+      errorCount: totalError,
+      errors: allErrors
+    })
+    setStep(3)
   }
 
   return (
@@ -138,9 +167,9 @@ export default function CatalogImportPage() {
           </div>
           <div className="flex items-center gap-2 p-6 pt-0">
             <button className="inline-flex items-center border hover:bg-muted px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50" onClick={() => setStep(1)} disabled={loading}>Voltar</button>
-            <button className="inline-flex items-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50" onClick={handleConfirm} disabled={loading}>
+            <button className="inline-flex items-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 min-w-[200px] justify-center" onClick={handleConfirm} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirmar Importação
+              {progressInfo || 'Confirmar Importação'}
             </button>
           </div>
         </div>
