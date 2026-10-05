@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { Plus, GripVertical, Settings2, Trash2, Loader2 } from 'lucide-react'
-import { createDefaultWorkflowAction } from '../actions'
+import { createDefaultWorkflowAction, createWorkflowStageAction, updateWorkflowStageAction, deleteWorkflowStageAction } from '../actions'
+import { useRouter } from 'next/navigation'
 
 export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initialWorkflows: any[], companyId: string }) {
+  const router = useRouter()
   const [workflows, setWorkflows] = useState(initialWorkflows)
   const [isPending, startTransition] = useTransition()
 
@@ -17,6 +19,41 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
         console.error("Failed to create workflow", error)
       }
     })
+  }
+
+  const handleAddStage = (workflowId: string) => {
+    startTransition(async () => {
+      try {
+        await createWorkflowStageAction(workflowId, 'Nova Etapa')
+        router.refresh()
+      } catch (error) {
+        console.error(error)
+      }
+    })
+  }
+
+  const handleUpdateStage = (stageId: string, field: string, value: string) => {
+    startTransition(async () => {
+      try {
+        await updateWorkflowStageAction(stageId, { [field]: value })
+        router.refresh()
+      } catch (error) {
+        console.error(error)
+      }
+    })
+  }
+
+  const handleDeleteStage = (stageId: string) => {
+    if (confirm("Tem certeza que deseja excluir esta etapa?")) {
+      startTransition(async () => {
+        try {
+          await deleteWorkflowStageAction(stageId)
+          router.refresh()
+        } catch (error) {
+          console.error(error)
+        }
+      })
+    }
   }
 
   if (workflows.length === 0) {
@@ -44,13 +81,16 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
   const activeWorkflow = workflows[0] // Simplify for now
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
       <div className="flex items-center justify-between border-b pb-4">
         <div>
           <h3 className="text-base font-medium">{activeWorkflow.name}</h3>
           <p className="text-sm text-muted-foreground">{activeWorkflow.description || 'Workflow padrão de atendimento'}</p>
         </div>
-        <button className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center">
+        <button 
+          onClick={() => handleAddStage(activeWorkflow.id)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Adicionar Etapa
         </button>
@@ -68,6 +108,9 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
                 <input 
                   type="text" 
                   defaultValue={stage.name}
+                  onBlur={(e) => {
+                    if (e.target.value !== stage.name) handleUpdateStage(stage.id, 'name', e.target.value)
+                  }}
                   className="bg-transparent border-0 font-medium text-sm focus:ring-0 p-0 w-full"
                 />
               </div>
@@ -76,12 +119,16 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
                   type="text" 
                   placeholder="Descrição opcional..."
                   defaultValue={stage.description || ''}
+                  onBlur={(e) => {
+                    if (e.target.value !== (stage.description || '')) handleUpdateStage(stage.id, 'description', e.target.value)
+                  }}
                   className="bg-transparent border-0 text-sm text-muted-foreground focus:ring-0 p-0 w-full"
                 />
               </div>
               <div className="col-span-3">
                 <select 
                   defaultValue={stage.stage_type}
+                  onChange={(e) => handleUpdateStage(stage.id, 'stage_type', e.target.value)}
                   className="text-xs rounded-md border border-input bg-transparent px-2 py-1.5 shadow-sm focus:outline-none w-full"
                 >
                   <option value="initial">Entrada (Inicial)</option>
@@ -91,7 +138,10 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
               </div>
             </div>
 
-            <button className="text-muted-foreground/50 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100">
+            <button 
+              onClick={() => handleDeleteStage(stage.id)}
+              className="text-muted-foreground/50 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+            >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
@@ -105,9 +155,7 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
       </div>
       
       <div className="pt-4 flex justify-end">
-        <button className="bg-secondary text-secondary-foreground hover:bg-secondary/80 px-4 py-2 rounded-md text-sm font-medium shadow-sm">
-          Salvar Alterações
-        </button>
+        <p className="text-xs text-muted-foreground">As alterações são salvas automaticamente ao clicar fora dos campos.</p>
       </div>
     </div>
   )

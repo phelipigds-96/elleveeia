@@ -136,3 +136,24 @@ Os provedores sÃ£o 100% intercambiÃ¡veis, permitindo testar e expandir para novo
 - Tailwind CSS & shadcn/ui
 - Supabase (PostgreSQL, Auth)
 - @google/genai (Gemini SDK)
+
+## Central de Conversas, Workflows e Kanban
+
+O sistema possui uma estrutura flexível para o gerenciamento do fluxo operacional das conversas:
+
+`	ext
+Company
+   ?
+Workflow (ex: Atendimento Padrão)
+   ?
+Workflow Stages (ex: Novo Contato, Em Atendimento, Finalizado)
+   ?
+Conversation
+``n
+### Status vs Workflow Stage
+É crucial diferenciar o estado operacional da conversa da sua posição no processo comercial:
+- **conversation.status (open | human | closed)**: Reflete QUEM está responsável pela conversa no momento. open significa que o Agente IA está no controle; human significa que a IA foi silenciada e um operador humano assumiu; closed significa que o atendimento foi encerrado operacionalmente.
+- **conversation.workflow_stage_id**: Reflete a ETAPA DO FUNIL em que a conversa se encontra (independente de quem está respondendo). Uma conversa pode estar no status open (Agente IA) e na etapa Orçamento, ou no status human (Humano) e na mesma etapa Orçamento.
+
+### Multi-Tenant e Segurança nos Workflows
+Todas as operações de Workflow e Movimentação Kanban utilizam estritamente o createClient() (cliente autenticado no SSR). O company_id é sempre derivado e cruzado server-side com as políticas de RLS, assegurando que, mesmo através de manipulações de requisições, um tenant jamais conseguirá ler, modificar ou mover conversas entre etapas pertencentes a outra empresa.

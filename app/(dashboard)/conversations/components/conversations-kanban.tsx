@@ -1,7 +1,10 @@
 'use client'
 
+import { useState, useTransition } from 'react'
 import { Clock, MessageSquare, User, Settings2 } from 'lucide-react'
 import Link from 'next/link'
+import { moveConversationStageAction } from '../../settings/workflows/actions'
+import { useRouter } from 'next/navigation'
 
 export function ConversationsKanban({ 
   workflows, 
@@ -12,6 +15,9 @@ export function ConversationsKanban({
   conversations: any[],
   onSelectConversation: (id: string) => void
 }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
   if (!workflows || workflows.length === 0 || !workflows[0]?.workflow_stages || workflows[0].workflow_stages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full p-8 text-center bg-background">
@@ -35,7 +41,6 @@ export function ConversationsKanban({
   const activeWorkflow = workflows[0]
   const stages = activeWorkflow.workflow_stages || []
 
-  // Agrupar conversas pelas etapas. Conversas antigas sem stage vão para a primeira coluna por padrão.
   const groupedConversations = stages.reduce((acc: any, stage: any) => {
     acc[stage.id] = conversations.filter(c => 
       c.workflow_stage_id === stage.id || 
@@ -44,14 +49,43 @@ export function ConversationsKanban({
     return acc
   }, {})
 
+  const handleDragStart = (e: React.DragEvent, conversationId: string) => {
+    e.dataTransfer.setData('conversationId', conversationId)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = (e: React.DragEvent, stageId: string) => {
+    e.preventDefault()
+    const conversationId = e.dataTransfer.getData('conversationId')
+    
+    if (conversationId) {
+      startTransition(async () => {
+        try {
+          await moveConversationStageAction(conversationId, stageId)
+          router.refresh()
+        } catch (error) {
+          console.error('Erro ao mover conversa', error)
+        }
+      })
+    }
+  }
+
   return (
-    <div className="flex-1 h-full overflow-x-auto overflow-y-hidden bg-[#fafafa] dark:bg-background">
+    <div className={`flex-1 h-full overflow-x-auto overflow-y-hidden bg-[#fafafa] dark:bg-background ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
       <div className="flex h-full p-6 gap-6 min-w-max">
         {stages.map((stage: any) => {
           const stageConvs = groupedConversations[stage.id] || []
           
           return (
-            <div key={stage.id} className="w-80 flex flex-col h-full bg-muted/30 rounded-xl border border-border/50">
+            <div 
+              key={stage.id} 
+              className="w-80 flex flex-col h-full bg-muted/30 rounded-xl border border-border/50"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, stage.id)}
+            >
               <div className="p-4 border-b border-border/50 flex items-center justify-between shrink-0 bg-background/50 rounded-t-xl">
                 <h3 className="font-medium text-sm text-foreground">{stage.name}</h3>
                 <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
@@ -63,8 +97,10 @@ export function ConversationsKanban({
                 {stageConvs.map((conv: any) => (
                   <div 
                     key={conv.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, conv.id)}
                     onClick={() => onSelectConversation(conv.id)}
-                    className="bg-background p-4 rounded-lg border shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                    className="bg-background p-4 rounded-lg border shadow-sm hover:shadow-md transition-shadow cursor-pointer group active:cursor-grabbing"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-2">

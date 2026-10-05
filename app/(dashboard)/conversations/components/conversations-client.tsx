@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
 import { getConversations, getMessages, sendMessage, updateConversationStatus, markAsRead } from '@/lib/services/conversations'
 import { Search, Send, User, Clock, MessageSquare, AlertCircle } from 'lucide-react'
 
 import { ConversationsKanban } from './conversations-kanban'
+import { moveConversationStageAction } from '../../settings/workflows/actions'
+import { useRouter } from 'next/navigation'
 
 export function ConversationsClient({ 
   initialConversations, 
@@ -15,6 +17,8 @@ export function ConversationsClient({
   initialWorkflows?: any[],
   companyId?: string
 }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [conversations, setConversations] = useState(initialConversations)
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
@@ -91,10 +95,27 @@ export function ConversationsClient({
     }
   }
 
+  const handleChangeStage = (stageId: string) => {
+    if (!selectedConvId) return
+    startTransition(async () => {
+      try {
+        await moveConversationStageAction(selectedConvId, stageId)
+        setConversations(prev => prev.map(c => 
+          c.id === selectedConvId ? { ...c, workflow_stage_id: stageId } : c
+        ))
+        router.refresh()
+      } catch (error) {
+        console.error(error)
+      }
+    })
+  }
+
   const selectedConv = conversations.find(c => c.id === selectedConvId)
+  const activeWorkflow = initialWorkflows?.[0]
+  const stages = activeWorkflow?.workflow_stages || []
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden border-t flex-col">
+    <div className={`flex h-full w-full bg-background overflow-hidden border-t flex-col ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
       {/* HEADER BAR FOR VIEW TOGGLE */}
       <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/5 shrink-0">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Central de Atendimento</h2>
@@ -213,6 +234,17 @@ export function ConversationsClient({
               </div>
               
               <div className="flex items-center gap-2">
+                {stages.length > 0 && (
+                  <select 
+                    value={selectedConv.workflow_stage_id || stages[0].id}
+                    onChange={(e) => handleChangeStage(e.target.value)}
+                    className="text-xs rounded-md border border-input bg-transparent px-2 py-1 shadow-sm focus:outline-none"
+                  >
+                    {stages.map((stage: any) => (
+                      <option key={stage.id} value={stage.id}>{stage.name}</option>
+                    ))}
+                  </select>
+                )}
                 <select 
                   value={selectedConv.status}
                   onChange={(e) => handleChangeStatus(e.target.value)}
@@ -325,10 +357,13 @@ export function ConversationsClient({
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Status Atual</h4>
                 <div className="text-sm space-y-1">
-                  <p className="text-muted-foreground"><span className="font-medium text-foreground">Fase:</span> {
+                  <p className="text-muted-foreground"><span className="font-medium text-foreground">Responsável:</span> {
                     selectedConv.status === 'open' ? 'Agente IA' : 
                     selectedConv.status === 'human' ? 'Atendimento Humano' : 
-                    'Encerrada'
+                    'Nenhum (Encerrada)'
+                  }</p>
+                  <p className="text-muted-foreground"><span className="font-medium text-foreground">Etapa do Funil:</span> {
+                    stages.find((s: any) => s.id === selectedConv.workflow_stage_id)?.name || 'Sem Etapa'
                   }</p>
                   <p className="text-muted-foreground"><span className="font-medium text-foreground">Iniciada:</span> {new Date(selectedConv.started_at).toLocaleString()}</p>
                 </div>

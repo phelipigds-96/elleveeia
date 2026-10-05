@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/service'
+import { createClient } from '@/lib/supabase/server'
 
 export interface Workflow {
   id: string
@@ -20,8 +20,17 @@ export interface WorkflowStage {
   is_active: boolean
 }
 
-export async function getCompanyWorkflows(companyId: string) {
-  const supabase = createAdminClient()
+async function getCompanyId(supabase: any) {
+  const { data: userData } = await supabase.auth.getUser()
+  if (!userData?.user) throw new Error("Unauthorized")
+  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user.id).single()
+  if (!profile?.company_id) throw new Error("Company not found")
+  return profile.company_id
+}
+
+export async function getCompanyWorkflows() {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
   
   const { data, error } = await supabase
     .from('workflows')
@@ -40,10 +49,10 @@ export async function getCompanyWorkflows(companyId: string) {
   return workflows || []
 }
 
-export async function createWorkflow(companyId: string, name: string, description?: string) {
-  const supabase = createAdminClient()
+export async function createWorkflow(name: string, description?: string) {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
 
-  // Verify if it's the first one, make it default
   const { count } = await supabase.from('workflows').select('*', { count: 'exact', head: true }).eq('company_id', companyId)
   const isDefault = count === 0
 
@@ -57,10 +66,10 @@ export async function createWorkflow(companyId: string, name: string, descriptio
   return data
 }
 
-export async function createWorkflowStage(companyId: string, workflowId: string, name: string, stageType: string = 'in_progress') {
-  const supabase = createAdminClient()
+export async function createWorkflowStage(workflowId: string, name: string, stageType: string = 'in_progress') {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
 
-  // Get max position
   const { data: stages } = await supabase
     .from('workflow_stages')
     .select('position')
@@ -86,15 +95,46 @@ export async function createWorkflowStage(companyId: string, workflowId: string,
   return data
 }
 
-export async function moveConversationStage(companyId: string, conversationId: string, stageId: string) {
-  const supabase = createAdminClient()
+export async function updateWorkflowStage(stageId: string, updates: any) {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
   
-  // Update the conversation directly. Ensures it belongs to company
+  // Clean payload
+  delete updates.id
+  delete updates.company_id
+  delete updates.workflow_id
+  
+  const { error } = await supabase
+    .from('workflow_stages')
+    .update(updates)
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteWorkflowStage(stageId: string) {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
+  
+  const { error } = await supabase
+    .from('workflow_stages')
+    .delete()
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+
+  if (error) throw new Error(error.message)
+}
+
+export async function moveConversationStage(conversationId: string, stageId: string) {
+  const supabase = createClient()
+  const companyId = await getCompanyId(supabase)
+  
   const { error } = await supabase
     .from('conversations')
     .update({ workflow_stage_id: stageId })
-    .eq('company_id', companyId)
     .eq('id', conversationId)
+    .eq('company_id', companyId)
 
   if (error) throw new Error(error.message)
 }
