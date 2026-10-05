@@ -127,78 +127,73 @@ export function ConversationsClient({
       ) : (
         <>
           {/* LEFT COLUMN: LIST */}
-          <div className="w-full md:w-80 lg:w-96 border-r flex flex-col bg-muted/10 h-full shrink-0">
-            <div className="p-4 border-b space-y-4 shrink-0">
+          <div className="w-full md:w-80 lg:w-96 border-r flex flex-col bg-background h-full shrink-0">
+            <div className="p-3 border-b border-border/40 space-y-3 shrink-0">
               <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Buscar cliente ou número..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-background pl-9 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 text-sm scrollbar-hide">
-            <button onClick={() => setActiveTab('all')} className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${activeTab === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80 text-muted-foreground'}`}>
-              Todas
-            </button>
-            <button onClick={() => setActiveTab('open')} className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${activeTab === 'open' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80 text-muted-foreground'}`}>
-              Abertas
-            </button>
-            <button onClick={() => setActiveTab('human')} className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${activeTab === 'human' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80 text-muted-foreground'}`}>
-              Humanos
-            </button>
-            <button onClick={() => setActiveTab('closed')} className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${activeTab === 'closed' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80 text-muted-foreground'}`}>
-              Encerradas
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center space-y-3">
-              <MessageSquare className="h-8 w-8 opacity-20" />
-              <p className="text-sm">Nenhuma conversa encontrada neste filtro.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              {conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => setSelectedConvId(conv.id)}
-                  className={`flex flex-col items-start p-4 border-b text-left transition-colors hover:bg-muted/50 ${selectedConvId === conv.id ? 'bg-muted' : ''}`}
-                >
-                  <div className="flex w-full justify-between items-center mb-1">
-                    <span className="font-semibold text-sm truncate pr-2">
-                      {conv.customers?.name || 'Cliente Desconhecido'}
-                    </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <div className="flex w-full justify-between items-center mt-1">
-                    <span className="text-xs text-muted-foreground truncate pr-2">
-                      {conv.customers?.phone || 'Sem número'}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {conv.status === 'open' && <span className="h-2 w-2 rounded-full bg-blue-500" title="Aberta"></span>}
-                      {conv.status === 'human' && <span className="h-2 w-2 rounded-full bg-amber-500" title="Humano"></span>}
-                      {conv.status === 'closed' && <span className="h-2 w-2 rounded-full bg-gray-400" title="Encerrada"></span>}
-                      
-                      {conv.unread_count > 0 && (
-                        <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                          {conv.unread_count}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex h-9 w-full rounded-md border-0 bg-muted/30 pl-9 py-2 text-sm shadow-none transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="flex gap-1 overflow-x-auto pb-0.5 text-xs font-medium scrollbar-hide">
+                <button onClick={() => setActiveTab('all')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'all' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                  Todas
                 </button>
-              ))}
+                <button onClick={() => setActiveTab('open')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'open' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                  Abertas
+                </button>
+                <button onClick={() => setActiveTab('human')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'human' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                  Humanos
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+              {conversations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground/50 p-8 text-center space-y-2">
+                  <MessageSquare className="h-6 w-6" />
+                  <p className="text-sm">Nenhuma conversa encontrada.</p>
+                </div>
+              ) : (
+                conversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => setSelectedConvId(conv.id)}
+                    className={`flex flex-col items-start px-3 py-2.5 w-full rounded-lg text-left transition-colors ${selectedConvId === conv.id ? 'bg-secondary/60' : 'hover:bg-muted/40'}`}
+                  >
+                    <div className="flex w-full justify-between items-center mb-0.5">
+                      <span className="font-medium text-[13px] text-foreground truncate pr-2">
+                        {conv.customers?.name || 'Cliente Desconhecido'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="flex w-full justify-between items-center">
+                      <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">
+                        {conv.last_message_preview || (conv.customers?.phone || 'Sem número')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {conv.status === 'open' && <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>}
+                        {conv.status === 'human' && <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>}
+                        {conv.status === 'closed' && <span className="h-1.5 w-1.5 rounded-full bg-gray-400"></span>}
+                        
+                        {conv.unread_count > 0 && (
+                          <span className="bg-primary text-primary-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                            {conv.unread_count}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
 
       {/* CENTER AND RIGHT WRAPPER */}
       {selectedConv ? (
@@ -230,14 +225,14 @@ export function ConversationsClient({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/20">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-background">
               {loadingMessages ? (
                 <div className="flex justify-center p-4">
-                  <span className="text-xs text-muted-foreground animate-pulse">Carregando histórico...</span>
+                  <span className="text-xs text-muted-foreground animate-pulse font-medium tracking-tight">Carregando histórico...</span>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2 opacity-50">
-                  <AlertCircle className="h-8 w-8" />
+                  <MessageSquare className="h-6 w-6" />
                   <p className="text-sm">Nenhuma mensagem registrada ainda.</p>
                 </div>
               ) : (
@@ -248,32 +243,33 @@ export function ConversationsClient({
                   
                   if (isSystem) {
                     return (
-                      <div key={msg.id} className="flex justify-center my-4">
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-2 py-1 rounded-md font-medium">
-                          {msg.content}
+                      <div key={msg.id} className="flex justify-center my-6">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                          — {msg.content} —
                         </span>
                       </div>
                     )
                   }
 
                   return (
-                    <div key={msg.id} className={`flex flex-col ${isCustomer ? 'items-start' : 'items-end'}`}>
+                    <div key={msg.id} className={`flex flex-col ${isCustomer ? 'items-start' : 'items-end'} group`}>
+                      <div className="flex items-center gap-2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-medium text-muted-foreground">
+                          {isCustomer ? (selectedConv.customers?.name || 'Cliente') : (isAgent ? 'Agente IA' : 'Humano')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/70">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                       <div 
-                        className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm shadow-sm ${
+                        className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 text-[14px] shadow-sm ${
                           isCustomer 
-                            ? 'bg-card border text-card-foreground rounded-tl-sm' 
-                            : isAgent
-                              ? 'bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm'
-                              : 'bg-primary text-primary-foreground rounded-tr-sm' // human
+                            ? 'bg-muted/30 border border-border/50 text-foreground rounded-2xl rounded-tl-sm' 
+                            : 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
                         }`}
                       >
                         <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                       </div>
-                      <span className="text-[10px] text-muted-foreground mt-1 mx-1">
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {!isCustomer && msg.sender_type === 'human' && ' • Humano'}
-                        {!isCustomer && msg.sender_type === 'agent' && ' • Agente IA'}
-                      </span>
                     </div>
                   )
                 })

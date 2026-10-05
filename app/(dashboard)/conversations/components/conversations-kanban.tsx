@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock, MessageSquare, User } from 'lucide-react'
+import { Clock, MessageSquare, User, Settings2 } from 'lucide-react'
+import Link from 'next/link'
 
 export function ConversationsKanban({ 
   workflows, 
@@ -11,14 +12,22 @@ export function ConversationsKanban({
   conversations: any[],
   onSelectConversation: (id: string) => void
 }) {
-  if (!workflows || workflows.length === 0) {
+  if (!workflows || workflows.length === 0 || !workflows[0]?.workflow_stages || workflows[0].workflow_stages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground bg-muted/10">
-        <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4">
-          <MessageSquare className="h-6 w-6" />
+      <div className="flex-1 flex flex-col items-center justify-center h-full p-8 text-center bg-background">
+        <div className="h-12 w-12 rounded-lg border bg-muted/30 flex items-center justify-center mb-5 shadow-sm">
+          <Settings2 className="h-5 w-5 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-medium text-foreground">Sem Workflow Configurado</h3>
-        <p className="text-sm mt-1 max-w-sm">Para visualizar o quadro Kanban, você precisa configurar as etapas de atendimento nas configurações.</p>
+        <h3 className="text-base font-medium text-foreground tracking-tight">Quadro Kanban não configurado</h3>
+        <p className="text-sm mt-1.5 text-muted-foreground max-w-sm mb-6 leading-relaxed">
+          Para utilizar esta visualização, você precisa definir as etapas do seu funil de atendimento.
+        </p>
+        <Link 
+          href="/settings/workflows" 
+          className="inline-flex items-center justify-center h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          Configurar Workflows
+        </Link>
       </div>
     )
   }
