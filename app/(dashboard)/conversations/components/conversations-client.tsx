@@ -4,11 +4,22 @@ import { useState, useEffect, useRef } from 'react'
 import { getConversations, getMessages, sendMessage, updateConversationStatus, markAsRead } from '@/lib/services/conversations'
 import { Search, Send, User, Clock, MessageSquare, AlertCircle } from 'lucide-react'
 
-export function ConversationsClient({ initialConversations }: { initialConversations: any[] }) {
+import { ConversationsKanban } from './conversations-kanban'
+
+export function ConversationsClient({ 
+  initialConversations, 
+  initialWorkflows, 
+  companyId 
+}: { 
+  initialConversations: any[],
+  initialWorkflows?: any[],
+  companyId?: string
+}) {
   const [conversations, setConversations] = useState(initialConversations)
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
   
   const [messages, setMessages] = useState<any[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -83,11 +94,42 @@ export function ConversationsClient({ initialConversations }: { initialConversat
   const selectedConv = conversations.find(c => c.id === selectedConvId)
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden border-t">
-      {/* LEFT COLUMN: LIST */}
-      <div className="w-full md:w-80 lg:w-96 border-r flex flex-col bg-muted/10 h-full">
-        <div className="p-4 border-b space-y-4">
-          <div className="relative">
+    <div className="flex h-full w-full bg-background overflow-hidden border-t flex-col">
+      {/* HEADER BAR FOR VIEW TOGGLE */}
+      <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/5 shrink-0">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">Central de Atendimento</h2>
+        <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+          <button 
+            onClick={() => setViewMode('list')} 
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Lista
+          </button>
+          <button 
+            onClick={() => setViewMode('kanban')} 
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Kanban
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+      {viewMode === 'kanban' ? (
+        <ConversationsKanban 
+          workflows={initialWorkflows || []} 
+          conversations={conversations} 
+          onSelectConversation={(id) => {
+            setSelectedConvId(id)
+            setViewMode('list')
+          }} 
+        />
+      ) : (
+        <>
+          {/* LEFT COLUMN: LIST */}
+          <div className="w-full md:w-80 lg:w-96 border-r flex flex-col bg-muted/10 h-full shrink-0">
+            <div className="p-4 border-b space-y-4 shrink-0">
+              <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
@@ -314,6 +356,9 @@ export function ConversationsClient({ initialConversations }: { initialConversat
           </div>
         </div>
       )}
+      </>
+      )}
+      </div>
     </div>
   )
 }
