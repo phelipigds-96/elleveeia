@@ -11,7 +11,7 @@ export default async function WorkflowsSettingsPage() {
   
   let initialWorkflows: any[] = []
   if (profile?.company_id) {
-    initialWorkflows = await getCompanyWorkflows(profile.company_id)
+    initialWorkflows = await getCompanyWorkflows()
   }
 
   return (

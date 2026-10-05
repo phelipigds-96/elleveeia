@@ -12,7 +12,7 @@ export default async function ConversationsPage() {
   const companyId = profile?.company_id
 
   const initialConversations = await getConversations('all', '')
-  const workflows = companyId ? await getCompanyWorkflows(companyId) : []
+  const workflows = companyId ? await getCompanyWorkflows() : []
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col -m-6 sm:-m-8">
