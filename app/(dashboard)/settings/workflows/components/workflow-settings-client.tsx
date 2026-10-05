@@ -1,14 +1,23 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, GripVertical, Settings2, Trash2 } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Plus, GripVertical, Settings2, Trash2, Loader2 } from 'lucide-react'
+import { createDefaultWorkflowAction } from '../actions'
 
 export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initialWorkflows: any[], companyId: string }) {
   const [workflows, setWorkflows] = useState(initialWorkflows)
+  const [isPending, startTransition] = useTransition()
 
-  // In a complete implementation, this would handle creating workflows, 
-  // adding stages, drag and drop, and saving to the backend via Server Actions.
-  // For now, it provides the premium UI requested.
+  const handleCreateDefault = () => {
+    startTransition(async () => {
+      try {
+        await createDefaultWorkflowAction()
+        window.location.reload()
+      } catch (error) {
+        console.error("Failed to create workflow", error)
+      }
+    })
+  }
 
   if (workflows.length === 0) {
     return (
@@ -20,8 +29,12 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
         <p className="text-sm text-muted-foreground mt-2 max-w-sm mb-6">
           Crie o seu primeiro workflow para organizar as conversas no formato Kanban.
         </p>
-        <button className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center">
-          <Plus className="h-4 w-4 mr-2" />
+        <button 
+          onClick={handleCreateDefault}
+          disabled={isPending}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center disabled:opacity-50"
+        >
+          {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
           Criar Workflow Padrão
         </button>
       </div>
