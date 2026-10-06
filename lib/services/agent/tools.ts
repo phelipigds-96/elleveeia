@@ -43,7 +43,7 @@ export class ToolRegistry {
 
   register(definition: ToolDefinition) {
     if (this.tools.has(definition.name)) {
-      throw new Error(`Tool ${definition.name} já está registrada.`)
+      throw new Error(`Tool ${definition.name} ja esta registrada.`)
     }
     this.tools.set(definition.name, definition)
   }
@@ -60,10 +60,10 @@ export class ToolRegistry {
     return Array.from(this.tools.values())
   }
 
-  getProviderPayload() {
-    return Array.from(this.tools.values()).map(tool => {
+  getProviderPayload(selectedTools?: ToolDefinition[]) {
+    const toolsToMap = selectedTools || Array.from(this.tools.values())
+    return toolsToMap.map(tool => {
       const jsonSchema = zodToJsonSchema(tool.schema, 'mySchema') as any
-      // Removendo referências do zodToJsonSchema root para manter formato limpo
       const properties = jsonSchema.definitions?.mySchema?.properties || jsonSchema.properties || {}
       const required = jsonSchema.definitions?.mySchema?.required || jsonSchema.required || []
 
@@ -94,12 +94,11 @@ export class ToolExecutor {
           success: false,
           error: {
             code: 'TOOL_NOT_FOUND',
-            message: `A ferramenta solicitada '${call.toolName}' não foi encontrada ou não está habilitada.`
+            message: `A ferramenta solicitada '${call.toolName}' nao foi encontrada ou nao esta habilitada.`
           }
         }
       }
 
-      // Validação de Schema (Zod)
       const parseResult = tool.schema.safeParse(call.arguments)
       if (!parseResult.success) {
         return {
@@ -108,12 +107,11 @@ export class ToolExecutor {
           success: false,
           error: {
             code: 'INVALID_ARGUMENTS',
-            message: `Argumentos inválidos: ${parseResult.error.message}`
+            message: `Argumentos invalidos: ${parseResult.error.message}`
           }
         }
       }
 
-      // Execução da Ferramenta
       const resultData = await tool.execute(parseResult.data, context)
 
       return {
