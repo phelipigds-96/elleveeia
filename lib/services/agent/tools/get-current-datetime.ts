@@ -4,6 +4,7 @@ import { ToolDefinition } from '../tools'
 export const getCurrentDatetimeTool: ToolDefinition = {
   name: 'get_current_datetime',
   description: 'Retorna a data e hora atuais no fuso horário local da empresa. Sempre chame isso antes de realizar ações que dependem de datas ou horários.',
+  metadata: { category: 'datetime', capabilities: ['datetime.read'] },
   schema: z.object({
     reason: z.string().describe('O motivo pelo qual você precisa saber a data atual.')
   }),

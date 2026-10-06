@@ -6,6 +6,7 @@ import { resolveProductPrice } from '../../commercial/pricing'
 export const consultarProdutoComercialTool: ToolDefinition = {
   name: 'consultar_produto_comercial',
   description: 'Busca um produto no catǭlogo e jǭ calcula o preo correto em uma ǧnica etapa. Utilize esta ferramenta preferencialmente quando o usuǭrio perguntar sobre produtos E preos (ex: "quanto custa a cobertura x"). Nǜo assuma estoque se o status for "not_found", diga apenas que o produto nǜo foi localizado. Se for "ambiguous", pea para o usuǭrio esclarecer.',
+  metadata: { category: 'commercial', capabilities: ['product.search', 'price.calculate'] },
   schema: z.object({
     product_query: z.string().describe('Frase ou termos de busca informados pelo cliente (ex: "cobertura genuine meio amargo 1kg").'),
     quantity: z.number().int().positive().optional().describe('Quantidade desejada. Se nǜo informada, assume 1.'),

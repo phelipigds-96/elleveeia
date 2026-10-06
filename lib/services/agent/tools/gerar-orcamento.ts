@@ -12,6 +12,7 @@ const InputSchema = z.object({
 export const gerarOrcamentoTool: ToolDefinition = {
   name: 'gerar_orcamento',
   description: 'Gera um orçamento oficial contendo um ou múltiplos produtos e quantidades. O sistema calcula automaticamente os preços unitários, os subtotais e o valor total final, salvando o registro histórico.',
+  metadata: { category: 'quotes', capabilities: ['quote.create'] },
   schema: InputSchema,
   execute: async (input, context) => {
     const { items } = input as z.infer<typeof InputSchema>

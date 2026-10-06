@@ -9,6 +9,7 @@ import { consultarPrecoTool } from './tools/consultar-preco'
 import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
+import { resolveToolScope } from './tool-scoping'
 
 const MAX_TOOL_ITERATIONS = 5
 
@@ -28,6 +29,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
   let usageMetrics = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
   let modelUsed = 'unknown'
   let providerUsed: LLMProviderType = 'openai'
+  let scopedTools: any[] = []
   const executedTools: Array<{name: string, success: boolean}> = []
 
   try {
@@ -62,7 +64,12 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     registry.register(consultarProdutoComercialTool)
     
     const executor = new ToolExecutor(registry)
-    const availableTools = registry.getProviderPayload()
+    
+    // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg e historico
+    // Para obter o historico "raw" (sem a msg atual):
+    const historyForScoping = payloadMessages.filter(m => m.role === 'user' || m.role === 'assistant')
+    scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list())
+    const availableTools = registry.getProviderPayload(scopedTools)
 
     let messagesForLLM: LLMRequestMessage[] = payloadMessages.map(msg => ({
       role: msg.role === 'function' || msg.role === 'tool' ? 'user' : msg.role,
@@ -141,6 +148,13 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     runStatus = 'success'
 
+    const runMetadata: any = {
+      tools_available: scopedTools.map(t => t.name)
+    }
+    if (executedTools.length > 0) {
+      runMetadata.tool_calls = executedTools
+    }
+
     await logAgentRun(supabase, {
       companyId, 
       agentId, 
@@ -150,7 +164,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
       model: modelUsed, 
       usageMetrics, 
       duration: Date.now() - startTime,
-      metadata: executedTools.length > 0 ? { tool_calls: executedTools } : null
+      metadata: runMetadata
     })
 
     return {
@@ -163,8 +177,15 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     runStatus = 'error'
     runErrorMessage = error.message
 
+    const errMetadata: any = {
+      tools_available: scopedTools.map(t => t.name)
+    }
+    if (executedTools.length > 0) {
+      errMetadata.tool_calls = executedTools
+    }
+
     await logAgentRun(supabase, {
-      companyId, agentId, conversationId, status: runStatus, provider: providerUsed, model: modelUsed, usageMetrics, duration: Date.now() - startTime, errorMessage: runErrorMessage
+      companyId, agentId, conversationId, status: runStatus, provider: providerUsed, model: modelUsed, usageMetrics, duration: Date.now() - startTime, errorMessage: runErrorMessage, metadata: errMetadata
     }).catch(console.error)
 
     console.error('[Agent Engine Error]', error)

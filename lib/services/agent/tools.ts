@@ -25,10 +25,16 @@ export interface InternalToolResult {
   }
 }
 
+export interface ToolMetadata {
+  category: 'catalog' | 'pricing' | 'commercial' | 'quotes' | 'datetime' | 'general'
+  capabilities?: string[]
+}
+
 export interface ToolDefinition<T extends z.ZodTypeAny = z.ZodTypeAny> {
   name: string
   description: string
   schema: T
+  metadata?: ToolMetadata
   execute: (input: z.infer<T>, context: ToolExecutionContext) => Promise<any>
 }
 
