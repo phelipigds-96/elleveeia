@@ -113,7 +113,10 @@ export class GeminiProvider implements LLMProvider {
       usage: {
         prompt_tokens: usage?.promptTokenCount || 0,
         completion_tokens: usage?.candidatesTokenCount || 0,
-        total_tokens: usage?.totalTokenCount || 0
+        total_tokens: usage?.totalTokenCount || 0,
+        cached_tokens: usage?.cachedContentTokenCount,
+        reasoning_tokens: usage?.thoughtsTokenCount,
+        tool_use_tokens: usage?.toolUsePromptTokenCount
       },
       tool_calls: internalToolCalls
     }

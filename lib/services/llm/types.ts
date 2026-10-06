@@ -20,6 +20,10 @@ export interface LLMResponseUsage {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cached_tokens?: number
+  reasoning_tokens?: number
+  cache_write_tokens?: number
+  tool_use_tokens?: number
 }
 
 export interface LLMResponse {

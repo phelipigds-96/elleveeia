@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/service'
+﻿import { createAdminClient } from '@/lib/supabase/service'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
 import { LLMProviderType, LLMRequestMessage } from '../llm/types'
@@ -45,10 +45,10 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         content: userMessage,
         message_type: 'text'
       })
-      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuǭrio: ${msgErr.message}`)
+      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuÇ­rio: ${msgErr.message}`)
     }
 
-    // O Context Builder agora devolve tambǸm a workingMemory da ǧltima interaǜo
+    // O Context Builder agora devolve tambÇ¸m a workingMemory da Ç§ltima interaÇœo
     const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
       companyId,
       agentId,
@@ -81,11 +81,14 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     }))
 
     let iteration = 0
+    let llm_rounds: any[] = []
     let finalContent: string | null = null
 
     // LLM Loop para Function Calling
     while (iteration < MAX_TOOL_ITERATIONS) {
       iteration++
+
+      const roundStartTime = Date.now()
 
       const response = await provider.generateResponse({
         model: modelUsed,
@@ -94,10 +97,25 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         tools: availableTools
       })
 
-      // Acumula mǸtricas
+      // Acumula mÇ¸tricas
       usageMetrics.prompt_tokens += response.usage.prompt_tokens
       usageMetrics.completion_tokens += response.usage.completion_tokens
       usageMetrics.total_tokens += response.usage.total_tokens
+
+      llm_rounds.push({
+        round: iteration,
+        provider: providerUsed,
+        model: modelUsed,
+        duration_ms: Date.now() - roundStartTime,
+        input_tokens: response.usage.prompt_tokens,
+        output_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+        cached_input_tokens: response.usage.cached_tokens,
+        cache_write_tokens: response.usage.cache_write_tokens,
+        reasoning_tokens: response.usage.reasoning_tokens,
+        tool_use_tokens: response.usage.tool_use_tokens,
+        tool_names: response.tool_calls ? response.tool_calls.map(tc => tc.toolName) : []
+      })
 
       if (response.tool_calls && response.tool_calls.length > 0) {
         messagesForLLM.push({
@@ -126,14 +144,14 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     }
 
     if (!finalContent) {
-      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vǭlida de texto aps ${iteration} iteraes.`)
+      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vÇ­lida de texto aps ${iteration} iteraes.`)
     }
 
     // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
-    // Não inventamos dados, apenas parseamos resultados deterministicos de forma segura
+    // NÃ£o inventamos dados, apenas parseamos resultados deterministicos de forma segura
     const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
-    // 3. Salvar a resposta do agente contendo a nova memória no campo metadata!
+    // 3. Salvar a resposta do agente contendo a nova memÃ³ria no campo metadata!
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
       messageMetadata.working_memory = newWorkingMemory
@@ -158,8 +176,9 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     runStatus = 'success'
 
-    // Observabilidade das Métricas de Contexto
+    // Observabilidade das MÃ©tricas de Contexto
     const runMetadata: any = {
+      llm_rounds,
       tools_available: scopedTools.map(t => t.name),
       context: {
         history_messages_available: contextMetrics.availableMessages,
@@ -241,3 +260,6 @@ async function logAgentRun(supabase: any, { companyId, agentId, conversationId, 
 
   await supabase.from('agent_runs').insert(payload)
 }
+
+
+

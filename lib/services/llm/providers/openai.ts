@@ -100,7 +100,9 @@ export class OpenAIProvider implements LLMProvider {
       usage: {
         prompt_tokens: data.usage?.prompt_tokens || 0,
         completion_tokens: data.usage?.completion_tokens || 0,
-        total_tokens: data.usage?.total_tokens || 0
+        total_tokens: data.usage?.total_tokens || 0,
+        cached_tokens: data.usage?.prompt_tokens_details?.cached_tokens,
+        reasoning_tokens: data.usage?.completion_tokens_details?.reasoning_tokens
       },
       tool_calls: internalToolCalls
     }
