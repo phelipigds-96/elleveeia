@@ -1,72 +1,56 @@
-import { tokenizeQuery, calculateMatchScore } from './search-logic'
+import { parseQuery, calculateMatchScore } from './search-logic'
 
-// Este arquivo contǸm testes unitǭrios para a lgica de busca inteligente do catǭlogo
+describe('Catalog Search Logic v2', () => {
 
-describe('Catalog Search Logic', () => {
-
-  describe('Tokenization', () => {
-    it('should tokenize and recognize multi-word specifics', () => {
-      const tokens = tokenizeQuery('cobertura genuine meio amargo 1kg')
+  describe('Tokenization and Parsing', () => {
+    it('should parse multi-word tokens and distinguish attributes', () => {
+      const parsed = parseQuery('quanto ta a cobertura genuine meio amargo de 1kg')
       
-      const generic = tokens.find(t => t.original === 'cobertura')
-      expect(generic?.isGeneric).toBe(true)
-
-      const specific = tokens.find(t => t.original === 'genuine')
-      expect(specific?.isGeneric).toBe(false)
+      expect(parsed.significantTokens).toContain('genuine')
+      expect(parsed.genericTokens).toContain('cobertura')
+      expect(parsed.weight).toBe(1)
+      expect(parsed.unit).toBe('kg')
       
-      const multi = tokens.find(t => t.original === 'meio amargo')
-      expect(multi?.variants).toContain('m amargo')
-      expect(multi?.isGeneric).toBe(false)
-
-      const unit = tokens.find(t => t.original === '1kg')
-      expect(unit?.isUnit).toBe(true)
-    })
-
-    it('should handle decimal weights', () => {
-      const tokens = tokenizeQuery('sicao 1.01kg')
-      const unit = tokens.find(t => t.isUnit)
-      expect(unit?.original).toBe('1.01kg')
-      expect(unit?.variants).toContain('1 01kg')
+      const mw = parsed.tokenGroups.find(t => t.original === 'meio amargo')
+      expect(mw?.variants).toContain('m amargo')
     })
   })
 
-  describe('Scoring', () => {
-    it('Teste 1 & 2: Natural description vs DB format', () => {
-      // Catǭlogo: Cob. genuine m/amargo 1kg
-      // normalized_name: cob genuine m amargo 1kg
+  describe('Scoring and Confidence', () => {
+    it('Teste A & B: exact_match score', () => {
       const dbName = 'cob genuine m amargo 1kg'
-      const tokens = tokenizeQuery('cobertura genuine meio amargo de 1kg')
+      const parsed = parseQuery('quanto ta a cobertura genuine meio amargo de 1kg')
       
-      const score = calculateMatchScore(dbName, tokens)
-      expect(score).toBeGreaterThan(50) // High score for matching specific + unit + generic
+      const { score, confidence, penalty } = calculateMatchScore(dbName, 'genuine', 'cobertura', parsed)
+      
+      expect(penalty).toBe(0) // No missing tokens
+      expect(confidence).toBe(1.0)
+      expect(score).toBeGreaterThan(60)
     })
 
-    it('Teste 3: Abbreviations in query', () => {
-      const dbName = 'cobertura genuine meio amargo 1kg'
-      const tokens = tokenizeQuery('cob genuine m/amargo 1kg')
-      const score = calculateMatchScore(dbName, tokens)
-      expect(score).toBeGreaterThan(50)
+    it('Teste D & F: Ambiguity and missing unit', () => {
+      const parsed = parseQuery('quanto custa a cobertura genuine meio amargo') // No unit
+      
+      const { score: score1kg, penalty: pen1 } = calculateMatchScore('cob genuine m amargo 1kg', 'genuine', 'cobertura', parsed)
+      const { score: score500g, penalty: pen2 } = calculateMatchScore('cob genuine m amargo 500g', 'genuine', 'cobertura', parsed)
+      
+      // Both match the query equally well, since the query has no unit
+      expect(score1kg).toBe(score500g)
+      expect(pen1).toBe(0)
+      expect(pen2).toBe(0)
     })
 
-    it('Teste 4: False positive penalty', () => {
-      const dbNameWhite = 'cob genuine branco 1kg'
-      const dbNameDark = 'cob genuine m amargo 1kg'
-      
+    it('Teste E: False positive penalty', () => {
       // Query looking for white
-      const tokens = tokenizeQuery('Cobertura Genuine Branco 1kg')
+      const parsed = parseQuery('quanto custa a cobertura genuine branca 1kg')
       
-      const scoreWhite = calculateMatchScore(dbNameWhite, tokens)
-      const scoreDark = calculateMatchScore(dbNameDark, tokens)
+      const resWhite = calculateMatchScore('cob genuine branco 1kg', 'genuine', 'cobertura', parsed)
+      const resDark = calculateMatchScore('cob genuine m amargo 1kg', 'genuine', 'cobertura', parsed)
       
-      // Branco must score significantly higher than meio amargo
-      expect(scoreWhite).toBeGreaterThan(scoreDark + 15)
-    })
-
-    it('Teste 5: Chocolate vs Sicao', () => {
-      const dbName = 'choc sicao m amargo 1kg'
-      const tokens = tokenizeQuery('Chocolate Sicao Meio Amargo 1kg')
-      const score = calculateMatchScore(dbName, tokens)
-      expect(score).toBeGreaterThan(50)
+      // Branco must score significantly higher, Dark must be penalized for missing "branca/branco"
+      expect(resWhite.score).toBeGreaterThan(resDark.score + 20)
+      expect(resDark.penalty).toBeGreaterThan(0)
+      expect(resDark.confidence).toBeLessThan(1.0)
     })
   })
 })

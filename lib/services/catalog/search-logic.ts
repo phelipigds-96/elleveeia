@@ -7,18 +7,36 @@ export interface TokenGroup {
   isUnit: boolean
 }
 
+export type ParsedProductQuery = {
+  originalQuery: string
+  normalizedQuery: string
+  weight?: number
+  unit?: string
+  identifiers: string[]
+  significantTokens: string[]
+  genericTokens: string[]
+  tokenGroups: TokenGroup[]
+}
+
 const GENERICS = new Set(['cobertura', 'chocolate', 'recheio', 'pasta', 'creme', 'po', 'gota', 'gotas', 'barra', 'pacote', 'caixa', 'unidade'])
 
-export function tokenizeQuery(query: string): TokenGroup[] {
-  let text = query.toLowerCase()
+export function parseQuery(query: string): ParsedProductQuery {
+  let normalizedQuery = query.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 
   const groups: TokenGroup[] = []
+  let text = normalizedQuery
 
-  // 1. Extrair multi-word tokens primeiro
+  // 1. Identificadores exatos (SKU, EAN)
+  const identifiers: string[] = []
+  if (/^[a-z0-9]+$/.test(normalizedQuery) && normalizedQuery.length >= 4) {
+    identifiers.push(normalizedQuery)
+  }
+
+  // 2. Extrair multi-word tokens
   for (const mw of MULTI_WORD_TOKENS) {
     for (const variant of mw.variants) {
       if (text.includes(variant)) {
@@ -28,12 +46,15 @@ export function tokenizeQuery(query: string): TokenGroup[] {
           isGeneric: false,
           isUnit: false
         })
-        text = text.replace(variant, ' ') // Remove from text so we don't process it again
+        text = text.replace(variant, ' ')
       }
     }
   }
 
-  // 2. Extrair pesos colados (ex: 1kg, 500g)
+  // 3. Extrair pesos colados (ex: 1kg, 500g)
+  let weightValue: number | undefined
+  let unitValue: string | undefined
+  
   const weightMatches = text.match(/\b\d+(?:[\.,]\d+)?\s*(?:kg|g|ml|l|un|und)\b/g)
   if (weightMatches) {
     for (const w of weightMatches) {
@@ -45,17 +66,21 @@ export function tokenizeQuery(query: string): TokenGroup[] {
         isUnit: true
       })
       text = text.replace(w, ' ')
+      
+      // Parse for structured attributes
+      const numMatch = normalizedW.match(/(\d+(?:\.\d+)?)/)
+      const unitMatch = normalizedW.match(/[a-z]+$/)
+      if (numMatch) weightValue = parseFloat(numMatch[1])
+      if (unitMatch) unitValue = unitMatch[0]
     }
   }
 
-  // 3. Processar palavras restantes
+  // 4. Processar palavras restantes
   const words = text.split(' ').filter(w => w.length > 0 && !STOP_WORDS.has(w))
   
   for (const word of words) {
-    // Se a palavra jǭ foi processada (ex: parte de um multi-word que falhou no replace por algum motivo), pular
     const isGeneric = GENERICS.has(word)
     
-    // Find aliases where this word is a key or a variant
     let variants = [word]
     for (const [canonical, aliases] of Object.entries(ALIASES)) {
       if (canonical === word || aliases.includes(word)) {
@@ -72,35 +97,79 @@ export function tokenizeQuery(query: string): TokenGroup[] {
     })
   }
 
-  return groups
+  const significantTokens = groups.filter(g => !g.isGeneric && !g.isUnit).map(g => g.original)
+  const genericTokens = groups.filter(g => g.isGeneric).map(g => g.original)
+
+  return {
+    originalQuery: query,
+    normalizedQuery,
+    weight: weightValue,
+    unit: unitValue,
+    identifiers,
+    significantTokens,
+    genericTokens,
+    tokenGroups: groups
+  }
 }
 
-export function calculateMatchScore(normalizedProductName: string, tokenGroups: TokenGroup[]): number {
-  let score = 0
-  const paddedName = ` ${normalizedProductName} `
+export interface MatchScoreResult {
+  score: number
+  penalty: number
+  confidence: number
+}
 
-  for (const group of tokenGroups) {
-    let matched = false
+export function calculateMatchScore(
+  productName: string, 
+  productBrand: string | null, 
+  productCategory: string | null,
+  parsed: ParsedProductQuery
+): MatchScoreResult {
+  let score = 0
+  let penalty = 0
+  
+  const paddedName = ` ${productName} `
+  const brandNorm = productBrand ? productBrand.toLowerCase() : null
+  const catNorm = productCategory ? productCategory.toLowerCase() : null
+
+  for (const group of parsed.tokenGroups) {
+    let matchedInName = false
     
-    // Exact variant match in the string with word boundaries
+    const matchedBrand = brandNorm && group.variants.some(v => brandNorm.includes(v))
+    const matchedCat = catNorm && group.variants.some(v => catNorm.includes(v))
+
     for (const variant of group.variants) {
       if (paddedName.includes(` ${variant} `)) {
-        matched = true
+        matchedInName = true
         break
       }
     }
 
+    const matched = matchedInName || matchedBrand || matchedCat
+
     if (matched) {
       if (group.isUnit) score += 30
+      else if (matchedBrand) score += 40
+      else if (matchedCat) score += 25
       else if (!group.isGeneric) score += 20
       else score += 5
     } else {
-      // Penalty for missing
       if (!group.isGeneric && !group.isUnit) {
-        score -= 10 // Missing a specific term is bad
+        penalty += 20 // Penaliza fortemente falta de termos importantes (ex: branco vs meio amargo)
+      } else if (group.isUnit) {
+        penalty += 10 // Penaliza tamanho incorreto
+      } else {
+        penalty += 2 // Penaliza levemente termos genericos faltando
       }
     }
   }
 
-  return score
+  // Calcula confiana (1.0 = sem penalidades, reduz conforme a penalidade cresce)
+  // Penalidade de 20 jǭ derruba a confiana para 0.60
+  const confidence = Math.max(0, 1.0 - (penalty / 50))
+
+  return {
+    score: score - penalty,
+    penalty,
+    confidence
+  }
 }

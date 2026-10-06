@@ -4,20 +4,21 @@ import { searchProducts } from '../../catalog/products'
 
 export const buscarProdutoTool: ToolDefinition = {
   name: 'buscar_produto',
-  description: 'Busca produtos do catálogo da empresa por nome, descrição, código, SKU ou código de barras.',
+  description: 'Busca produtos do catǭlogo da empresa por nome ou caractersticas. ATENO: NO existe integraǜo de estoque no momento. Se o status for "not_found", responda apenas que o produto nǜo foi localizado no catǭlogo, e NUNCA afirme que estǭ "sem estoque". Se for "ambiguous", pea para o usuǭrio esclarecer (ex: escolhendo entre os tamanhos/sabores retornados).',
   schema: z.object({
-    query: z.string().describe('Termo de busca (nome do produto, marca, código de barras, ou SKU).'),
-    limit: z.number().optional().describe('Quantidade máxima de resultados a retornar (padrão 5).')
+    query: z.string().describe('Frase ou termos de busca informados pelo cliente (ex: "cobertura genuine meio amargo 1kg").'),
+    limit: z.number().optional().describe('Quantidade mǭxima de resultados a retornar (padrǜo 5).')
   }),
   execute: async (input, context) => {
     const { query, limit = 5 } = input
     
-    // A chamada do serviço recebe o companyId proveniente EXCLUSIVAMENTE do contexto seguro.
-    const products = await searchProducts(context.companyId, query, limit)
+    // A busca agora cuida inteiramente da anǭlise semǦntica e ranking.
+    // Retorna { status: 'exact_match' | 'ambiguous' | 'not_found', confidence, matches }
+    const result = await searchProducts(context.companyId, query, limit)
 
     return {
       success: true,
-      products
+      data: result
     }
   }
 }

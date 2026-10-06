@@ -1,6 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/service'
-import { normalizeCatalogText } from './normalization'
-import { tokenizeQuery, calculateMatchScore } from './search-logic'
+import { parseQuery, calculateMatchScore } from './search-logic'
 
 export interface ProductSearchResult {
   id: string
@@ -14,19 +13,24 @@ export interface ProductSearchResult {
   match_score?: number
 }
 
-export async function searchProducts(companyId: string, query: string, limit: number = 5): Promise<ProductSearchResult[]> {
-  const supabase = createAdminClient()
-  const normalizedQuery = normalizeCatalogText(query)
+export interface StructuredSearchResponse {
+  status: 'exact_match' | 'ambiguous' | 'not_found'
+  confidence: number
+  matches: ProductSearchResult[]
+}
 
-  if (!normalizedQuery || normalizedQuery.trim() === '') {
-    return []
+export async function searchProducts(companyId: string, query: string, limit: number = 5): Promise<StructuredSearchResponse> {
+  const supabase = createAdminClient()
+  const parsed = parseQuery(query)
+
+  if (!parsed.normalizedQuery || parsed.normalizedQuery.trim() === '') {
+    return { status: 'not_found', confidence: 0, matches: [] }
   }
 
   const maxLimit = Math.min(limit, 10)
 
-  // 1. Verificar se Ǹ um identificador exato (EAN ou SKU)
-  // Se for apenas nǧmeros ou cdigo alfanumǸrico curto, tentar match exato primeiro
-  if (/^[a-zA-Z0-9]+$/.test(normalizedQuery) && normalizedQuery.length >= 4) {
+  // 1. Identificadores exatos
+  if (parsed.identifiers.length > 0) {
     const { data: exactData } = await supabase
       .from('products')
       .select(`id, name, sku, barcode, unit, active, product_brands ( name ), product_categories ( name )`)
@@ -36,19 +40,16 @@ export async function searchProducts(companyId: string, query: string, limit: nu
       .limit(1)
       
     if (exactData && exactData.length > 0) {
-      return exactData.map(mapProductRow)
+      return {
+        status: 'exact_match',
+        confidence: 1.0,
+        matches: exactData.map(mapProductRow)
+      }
     }
   }
 
-  // 2. Tokenizar e classificar a query
-  const tokenGroups = tokenizeQuery(query)
-  
-  // Separar tokens especficos (alta relevǦncia)
-  const specificTokens = tokenGroups.filter(g => !g.isGeneric && !g.isUnit)
-  const unitTokens = tokenGroups.filter(g => g.isUnit)
-  
-  // Vamos usar no mǭximo os 2 tokens mais especficos para forar no DB (AND)
-  // Isso reduz o conjunto retornado sem ser restritivo demais
+  // 2. Candidate Retrieval no banco (PostgreSQL)
+  const specificTokens = parsed.tokenGroups.filter(g => !g.isGeneric && !g.isUnit)
   const requiredDbTokens = specificTokens.slice(0, 2)
   
   let dbQuery = supabase
@@ -57,56 +58,74 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     .eq('company_id', companyId)
     .eq('active', true)
 
-  // Adicionar filtros .or para cada token obrigatrio (atuam como AND entre si no Supabase)
   for (const group of requiredDbTokens) {
     const orCondition = group.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
     dbQuery = dbQuery.or(orCondition)
   }
 
-  // Se nǜo houver tokens especficos, talvez a busca seja s "cobertura" ou "1kg"
-  // Nesse caso, usamos os tokens genǸricos/unidades para nǜo buscar tudo
-  if (requiredDbTokens.length === 0 && tokenGroups.length > 0) {
-    const fallbackGroup = tokenGroups[0]
+  if (requiredDbTokens.length === 0 && parsed.tokenGroups.length > 0) {
+    const fallbackGroup = parsed.tokenGroups[0]
     const orCondition = fallbackGroup.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
     dbQuery = dbQuery.or(orCondition)
   }
 
   const { data, error } = await dbQuery.limit(200)
 
-  if (error || !data) {
-    console.error('[searchProducts] Erro na busca de produtos:', error?.message)
-    return []
+  if (error || !data || data.length === 0) {
+    return { status: 'not_found', confidence: 0, matches: [] }
   }
 
-  // Filtra produtos de balana
   const isBulkRegex = /(?:^|[^0-9])\s+KG(?:\s|$)/i
   const validProducts = data.filter((row: any) => !isBulkRegex.test(row.name))
 
-  // 3. Avaliar relevǦncia no backend (Scoring)
+  // 3. Ranking e Avaliao de Confiana
   const scoredProducts = validProducts.map((row: any) => {
-    const score = calculateMatchScore(row.normalized_name, tokenGroups)
+    const brand = row.product_brands?.name || null
+    const category = row.product_categories?.name || null
+    const { score, confidence } = calculateMatchScore(row.normalized_name, brand, category, parsed)
+    
     return {
       product: mapProductRow(row),
-      score
+      score,
+      confidence
     }
   })
 
-  // 4. Ordenar e retornar os melhores
+  // Ordena pelo maior score
   scoredProducts.sort((a, b) => b.score - a.score)
   
-  // Se tivermos candidatos com score negativo (penalizados por falta de token chave), 
-  // ns ignoramos se o melhor score for decente.
-  const bestScore = scoredProducts[0]?.score || 0
-  const threshold = bestScore > 10 ? bestScore - 15 : 0 // Filtro de qualidade
+  // 4. Resolve Status e Ambiguidade
+  const bestMatch = scoredProducts[0]
   
-  const finalCandidates = scoredProducts
-    .filter(item => item.score >= threshold && item.score > 0)
-    .slice(0, maxLimit)
+  if (!bestMatch || bestMatch.score <= 0 || bestMatch.confidence < 0.4) {
+    return { status: 'not_found', confidence: 0, matches: [] }
+  }
 
-  return finalCandidates.map(c => ({
+  // Define os candidatos relevantes (aqueles que esto prximos do melhor score)
+  const threshold = bestMatch.score > 20 ? bestMatch.score - 5 : bestMatch.score
+  const candidates = scoredProducts.filter(item => item.score >= threshold)
+
+  let status: 'exact_match' | 'ambiguous' | 'not_found' = 'exact_match'
+
+  if (candidates.length > 1) {
+    // Se temos mltiplos candidatos excelentes empatados ou quase empatados, Ǹ ambguo
+    status = 'ambiguous'
+  } else if (bestMatch.confidence < 0.8) {
+    // Se a confiana Ǹ mǸdia (ex: acertou a marca mas errou o peso ou faltou algo), nǜo afirmamos match exato
+    status = 'ambiguous'
+  }
+
+  // Reduzir carga para o LLM enviando no mǭximo maxLimit
+  const finalMatches = candidates.slice(0, maxLimit).map(c => ({
     ...c.product,
-    match_score: c.score // Exposto internamente
+    match_score: c.score
   }))
+
+  return {
+    status,
+    confidence: bestMatch.confidence,
+    matches: finalMatches
+  }
 }
 
 function mapProductRow(row: any): ProductSearchResult {
