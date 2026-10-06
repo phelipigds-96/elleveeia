@@ -82,7 +82,8 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     let iteration = 0
     let llm_rounds: any[] = []
-    let finalContent: string | null = null
+      let finalContent: string | null = null
+      let debug_tool_loop: any[] = []
 
     // LLM Loop para Function Calling
     while (iteration < MAX_TOOL_ITERATIONS) {
@@ -119,10 +120,15 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
       if (response.tool_calls && response.tool_calls.length > 0) {
         messagesForLLM.push({
-          role: 'assistant',
-          content: response.content || undefined,
-          tool_calls: response.tool_calls
-        })
+            role: 'assistant',
+            content: response.content || undefined,
+            tool_calls: response.tool_calls
+          })
+
+          debug_tool_loop.push({
+            round: iteration,
+            tool_calls_requested: response.tool_calls.map(tc => tc.toolName)
+          })
 
         for (const call of response.tool_calls) {
           const result = await executor.execute(call, { companyId, agentId, conversationId })
@@ -131,10 +137,15 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
           allToolResults.push(result) // Salvamos para o parser da Working Memory
 
           messagesForLLM.push({
-            role: 'tool',
-            tool_result: result
+              role: 'tool',
+              tool_result: result
+            })
+          }
+
+          debug_tool_loop.push({
+            round: iteration + 1,
+            tool_results_sent: allToolResults.map(r => ({ tool_name: r.toolName, success: r.success, data: r.data }))
           })
-        }
         
         continue
       }
@@ -191,7 +202,8 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
       // Observabilidade das Metricas de Contexto
       const runMetadata: any = {
-        llm_rounds,
+          debug_tool_loop,
+          llm_rounds,
         caching: {
           total_cached_tokens,
           cache_hit: total_cached_tokens > 0,
@@ -278,6 +290,10 @@ async function logAgentRun(supabase: any, { companyId, agentId, conversationId, 
 
   await supabase.from('agent_runs').insert(payload)
 }
+
+
+
+
 
 
 
