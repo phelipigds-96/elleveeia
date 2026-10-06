@@ -19,8 +19,6 @@ export class OpenAIProvider implements LLMProvider {
           content: JSON.stringify(toolPayload) || "{}"
         }
       }
-      }
-      }
 
       if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
         return {
@@ -111,5 +109,7 @@ export class OpenAIProvider implements LLMProvider {
     }
   }
 }
+
+
 
 

@@ -29,12 +29,6 @@ export class GeminiProvider implements LLMProvider {
             }
           }]
         })
-      }
-          }]
-        })
-      }
-          }]
-        })
       } else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
         // Restaurar as chamadas de funÃ§Ã£o com suas respectivas thoughtSignatures (obrigatÃ³rio no Gemini 3+)
         const functionCallParts = msg.tool_calls.map(tc => {
@@ -129,5 +123,6 @@ export class GeminiProvider implements LLMProvider {
     }
   }
 }
+
 
 
