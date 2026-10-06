@@ -24,29 +24,41 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
     const toolName = res.toolName
     
     if (toolName === 'buscar_produto' || toolName === 'consultar_produto_comercial') {
-       const matches = res.data.matches || []
-       
-       if (res.data.status === 'exact_match' && matches.length === 1 && matches[0].id) {
-           const newId = matches[0].id
+       if (res.data.status === 'exact_match') {
+           const product = res.data.product ?? res.data.matches?.[0]
            
-           // Invalidaǜo de dependǦncias: se o produto mudou, descartamos os derivados antigos
-           if (next.activeProduct && next.activeProduct.id !== newId) {
-               delete next.activePrice
-               delete next.activeQuantity
+           if (product && product.id) {
+               const newId = product.id
+               
+               // Invalidacao de dependencias: se o produto mudou, descartamos os derivados antigos
+               if (next.activeProduct && next.activeProduct.id !== newId) {
+                   delete next.activePrice
+                   delete next.activeQuantity
+               }
+               
+               next.activeProduct = { id: newId, name: product.name }
            }
-           
-           next.activeProduct = { id: newId, name: matches[0].name }
        }
        
-       // Aplica preço novo se houver
-       if (res.data.price) {
-           next.activePrice = { unitPrice: res.data.price.unitPrice, priceType: res.data.price.priceType }
+       // Aplica preco novo se houver
+       const pricingData = res.data.pricing ?? res.data.price
+       if (pricingData) {
+           const unitPrice = pricingData.unit_price ?? pricingData.unitPrice
+           const priceType = pricingData.price_type ?? pricingData.priceType
+           if (unitPrice !== undefined) {
+               next.activePrice = { unitPrice, priceType }
+           }
        }
     }
     
     if (toolName === 'calcular_preco_produto') {
-       if (res.data.quantity) next.activeQuantity = res.data.quantity
-       if (res.data.unitPrice) next.activePrice = { unitPrice: res.data.unitPrice }
+       if (res.data.quantity !== undefined) next.activeQuantity = res.data.quantity
+       
+       const unitPrice = res.data.unit_price ?? res.data.unitPrice
+       const priceType = res.data.price_type ?? res.data.priceType
+       if (unitPrice !== undefined) {
+           next.activePrice = { unitPrice, priceType }
+       }
     }
 
     if (toolName === 'gerar_orcamento') {

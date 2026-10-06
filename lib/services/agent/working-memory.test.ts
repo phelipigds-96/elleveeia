@@ -2,12 +2,31 @@ import { applyWorkingMemoryUpdate, WorkingMemory } from './working-memory'
 
 describe('Working Memory Consolidation', () => {
 
-  it('deve descartar preço e quantidade quando o produto muda (Cross Contamination)', () => {
-    const previous: WorkingMemory = {
-      activeProduct: { id: 'A', name: 'Produto A' },
-      activePrice: { unitPrice: 29.99 },
-      activeQuantity: 20
-    }
+  it('deve extrair produto e preco pelo contrato de consultar_produto_comercial (data.product e data.pricing)', () => {
+    const previous: WorkingMemory = {}
+
+    const toolResults = [
+      {
+        success: true,
+        toolName: 'consultar_produto_comercial',
+        data: {
+          status: 'exact_match',
+          product: { id: 'product-b', name: 'Cobertura Genuine M/Amargo 1kg' },
+          pricing: { unit_price: 35.90, price_type: 'retail' }
+        }
+      }
+    ]
+
+    const next = applyWorkingMemoryUpdate(previous, toolResults)
+
+    expect(next.activeProduct?.id).toBe('product-b')
+    expect(next.activeProduct?.name).toBe('Cobertura Genuine M/Amargo 1kg')
+    expect(next.activePrice?.unitPrice).toBe(35.90)
+    expect(next.activePrice?.priceType).toBe('retail')
+  })
+
+  it('deve extrair produto e preco pelo contrato de buscar_produto (data.matches e data.price)', () => {
+    const previous: WorkingMemory = {}
 
     const toolResults = [
       {
@@ -15,8 +34,33 @@ describe('Working Memory Consolidation', () => {
         toolName: 'buscar_produto',
         data: {
           status: 'exact_match',
-          matches: [{ id: 'B', name: 'Produto B' }]
-          // Sem price, sem quantity
+          matches: [{ id: 'product-a', name: 'Sicao 1kg' }],
+          price: { unitPrice: 20.00, priceType: 'wholesale' }
+        }
+      }
+    ]
+
+    const next = applyWorkingMemoryUpdate(previous, toolResults)
+
+    expect(next.activeProduct?.id).toBe('product-a')
+    expect(next.activePrice?.unitPrice).toBe(20.00)
+    expect(next.activePrice?.priceType).toBe('wholesale')
+  })
+
+  it('deve descartar preço e quantidade quando o produto muda (Cross Contamination)', () => {
+    const previous: WorkingMemory = {
+      activeProduct: { id: 'A', name: 'Produto A' },
+      activePrice: { unitPrice: 29.99 },
+      activeQuantity: 10
+    }
+
+    const toolResults = [
+      {
+        success: true,
+        toolName: 'consultar_produto_comercial',
+        data: {
+          status: 'exact_match',
+          product: { id: 'B', name: 'Produto B' }
         }
       }
     ]
@@ -32,31 +76,7 @@ describe('Working Memory Consolidation', () => {
     const previous: WorkingMemory = {
       activeProduct: { id: 'A', name: 'Produto A' },
       activePrice: { unitPrice: 29.99 },
-      activeQuantity: 20
-    }
-
-    const toolResults = [
-      {
-        success: true,
-        toolName: 'buscar_produto',
-        data: {
-          status: 'exact_match',
-          matches: [{ id: 'A', name: 'Produto A' }]
-        }
-      }
-    ]
-
-    const next = applyWorkingMemoryUpdate(previous, toolResults)
-
-    expect(next.activeProduct?.id).toBe('A')
-    expect(next.activePrice?.unitPrice).toBe(29.99)
-    expect(next.activeQuantity).toBe(20)
-  })
-
-  it('deve aplicar novo preo no produto B', () => {
-    const previous: WorkingMemory = {
-      activeProduct: { id: 'A', name: 'Produto A' },
-      activePrice: { unitPrice: 29.99 }
+      activeQuantity: 10
     }
 
     const toolResults = [
@@ -65,49 +85,19 @@ describe('Working Memory Consolidation', () => {
         toolName: 'consultar_produto_comercial',
         data: {
           status: 'exact_match',
-          matches: [{ id: 'B', name: 'Produto B' }],
-          price: { unitPrice: 15.00 }
+          product: { id: 'A', name: 'Produto A' }
         }
       }
     ]
 
     const next = applyWorkingMemoryUpdate(previous, toolResults)
 
-    expect(next.activeProduct?.id).toBe('B')
-    expect(next.activePrice?.unitPrice).toBe(15.00)
+    expect(next.activeProduct?.id).toBe('A')
+    expect(next.activePrice?.unitPrice).toBe(29.99)
+    expect(next.activeQuantity).toBe(10)
   })
 
-  it('deve atualizar apenas quantidade do produto B', () => {
-    const previous: WorkingMemory = {
-      activeProduct: { id: 'A', name: 'Produto A' },
-      activeQuantity: 20
-    }
-
-    const toolResults = [
-      {
-        success: true,
-        toolName: 'buscar_produto',
-        data: {
-          status: 'exact_match',
-          matches: [{ id: 'B', name: 'Produto B' }]
-        }
-      },
-      {
-        success: true,
-        toolName: 'calcular_preco_produto',
-        data: {
-          quantity: 5
-        }
-      }
-    ]
-
-    const next = applyWorkingMemoryUpdate(previous, toolResults)
-
-    expect(next.activeProduct?.id).toBe('B')
-    expect(next.activeQuantity).toBe(5)
-  })
-
-  it('nǜo deve alterar produto se status for ambiguous', () => {
+  it('não deve alterar produto se status for ambiguous', () => {
     const previous: WorkingMemory = {
       activeProduct: { id: 'A', name: 'Produto A' }
     }
@@ -125,11 +115,10 @@ describe('Working Memory Consolidation', () => {
 
     const next = applyWorkingMemoryUpdate(previous, toolResults)
 
-    // Produto ativo contnua sendo A porque X/Y sǜo ambguos
     expect(next.activeProduct?.id).toBe('A')
   })
 
-  it('nǜo deve alterar produto se status for not_found', () => {
+  it('não deve alterar produto se status for not_found', () => {
     const previous: WorkingMemory = {
       activeProduct: { id: 'A', name: 'Produto A' }
     }
@@ -148,5 +137,30 @@ describe('Working Memory Consolidation', () => {
     const next = applyWorkingMemoryUpdate(previous, toolResults)
 
     expect(next.activeProduct?.id).toBe('A')
+  })
+
+  it('deve atualizar preço e quantidade a partir de calcular_preco_produto', () => {
+    const previous: WorkingMemory = {
+      activeProduct: { id: 'A', name: 'Produto A' }
+    }
+
+    const toolResults = [
+      {
+        success: true,
+        toolName: 'calcular_preco_produto',
+        data: {
+          quantity: 20,
+          unit_price: 49.99,
+          price_type: 'wholesale'
+        }
+      }
+    ]
+
+    const next = applyWorkingMemoryUpdate(previous, toolResults)
+
+    expect(next.activeProduct?.id).toBe('A')
+    expect(next.activeQuantity).toBe(20)
+    expect(next.activePrice?.unitPrice).toBe(49.99)
+    expect(next.activePrice?.priceType).toBe('wholesale')
   })
 })
