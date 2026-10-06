@@ -32,6 +32,9 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
   let scopedTools: any[] = []
   const executedTools: Array<{name: string, success: boolean}> = []
 
+  // Rastreabilidade estrita e deterministica da Memria de Trabalho (Sem LLM)
+  const allToolResults: any[] = []
+
   try {
     if (userMessage) {
       const { error: msgErr } = await supabase.from('messages').insert({
@@ -44,7 +47,8 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
       if (msgErr) throw new Error(`Falha ao inserir mensagem do usuǭrio: ${msgErr.message}`)
     }
 
-    const { agent, conversation, payloadMessages } = await buildAgentContext({
+    // O Context Builder agora devolve tambǸm a workingMemory da ǧltima interaǜo
+    const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
       companyId,
       agentId,
       conversationId
@@ -65,8 +69,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     
     const executor = new ToolExecutor(registry)
     
-    // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg e historico
-    // Para obter o historico "raw" (sem a msg atual):
+    // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg e historico limpo
     const historyForScoping = payloadMessages.filter(m => m.role === 'user' || m.role === 'assistant')
     scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list())
     const availableTools = registry.getProviderPayload(scopedTools)
@@ -90,44 +93,75 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         tools: availableTools
       })
 
-      // Acumula métricas
+      // Acumula mǸtricas
       usageMetrics.prompt_tokens += response.usage.prompt_tokens
       usageMetrics.completion_tokens += response.usage.completion_tokens
       usageMetrics.total_tokens += response.usage.total_tokens
 
       if (response.tool_calls && response.tool_calls.length > 0) {
-        // LLM pediu execução de ferramentas
-        // Adiciona a resposta do LLM no histórico como assistant
         messagesForLLM.push({
           role: 'assistant',
           content: response.content || undefined,
           tool_calls: response.tool_calls
         })
 
-        // Executa todas as tools (Em paralelo para leitura, mas seguro aqui no forEach se houver write futuramente gerenciar concorrência)
         for (const call of response.tool_calls) {
           const result = await executor.execute(call, { companyId, agentId, conversationId })
           
           executedTools.push({ name: call.toolName, success: result.success })
+          allToolResults.push(result) // Salvamos para o parser da Working Memory
 
-          // Envia o resultado de volta para o LLM
           messagesForLLM.push({
             role: 'tool',
             tool_result: result
           })
         }
         
-        // Continua para a próxima iteração para o LLM gerar a resposta baseado no resultado
         continue
       }
 
-      // Se chegou aqui, não há mais tool calls. Salva a resposta final
       finalContent = response.content
       break
     }
 
     if (!finalContent) {
-      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta válida de texto após ${iteration} iterações.`)
+      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vǭlida de texto aps ${iteration} iteraes.`)
+    }
+
+    // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
+    // Nǜo inventamos dados, apenas parseamos resultados deterministicos.
+    const newWorkingMemory = { ...(previousWorkingMemory || {}) }
+
+    for (const res of allToolResults) {
+      if (res.success && res.data) {
+        const toolName = res.toolName
+        
+        if (toolName === 'buscar_produto' || toolName === 'consultar_produto_comercial') {
+           const matches = res.data.matches || []
+           // Só atualiza a memria do produto ativo se for um "exact_match" confiǭvel
+           if (res.data.status === 'exact_match' && matches.length === 1 && matches[0].id) {
+               newWorkingMemory.activeProduct = { id: matches[0].id, name: matches[0].name }
+           }
+           if (res.data.price) {
+               newWorkingMemory.activePrice = { unitPrice: res.data.price.unitPrice, priceType: res.data.price.priceType }
+           }
+        }
+        
+        if (toolName === 'calcular_preco_produto') {
+           if (res.data.quantity) newWorkingMemory.activeQuantity = res.data.quantity
+           if (res.data.unitPrice) newWorkingMemory.activePrice = { unitPrice: res.data.unitPrice }
+        }
+
+        if (toolName === 'gerar_orcamento') {
+           newWorkingMemory.activeQuote = { id: res.data.id, total: res.data.total, status: res.data.status }
+        }
+      }
+    }
+
+    // 3. Salvar a resposta do agente contendo a nova memria no campo metadata!
+    const messageMetadata: any = {}
+    if (Object.keys(newWorkingMemory).length > 0) {
+      messageMetadata.working_memory = newWorkingMemory
     }
 
     const { error: insertErr } = await supabase.from('messages').insert({
@@ -135,7 +169,8 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
       conversation_id: conversationId,
       sender_type: 'agent',
       content: finalContent,
-      message_type: 'text'
+      message_type: 'text',
+      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
     })
 
     if (insertErr) throw new Error(`Falha ao persistir resposta do agente: ${insertErr.message}`)
@@ -148,8 +183,19 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     runStatus = 'success'
 
+    // Observabilidade das MǸtricas de Contexto
     const runMetadata: any = {
-      tools_available: scopedTools.map(t => t.name)
+      tools_available: scopedTools.map(t => t.name),
+      context: {
+        history_messages_available: contextMetrics.availableMessages,
+        history_messages_used: contextMetrics.usedMessages,
+        working_memory: {
+          has_active_product: !!newWorkingMemory.activeProduct,
+          has_active_price: !!newWorkingMemory.activePrice,
+          has_active_quantity: !!newWorkingMemory.activeQuantity,
+          has_active_quote: !!newWorkingMemory.activeQuote
+        }
+      }
     }
     if (executedTools.length > 0) {
       runMetadata.tool_calls = executedTools
