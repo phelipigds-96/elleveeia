@@ -83,9 +83,19 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
   return (
     <div className={`space-y-6 ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
       <div className="flex items-center justify-between border-b pb-4">
-        <div>
-          <h3 className="text-base font-medium">{activeWorkflow.name}</h3>
-          <p className="text-sm text-muted-foreground">{activeWorkflow.description || 'Workflow padrão de atendimento'}</p>
+        <div className="flex items-start gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-medium">{activeWorkflow.name}</h3>
+              {activeWorkflow.is_default && (
+                <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-wide">Padrão</span>
+              )}
+              {!activeWorkflow.is_active && (
+                <span className="text-[10px] font-semibold bg-muted text-muted-foreground px-2 py-0.5 rounded-full uppercase tracking-wide">Inativo</span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">{activeWorkflow.description || 'Workflow de atendimento'}</p>
+          </div>
         </div>
         <button 
           onClick={() => handleAddStage(activeWorkflow.id)}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { Clock, User, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { moveConversationStageAction } from '../../settings/workflows/actions'
@@ -17,8 +17,12 @@ export function ConversationsKanban({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  // Local state for optimistic UI — initialized from props
   const [localConversations, setLocalConversations] = useState(conversations)
+
+  // Sync local state when server refreshes and passes new conversations
+  useEffect(() => {
+    setLocalConversations(conversations)
+  }, [conversations])
 
   if (!workflows || workflows.length === 0 || !workflows[0]?.workflow_stages || workflows[0].workflow_stages.length === 0) {
     return (
@@ -101,50 +105,53 @@ export function ConversationsKanban({
                 </span>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                {stageConvs.map((conv: any) => (
-                  <div 
-                    key={conv.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, conv.id)}
-                    onClick={() => onSelectConversation(conv.id)}
-                    className="bg-background p-4 rounded-lg border shadow-sm hover:shadow-md transition-shadow cursor-pointer group active:cursor-grabbing"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center">
-                          <User className="h-3 w-3 text-secondary-foreground" />
-                        </div>
-                        <span className="font-medium text-sm truncate max-w-[120px]">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {stageConvs.length === 0 ? (
+                  <div className="flex items-center justify-center h-24 text-muted-foreground/40 text-xs text-center">
+                    Nenhuma conversa<br />nesta etapa
+                  </div>
+                ) : (
+                  stageConvs.map((conv: any) => (
+                    <div 
+                      key={conv.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, conv.id)}
+                      onClick={() => onSelectConversation(conv.id)}
+                      className="bg-background px-3 py-2.5 rounded-lg border border-border/60 hover:border-border hover:shadow-sm transition-all cursor-pointer group active:cursor-grabbing select-none"
+                    >
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="font-medium text-[13px] text-foreground truncate max-w-[140px]">
                           {conv.customers?.name || 'Visitante'}
                         </span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {new Date(conv.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                      {conv.last_message_preview || 'Nenhuma mensagem ainda...'}
-                    </p>
-                    
-                    <div className="mt-3 flex items-center justify-between pt-3 border-t border-border/50">
-                      <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-                        {conv.channel}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <div className={`h-2 w-2 rounded-full ${
-                          conv.status === 'open' ? 'bg-blue-500' :
-                          conv.status === 'human' ? 'bg-amber-500' : 'bg-gray-400'
-                        }`} />
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          {conv.status === 'open' ? 'Agente' : conv.status === 'human' ? 'Humano' : 'Encerrada'}
+                        <span className="text-[10px] text-muted-foreground/70 flex items-center shrink-0 ml-1">
+                          <Clock className="h-2.5 w-2.5 mr-0.5" />
+                          {new Date(conv.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
+                      
+                      {conv.last_message_preview && (
+                        <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed mb-2">
+                          {conv.last_message_preview}
+                        </p>
+                      )}
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
+                          {conv.channel}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            conv.status === 'open' ? 'bg-blue-500' :
+                            conv.status === 'human' ? 'bg-amber-500' : 'bg-gray-400'
+                          }`} />
+                          <span className="text-[10px] text-muted-foreground/70">
+                            {conv.status === 'open' ? 'Agente' : conv.status === 'human' ? 'Humano' : 'Encerrada'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )

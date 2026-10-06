@@ -161,14 +161,17 @@ export function ConversationsClient({
                 />
               </div>
               <div className="flex gap-1 overflow-x-auto pb-0.5 text-xs font-medium scrollbar-hide">
-                <button onClick={() => setActiveTab('all')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'all' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                <button onClick={() => setActiveTab('all')} className={`px-2.5 py-1.5 rounded-md transition-colors whitespace-nowrap ${activeTab === 'all' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
                   Todas
                 </button>
-                <button onClick={() => setActiveTab('open')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'open' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                <button onClick={() => setActiveTab('open')} className={`px-2.5 py-1.5 rounded-md transition-colors whitespace-nowrap ${activeTab === 'open' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
                   Abertas
                 </button>
-                <button onClick={() => setActiveTab('human')} className={`px-2.5 py-1.5 rounded-md transition-colors ${activeTab === 'human' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                <button onClick={() => setActiveTab('human')} className={`px-2.5 py-1.5 rounded-md transition-colors whitespace-nowrap ${activeTab === 'human' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
                   Humanos
+                </button>
+                <button onClick={() => setActiveTab('closed')} className={`px-2.5 py-1.5 rounded-md transition-colors whitespace-nowrap ${activeTab === 'closed' ? 'bg-secondary text-secondary-foreground shadow-sm' : 'hover:bg-muted/50 text-muted-foreground'}`}>
+                  Encerradas
                 </button>
               </div>
             </div>
