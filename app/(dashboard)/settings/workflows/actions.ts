@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { createWorkflow, createWorkflowStage, updateWorkflowStage, deleteWorkflowStage, moveConversationStage } from '@/lib/services/workflows/workflows'
+import { createWorkflow, createWorkflowStage, updateWorkflowStage, deleteWorkflowStage } from '@/lib/services/workflows/workflows'
 import { revalidatePath } from 'next/cache'
 
 export async function createDefaultWorkflowAction() {
@@ -34,6 +34,20 @@ export async function deleteWorkflowStageAction(stageId: string) {
 }
 
 export async function moveConversationStageAction(conversationId: string, stageId: string) {
-  await moveConversationStage(conversationId, stageId)
+  const supabase = createClient()
+  const { data: userData } = await supabase.auth.getUser()
+  if (!userData?.user) throw new Error('Unauthorized')
+  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user.id).single()
+  const companyId = profile?.company_id
+  if (!companyId) throw new Error('Company not found')
+
+  const { error } = await supabase
+    .from('conversations')
+    .update({ workflow_stage_id: stageId })
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+
+  if (error) throw new Error(error.message)
+
   revalidatePath('/conversations')
 }
