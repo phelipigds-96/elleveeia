@@ -1,4 +1,4 @@
-﻿import { createAdminClient } from '@/lib/supabase/service'
+import { createAdminClient } from '@/lib/supabase/service'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
 import { LLMProviderType, LLMRequestMessage } from '../llm/types'
@@ -115,7 +115,11 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         cache_write_tokens: response.usage.cache_write_tokens,
         reasoning_tokens: response.usage.reasoning_tokens,
         tool_use_tokens: response.usage.tool_use_tokens,
-        tool_names: response.tool_calls ? response.tool_calls.map(tc => tc.toolName) : []
+        tool_names: response.tool_calls ? response.tool_calls.map(tc => tc.toolName) : [],
+        tool_calls: response.tool_calls ? response.tool_calls.map(tc => ({
+          name: tc.toolName,
+          arguments: tc.arguments
+        })) : []
       })
 
       if (response.tool_calls && response.tool_calls.length > 0) {
