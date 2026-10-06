@@ -120,8 +120,9 @@ export class ToolExecutor {
       return {
         callId: call.callId,
         toolName: call.toolName,
-        success: true,
-        data: resultData
+        success: resultData?.success !== undefined ? resultData.success : true,
+        data: resultData?.data !== undefined ? resultData.data : resultData,
+        error: resultData?.error
       }
     } catch (err: any) {
       console.error(`[ToolExecutor Error - ${call.toolName}]`, err)

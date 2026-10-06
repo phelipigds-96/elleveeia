@@ -1,4 +1,4 @@
-import { LLMProvider, LLMRequest, LLMResponse } from '../types'
+﻿import { LLMProvider, LLMRequest, LLMResponse } from '../types'
 import { InternalToolCall } from '../../agent/tools'
 import { GoogleGenAI } from '@google/genai'
 
@@ -7,7 +7,7 @@ export class GeminiProvider implements LLMProvider {
     const apiKey = process.env.GEMINI_API_KEY
     
     if (!apiKey) {
-      throw new Error('O provedor Google Gemini não está configurado neste ambiente (GEMINI_API_KEY).')
+      throw new Error('O provedor Google Gemini nÃ£o estÃ¡ configurado neste ambiente (GEMINI_API_KEY).')
     }
 
     const ai = new GoogleGenAI({ apiKey })
@@ -19,17 +19,24 @@ export class GeminiProvider implements LLMProvider {
       if (msg.role === 'system') {
         systemInstruction += msg.content + '\n'
       } else if (msg.role === 'tool' && msg.tool_result) {
+        const toolPayload = msg.tool_result.success ? (msg.tool_result.data ?? { success: true }) : { error: msg.tool_result.error }
         contents.push({
           role: 'user',
           parts: [{
             functionResponse: {
               name: msg.tool_result.toolName,
-              response: msg.tool_result
+              response: toolPayload
             }
           }]
         })
+      }
+          }]
+        })
+      }
+          }]
+        })
       } else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        // Restaurar as chamadas de função com suas respectivas thoughtSignatures (obrigatório no Gemini 3+)
+        // Restaurar as chamadas de funÃ§Ã£o com suas respectivas thoughtSignatures (obrigatÃ³rio no Gemini 3+)
         const functionCallParts = msg.tool_calls.map(tc => {
           const part: any = {
             functionCall: {
@@ -103,7 +110,7 @@ export class GeminiProvider implements LLMProvider {
     }
 
     if (!contentText && !internalToolCalls) {
-      throw new Error('Google Gemini retornou uma resposta vazia sem texto ou chamada de função.')
+      throw new Error('Google Gemini retornou uma resposta vazia sem texto ou chamada de funÃ§Ã£o.')
     }
 
     return {
@@ -122,3 +129,5 @@ export class GeminiProvider implements LLMProvider {
     }
   }
 }
+
+

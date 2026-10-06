@@ -1,4 +1,4 @@
-import { LLMProvider, LLMRequest, LLMResponse } from '../types'
+﻿import { LLMProvider, LLMRequest, LLMResponse } from '../types'
 import { InternalToolCall } from '../../agent/tools'
 
 export class OpenAIProvider implements LLMProvider {
@@ -6,17 +6,20 @@ export class OpenAIProvider implements LLMProvider {
     const apiKey = process.env.OPENAI_API_KEY
     
     if (!apiKey) {
-      throw new Error('A chave OPENAI_API_KEY não está configurada neste ambiente.')
+      throw new Error('A chave OPENAI_API_KEY nÃ£o estÃ¡ configurada neste ambiente.')
     }
 
-    // Mapear mensagens do formato interno genérico para o formato OpenAI
+    // Mapear mensagens do formato interno genÃ©rico para o formato OpenAI
     const openAIMessages = request.messages.map(msg => {
       if (msg.role === 'tool' && msg.tool_result) {
+        const toolPayload = msg.tool_result.success ? (msg.tool_result.data ?? { success: true }) : { error: msg.tool_result.error }
         return {
           role: 'tool',
           tool_call_id: msg.tool_result.callId,
-          content: JSON.stringify(msg.tool_result)
+          content: JSON.stringify(toolPayload) || "{}"
         }
+      }
+      }
       }
 
       if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
@@ -108,3 +111,5 @@ export class OpenAIProvider implements LLMProvider {
     }
   }
 }
+
+
