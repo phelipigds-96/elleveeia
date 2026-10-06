@@ -10,6 +10,7 @@ import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
 import { resolveToolScope } from './tool-scoping'
+import { applyWorkingMemoryUpdate } from './working-memory'
 
 const MAX_TOOL_ITERATIONS = 5
 
@@ -129,36 +130,10 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     }
 
     // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
-    // Nǜo inventamos dados, apenas parseamos resultados deterministicos.
-    const newWorkingMemory = { ...(previousWorkingMemory || {}) }
+    // Não inventamos dados, apenas parseamos resultados deterministicos de forma segura
+    const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
-    for (const res of allToolResults) {
-      if (res.success && res.data) {
-        const toolName = res.toolName
-        
-        if (toolName === 'buscar_produto' || toolName === 'consultar_produto_comercial') {
-           const matches = res.data.matches || []
-           // Só atualiza a memria do produto ativo se for um "exact_match" confiǭvel
-           if (res.data.status === 'exact_match' && matches.length === 1 && matches[0].id) {
-               newWorkingMemory.activeProduct = { id: matches[0].id, name: matches[0].name }
-           }
-           if (res.data.price) {
-               newWorkingMemory.activePrice = { unitPrice: res.data.price.unitPrice, priceType: res.data.price.priceType }
-           }
-        }
-        
-        if (toolName === 'calcular_preco_produto') {
-           if (res.data.quantity) newWorkingMemory.activeQuantity = res.data.quantity
-           if (res.data.unitPrice) newWorkingMemory.activePrice = { unitPrice: res.data.unitPrice }
-        }
-
-        if (toolName === 'gerar_orcamento') {
-           newWorkingMemory.activeQuote = { id: res.data.id, total: res.data.total, status: res.data.status }
-        }
-      }
-    }
-
-    // 3. Salvar a resposta do agente contendo a nova memria no campo metadata!
+    // 3. Salvar a resposta do agente contendo a nova memória no campo metadata!
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
       messageMetadata.working_memory = newWorkingMemory
@@ -183,12 +158,13 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     runStatus = 'success'
 
-    // Observabilidade das MǸtricas de Contexto
+    // Observabilidade das Métricas de Contexto
     const runMetadata: any = {
       tools_available: scopedTools.map(t => t.name),
       context: {
         history_messages_available: contextMetrics.availableMessages,
         history_messages_used: contextMetrics.usedMessages,
+        history_anchor_expansion: contextMetrics.history_anchor_expansion,
         working_memory: {
           has_active_product: !!newWorkingMemory.activeProduct,
           has_active_price: !!newWorkingMemory.activePrice,

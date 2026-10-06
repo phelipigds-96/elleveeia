@@ -61,11 +61,29 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     }
   }
 
-  // 5. Seleǜo Inteligente de Histrico (Camada A)
-  // Preservamos as ltimas 8 mensagens incondicionalmente para manter referǦncias como "essa", "a de 1kg".
-  // Reduz drasticamente tokens em conversas comerciais longas.
-  const HISTORY_WINDOW = 8
-  const selectedHistory = rawHistory.slice(0, HISTORY_WINDOW).reverse() // oldest first
+  // 5. Seleção Inteligente de Histórico (Camada A + Anchoring)
+  const RECENT_WINDOW = 8
+  const MAX_WINDOW = 12
+  let historyWindow = RECENT_WINDOW
+
+  // Se existe histórico, analisamos a última mensagem do usuário (rawHistory[0] no array reverseado)
+  if (rawHistory.length > 0) {
+    const lastMsgContent = rawHistory[0].content.toLowerCase()
+    const anchors = [
+      'essa', 'esse', 'a primeira', 'a segunda', 'aquele', 'aquela',
+      'o primeiro', 'o segundo', 'e 20', 'e 10', 'quanto fica',
+      'quanto custa', 'pode colocar', 'adiciona', 'coloca', 'fecha'
+    ]
+
+    const needsAnchor = anchors.some(a => lastMsgContent.includes(a))
+    
+    // Se a mensagem pede resolução semântica profunda, expandimos a janela para evitar perda de listas de opções
+    if (needsAnchor) {
+      historyWindow = MAX_WINDOW
+    }
+  }
+
+  const selectedHistory = rawHistory.slice(0, historyWindow).reverse() // oldest first
 
   // 6. Montar o System Prompt
   let systemPrompt = `VocǦ Ǹ um assistente de IA operando no sistema Ellevee IA.\n\n`
@@ -135,7 +153,8 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     workingMemory,
     contextMetrics: {
       availableMessages: rawHistory.length,
-      usedMessages: selectedHistory.length
+      usedMessages: selectedHistory.length,
+      history_anchor_expansion: historyWindow - RECENT_WINDOW
     }
   }
 }
