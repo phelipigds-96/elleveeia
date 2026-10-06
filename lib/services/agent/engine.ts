@@ -176,9 +176,27 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
 
     runStatus = 'success'
 
-    // Observabilidade das MÃ©tricas de Contexto
-    const runMetadata: any = {
-      llm_rounds,
+      // Calcular metricas de cache agregadas
+      let total_cached_tokens = 0
+      let total_input_tokens = 0
+      for (const round of llm_rounds) {
+        if (round.cached_input_tokens) total_cached_tokens += round.cached_input_tokens
+        if (round.input_tokens) total_input_tokens += round.input_tokens
+      }
+      
+      let cache_hit_ratio: number | undefined = undefined
+      if (total_input_tokens > 0 && total_cached_tokens > 0) {
+        cache_hit_ratio = parseFloat((total_cached_tokens / total_input_tokens).toFixed(4))
+      }
+
+      // Observabilidade das Metricas de Contexto
+      const runMetadata: any = {
+        llm_rounds,
+        caching: {
+          total_cached_tokens,
+          cache_hit: total_cached_tokens > 0,
+          cache_hit_ratio
+        },
       tools_available: scopedTools.map(t => t.name),
       context: {
         history_messages_available: contextMetrics.availableMessages,
@@ -260,6 +278,8 @@ async function logAgentRun(supabase: any, { companyId, agentId, conversationId, 
 
   await supabase.from('agent_runs').insert(payload)
 }
+
+
 
 
 

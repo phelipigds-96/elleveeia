@@ -19,11 +19,11 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     .single()
 
   if (agentError || !agent) {
-    throw new Error('Agente nǜo encontrado ou acesso negado.')
+    throw new Error('Agente nao encontrado ou acesso negado.')
   }
 
   if (!agent.is_active) {
-    throw new Error('O agente estǭ desabilitado.')
+    throw new Error('O agente esta desabilitado.')
   }
 
   // 2. Validar a conversa e buscar o cliente
@@ -35,14 +35,14 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     .single()
 
   if (convError || !conversation) {
-    throw new Error('Conversa nǜo encontrada ou acesso negado.')
+    throw new Error('Conversa nao encontrada ou acesso negado.')
   }
 
   if (conversation.status === 'human') {
-    throw new Error('Conversa em modo de atendimento humano (Handoff). O agente nǜo deve intervir.')
+    throw new Error('Conversa em modo de atendimento humano (Handoff). O agente nao deve intervir.')
   }
 
-  // 3. Carregar histrico bruto (AtǸ 20 mensagens)
+  // 3. Carregar histrico bruto (Ate 20 mensagens)
   const { data: messages } = await supabase
     .from('messages')
     .select('*')
@@ -57,16 +57,15 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   for (const msg of rawHistory) {
     if (msg.sender_type === 'agent' && msg.metadata?.working_memory) {
       workingMemory = msg.metadata.working_memory
-      break // Pega a memria mais recente gravada
+      break
     }
   }
 
-  // 5. Seleção Inteligente de Histórico (Camada A + Anchoring)
+  // 5. Selecao Inteligente de Historico (Camada A + Anchoring)
   const RECENT_WINDOW = 8
   const MAX_WINDOW = 12
   let historyWindow = RECENT_WINDOW
 
-  // Se existe histórico, analisamos a última mensagem do usuário (rawHistory[0] no array reverseado)
   if (rawHistory.length > 0) {
     const lastMsgContent = rawHistory[0].content.toLowerCase()
     const anchors = [
@@ -75,10 +74,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
       'quanto custa', 'pode colocar', 'adiciona', 'coloca', 'fecha'
     ]
 
-    const needsAnchor = anchors.some(a => lastMsgContent.includes(a))
-    
-    // Se a mensagem pede resolução semântica profunda, expandimos a janela para evitar perda de listas de opções
-    if (needsAnchor) {
+    if (anchors.some(a => lastMsgContent.includes(a))) {
       historyWindow = MAX_WINDOW
     }
   }
@@ -86,63 +82,54 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   const selectedHistory = rawHistory.slice(0, historyWindow).reverse() // oldest first
 
   // 6. Montar o System Prompt
-  let systemPrompt = `VocǦ Ǹ um assistente de IA operando no sistema Ellevee IA.\n\n`
-  systemPrompt += `IDENTIDADE:\nNome: ${agent.name}\nSegmento: ${agent.segment || 'Geral'}\n`
-
-  // Data/Hora nativa e barata
-  const now = new Date()
-  systemPrompt += `DATA/HORA ATUAL:\nData: ${now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`
-  systemPrompt += `Hora: ${now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\nTimezone: America/Sao_Paulo\n`
+  // --- PARTE ESTATICA ---
+  let systemPrompt = `[SISTEMA]\nAssistente Ellevee IA\n`
+  systemPrompt += `Nome: ${agent.name}\nSegmento: ${agent.segment || 'Geral'}\n`
+  systemPrompt += `Regras: Conciso. Se nao souber, transfira.\n`
   
   if (agent.personality) {
-    // Truncamento explcito por seguranǜa de contexto
-    systemPrompt += `\nPERSONALIDADE E TOM DE VOZ:\n${agent.personality.substring(0, 800)}\n`
+    systemPrompt += `\n[PERSONALIDADE]\n${agent.personality.substring(0, 800)}\n`
   }
 
   if (agent.instructions) {
-    // Truncamento explcito para nǜo estourar budget em gestores prolixos
-    systemPrompt += `\nINSTRUÇÕES:\n${agent.instructions.substring(0, 2000)}\n`
+    systemPrompt += `\n[INSTRUCOES]\n${agent.instructions.substring(0, 2000)}\n`
   }
 
-  systemPrompt += `\nDADOS DO CLIENTE:\n`
-  systemPrompt += `Nome: ${conversation.customers?.name || 'Nǜo informado'}\n`
-  systemPrompt += `Telefone: ${conversation.customers?.phone || 'Nǜo informado'}\n`
+  // --- PARTE DINAMICA ---
+  systemPrompt += `\n[CLIENTE]\nNome: ${conversation.customers?.name || '?'}\nTel: ${conversation.customers?.phone || '?'}\n`
 
-  // Injeǜo da Working Memory Estruturada (O LLM se guia por fatos e nǜo inventa)
+  const now = new Date()
+  systemPrompt += `\n[CONTEXTO TEMPORAL]\n${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`
+
   if (workingMemory && Object.keys(workingMemory).length > 0) {
-     systemPrompt += `\n=== WORKING MEMORY (CONTEXTO COMERCIAL ATUAL) ===\n`
+     systemPrompt += `\n[WORKING MEMORY]\n`
      if (workingMemory.activeProduct) {
-         systemPrompt += `Produto em foco: ${workingMemory.activeProduct.name} (ID: ${workingMemory.activeProduct.id})\n`
+         systemPrompt += `Produto: ${workingMemory.activeProduct.name} (ID: ${workingMemory.activeProduct.id})\n`
      }
-     if (workingMemory.activePrice) {
-         systemPrompt += `Preo atual: R$ ${workingMemory.activePrice.unitPrice}\n`
-     }
-     if (workingMemory.activeQuantity) {
-         systemPrompt += `Quantidade em foco: ${workingMemory.activeQuantity}\n`
-     }
+     let priceQtd = []
+     if (workingMemory.activePrice) priceQtd.push(`Preco: R$ ${workingMemory.activePrice.unitPrice}`)
+     if (workingMemory.activeQuantity) priceQtd.push(`Qtd: ${workingMemory.activeQuantity}`)
+     if (priceQtd.length > 0) systemPrompt += priceQtd.join(' | ') + '\n'
+     
      if (workingMemory.activeQuote) {
-         systemPrompt += `Oramento em aberto: ID ${workingMemory.activeQuote.id} (Status: ${workingMemory.activeQuote.status})\n`
+         systemPrompt += `Orcamento: ID ${workingMemory.activeQuote.id} (${workingMemory.activeQuote.status})\n`
      }
-     systemPrompt += `=================================================\n`
   }
-
-  systemPrompt += `\nREGRAS OPERACIONAIS:\n- Seja conciso.\n- Se nǜo souber, oferea transferir.\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
   ]
 
-  // 7. Mapear as mensagens selecionadas para o Provider
+  // 7. Mapear as mensagens
   for (const msg of selectedHistory) {
     if (msg.sender_type === 'customer') {
       payloadMessages.push({ role: 'user', content: msg.content })
     } else if (msg.sender_type === 'agent') {
       payloadMessages.push({ role: 'assistant', content: msg.content })
     } else if (msg.sender_type === 'human') {
-      // Semǜntica clara para o LLM de que a empresa respondeu, mas foi um humano e nǜo a prpria IA
       payloadMessages.push({ role: 'assistant', content: `[ATENDENTE HUMANO]: ${msg.content}` })
     } else if (msg.sender_type === 'system') {
-      payloadMessages.push({ role: 'system', content: `[SYSTEM LOG]: ${msg.content}` })
+      payloadMessages.push({ role: 'system', content: `[LOG]: ${msg.content}` })
     }
   }
 

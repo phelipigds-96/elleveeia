@@ -61,7 +61,10 @@ export class ToolRegistry {
   }
 
   getProviderPayload(selectedTools?: ToolDefinition[]) {
-    const toolsToMap = selectedTools || Array.from(this.tools.values())
+    let toolsToMap = selectedTools ? [...selectedTools] : Array.from(this.tools.values())
+    // Ordenacao deterministica estrita para estabilidade de Prompt Caching Nativo
+    toolsToMap.sort((a, b) => a.name.localeCompare(b.name))
+
     return toolsToMap.map(tool => {
       const jsonSchema = zodToJsonSchema(tool.schema, 'mySchema') as any
       const properties = jsonSchema.definitions?.mySchema?.properties || jsonSchema.properties || {}
