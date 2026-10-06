@@ -42,7 +42,7 @@ export function resolveToolScope(
   let hasProductPriceIntent = false
   let hasQuantityPriceIntent = false
 
-  const timeKeywords = ['hora', 'dia', 'hoje', 'data', 'agora', 'funcionamento']
+  const timeKeywords = ['hora', 'horas', 'horario', 'dia', 'hoje', 'data', 'agora', 'atualmente', 'funcionamento']
   const quoteKeywords = ['orcamento', 'cotacao', 'pedido', 'fechar', 'finalizar', 'resumo']
   const catalogSearchKeywords = [
     'tem', 'buscar', 'procura', 'catalogo', 'produto', 'marca', 'qual', 'quais',
