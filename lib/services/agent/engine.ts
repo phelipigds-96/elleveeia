@@ -8,6 +8,7 @@ import { buscarProdutoTool } from './tools/buscar-produto'
 import { consultarPrecoTool } from './tools/consultar-preco'
 import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
+import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
 
 const MAX_TOOL_ITERATIONS = 5
 
@@ -38,7 +39,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         content: userMessage,
         message_type: 'text'
       })
-      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuário: ${msgErr.message}`)
+      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuǭrio: ${msgErr.message}`)
     }
 
     const { agent, conversation, payloadMessages } = await buildAgentContext({
@@ -58,6 +59,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     registry.register(consultarPrecoTool)
     registry.register(calcularPrecoProdutoTool)
     registry.register(gerarOrcamentoTool)
+    registry.register(consultarProdutoComercialTool)
     
     const executor = new ToolExecutor(registry)
     const availableTools = registry.getProviderPayload()
