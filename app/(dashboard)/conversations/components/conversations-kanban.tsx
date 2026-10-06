@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Clock, MessageSquare, User, Settings2 } from 'lucide-react'
+import { Clock, User, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { moveConversationStageAction } from '../../settings/workflows/actions'
 import { useRouter } from 'next/navigation'
@@ -17,6 +17,8 @@ export function ConversationsKanban({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // Local state for optimistic UI — initialized from props
+  const [localConversations, setLocalConversations] = useState(conversations)
 
   if (!workflows || workflows.length === 0 || !workflows[0]?.workflow_stages || workflows[0].workflow_stages.length === 0) {
     return (
@@ -42,7 +44,7 @@ export function ConversationsKanban({
   const stages = activeWorkflow.workflow_stages || []
 
   const groupedConversations = stages.reduce((acc: any, stage: any) => {
-    acc[stage.id] = conversations.filter(c => 
+    acc[stage.id] = localConversations.filter(c => 
       c.workflow_stage_id === stage.id || 
       (!c.workflow_stage_id && stage.position === 0)
     )
@@ -60,17 +62,23 @@ export function ConversationsKanban({
   const handleDrop = (e: React.DragEvent, stageId: string) => {
     e.preventDefault()
     const conversationId = e.dataTransfer.getData('conversationId')
-    
-    if (conversationId) {
-      startTransition(async () => {
-        try {
-          await moveConversationStageAction(conversationId, stageId)
-          router.refresh()
-        } catch (error) {
-          console.error('Erro ao mover conversa', error)
-        }
-      })
-    }
+    if (!conversationId) return
+
+    // ✅ Optimistic update: move card locally before server responds
+    setLocalConversations(prev =>
+      prev.map(c => c.id === conversationId ? { ...c, workflow_stage_id: stageId } : c)
+    )
+
+    startTransition(async () => {
+      try {
+        await moveConversationStageAction(conversationId, stageId)
+        router.refresh()
+      } catch (error) {
+        console.error('Erro ao mover conversa', error)
+        // Revert on failure by reloading
+        router.refresh()
+      }
+    })
   }
 
   return (
