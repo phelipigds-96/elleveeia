@@ -86,8 +86,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   let systemPrompt = `[SISTEMA]\nAssistente Ellevee IA\n`
   systemPrompt += `Nome: ${agent.name}\nSegmento: ${agent.segment || 'Geral'}\n`
   systemPrompt += `Regras: Conciso. Se nao souber, transfira.\n`
-  systemPrompt += `\n[PRIORIDADE DE FERRAMENTAS]\nQuando uma ferramenta apropriada estiver disponivel e retornar sucesso, use o resultado dessa ferramenta para responder ao usuario. Nao ignore um resultado valido de ferramenta por causa de uma restricao generica de dominio. Fora das capacidades disponiveis, nao invente informacoes e siga as instrucoes de transferencia.\n`
-  
+    
   if (agent.personality) {
     systemPrompt += `\n[PERSONALIDADE]\n${agent.personality.substring(0, 800)}\n`
   }
@@ -116,6 +115,8 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
          systemPrompt += `Orcamento: ID ${workingMemory.activeQuote.id} (${workingMemory.activeQuote.status})\n`
      }
   }
+
+  systemPrompt += `\n[PRIORIDADE ABSOLUTA]\nQuando uma ferramenta disponivel retornar sucesso (ex: horas, datas, precos, etc), VOCE DEVE priorizar o resultado dessa ferramenta na resposta. O resultado de uma ferramenta tem precedencia total sobre restricoes genericas de dominio ("Responda apenas sobre produtos"). Nao finja que nao pode informar algo se a ferramenta acabou de lhe devolver os dados.`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
@@ -146,3 +147,4 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     }
   }
 }
+
