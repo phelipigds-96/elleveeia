@@ -86,6 +86,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   let systemPrompt = `[SISTEMA]\nAssistente Ellevee IA\n`
   systemPrompt += `Nome: ${agent.name}\nSegmento: ${agent.segment || 'Geral'}\n`
   systemPrompt += `Regras: Conciso. Se nao souber, transfira.\n`
+  systemPrompt += `\n[PRIORIDADE DE FERRAMENTAS]\nQuando uma ferramenta apropriada estiver disponivel e retornar sucesso, use o resultado dessa ferramenta para responder ao usuario. Nao ignore um resultado valido de ferramenta por causa de uma restricao generica de dominio. Fora das capacidades disponiveis, nao invente informacoes e siga as instrucoes de transferencia.\n`
   
   if (agent.personality) {
     systemPrompt += `\n[PERSONALIDADE]\n${agent.personality.substring(0, 800)}\n`
