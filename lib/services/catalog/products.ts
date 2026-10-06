@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/service'
+﻿import { createAdminClient } from '@/lib/supabase/service'
 import { parseQuery, calculateMatchScore } from './search-logic'
 
 export interface ProductSearchResult {
@@ -50,7 +50,17 @@ export async function searchProducts(companyId: string, query: string, limit: nu
 
   // 2. Candidate Retrieval no banco (PostgreSQL)
   const specificTokens = parsed.tokenGroups.filter(g => !g.isGeneric && !g.isUnit)
-  const requiredDbTokens = specificTokens.slice(0, 2)
+  let dbTokens = [...specificTokens]
+  
+  // CAMADA B - Se houver poucos tokens especÃ­ficos, preservamos informaÃ§Ã£o da categoria/genÃ©ricos
+  if (dbTokens.length < 2 && parsed.tokenGroups.length > dbTokens.length) {
+    const genericTokens = parsed.tokenGroups.filter(g => g.isGeneric)
+    if (genericTokens.length > 0) {
+      dbTokens.push(genericTokens[0])
+    }
+  }
+
+  const requiredDbTokens = dbTokens.slice(0, 2)
   
   let dbQuery = supabase
     .from('products')
@@ -69,7 +79,25 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     dbQuery = dbQuery.or(orCondition)
   }
 
-  const { data, error } = await dbQuery.limit(200)
+  let { data, error } = await dbQuery.limit(200)
+
+  // CAMADA C - Fallback de RecuperaÃ§Ã£o Ampla
+  // Se a busca conjunta (ex: "branca" + "cobertura") nÃ£o encontrou nada, tentamos apenas o token mais especÃ­fico.
+  if ((!data || data.length === 0) && specificTokens.length > 0 && requiredDbTokens.length > 1) {
+    const fallbackToken = specificTokens[0]
+    let fallbackQuery = supabase
+      .from('products')
+      .select(`id, name, sku, barcode, unit, active, normalized_name, product_brands ( name ), product_categories ( name )`)
+      .eq('company_id', companyId)
+      .eq('active', true)
+      
+    const orCondition = fallbackToken.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
+    fallbackQuery = fallbackQuery.or(orCondition)
+    
+    const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(200)
+    data = fallbackData
+    error = fallbackError
+  }
 
   if (error || !data || data.length === 0) {
     return { status: 'not_found', confidence: 0, matches: [] }
@@ -108,15 +136,38 @@ export async function searchProducts(companyId: string, query: string, limit: nu
   let status: 'exact_match' | 'ambiguous' | 'not_found' = 'exact_match'
 
   if (candidates.length > 1) {
-    // Se temos mltiplos candidatos excelentes empatados ou quase empatados, Ǹ ambguo
+    // Se temos mltiplos candidatos excelentes empatados ou quase empatados, Ç¸ ambguo
     status = 'ambiguous'
   } else if (bestMatch.confidence < 0.8) {
-    // Se a confiana Ǹ mǸdia (ex: acertou a marca mas errou o peso ou faltou algo), nǜo afirmamos match exato
+    // Se a confiana Ç¸ mÇ¸dia (ex: acertou a marca mas errou o peso ou faltou algo), nÇœo afirmamos match exato
     status = 'ambiguous'
   }
 
-  // Reduzir carga para o LLM enviando no mǭximo maxLimit
-  const finalMatches = candidates.slice(0, maxLimit).map(c => ({
+    // 5. Diversidade Determinística
+  // Intercala marcas dentro de cada faixa de pontuação para evitar monopólio de uma única marca
+  const diverseMatches = []
+  const scoreTiers = Array.from(new Set(candidates.map(c => c.score))).sort((a,b) => b - a)
+  
+  for (const score of scoreTiers) {
+    let tierCandidates = candidates.filter(c => c.score === score)
+    while (tierCandidates.length > 0) {
+      const brandsInRound = new Set<string | null>()
+      const nextRemaining = []
+      
+      for (const c of tierCandidates) {
+        if (!brandsInRound.has(c.product.brand)) {
+          brandsInRound.add(c.product.brand)
+          diverseMatches.push(c)
+        } else {
+          nextRemaining.push(c)
+        }
+      }
+      tierCandidates = nextRemaining
+    }
+  }
+
+  // Reduzir carga para o LLM enviando no limite
+  const finalMatches = diverseMatches.slice(0, maxLimit).map(c => ({
     ...c.product,
     match_score: c.score
   }))

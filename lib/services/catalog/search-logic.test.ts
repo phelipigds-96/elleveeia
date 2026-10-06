@@ -14,6 +14,16 @@ describe('Catalog Search Logic v2', () => {
       const mw = parsed.tokenGroups.find(t => t.original === 'meio amargo')
       expect(mw?.variants).toContain('m amargo')
     })
+
+    it('should normalize gender inflections (branca -> branco, amarga -> amargo)', () => {
+      const parsed1 = parseQuery('cobertura branca')
+      const brancaGroup = parsed1.tokenGroups.find(g => g.variants.includes('branca'))
+      expect(brancaGroup?.variants).toContain('branco')
+
+      const parsed2 = parseQuery('cobertura meio amarga')
+      const amargaGroup = parsed2.tokenGroups.find(g => g.variants.includes('meio amarga'))
+      expect(amargaGroup?.variants).toContain('meio amargo')
+    })
   })
 
   describe('Scoring and Confidence', () => {

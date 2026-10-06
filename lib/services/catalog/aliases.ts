@@ -4,7 +4,7 @@ export const STOP_WORDS = new Set([
 ])
 
 export const MULTI_WORD_TOKENS = [
-  { canonical: 'meio amargo', variants: ['meio amargo', 'm amargo', 'm/amargo', 'm.amargo', 'meio-amargo'] },
+  { canonical: 'meio amargo', variants: ['meio amargo', 'm amargo', 'm/amargo', 'm.amargo', 'meio-amargo', 'meio amarga', 'm amarga', 'meio-amarga'] },
   { canonical: 'ao leite', variants: ['ao leite', 'a leite', 'a/leite', 'a.leite'] }
 ]
 
@@ -14,8 +14,10 @@ export const ALIASES: Record<string, string[]> = {
   'chocolate': ['choc'],
   
   // Tipos
-  'branco': ['bco', 'br'],
+  'branco': ['bco', 'br', 'branca'],
   'blend': ['bl'],
+  'amargo': ['amarga'],
+  'preto': ['preta'],
   
   // Unidades
   'kg': ['quilo', 'kilo', 'quilograma'],
