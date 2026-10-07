@@ -17,7 +17,7 @@ export const buscarProdutoTool: ToolDefinition = {
     // A busca cuida da analise semantica e ranking.
     const result = await searchProducts(context.companyId, query, limit)
 
-    const strategyPayload = applyCommercialStrategy(query, result, false)
+    const strategyPayload = applyCommercialStrategy(query, result, 1, undefined)
 
     return {
       success: true,

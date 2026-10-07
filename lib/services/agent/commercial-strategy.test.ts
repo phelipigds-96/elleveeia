@@ -17,11 +17,11 @@ describe('Commercial Response Strategy', () => {
     const result = applyCommercialStrategy('Tem cobertura branca?', searchResult)
     expect(result.strategy).toBe('generic_discovery')
     expect(result.brands.length).toBe(4) // capped
-    expect(result.total_brands).toBe(5)
-    expect(result.has_more_brands).toBe(true)
+    expect(result.product_count).toBe(5)
+    expect(result.products).toBeUndefined() // NUNCA deve enviar a lista de SKUs
   })
 
-  it('TESTE 3: Brand Specific Discovery se a marca estiver na query', () => {
+  it('TESTE 3 e 4: Brand Specific Discovery se a marca estiver na query', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
       confidence: 0.9,
@@ -36,7 +36,7 @@ describe('Commercial Response Strategy', () => {
     expect(result.products.length).toBe(2)
   })
 
-  it('TESTE 4: Specific Product para match exato com preo', () => {
+  it('TESTE 5: Specific Product para match exato com preo', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'exact_match',
       confidence: 1.0,
@@ -44,12 +44,12 @@ describe('Commercial Response Strategy', () => {
         { id: '1', name: 'Cobertura Genuine', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
-    const result = applyCommercialStrategy('Quanto custa cobertura Genuine', searchResult, true, 1, { unit_price: 29.99 })
+    const result = applyCommercialStrategy('Quanto custa cobertura Genuine', searchResult, 1, { unit_price: 29.99 })
     expect(result.strategy).toBe('specific_product')
     expect(result.price.unit_price).toBe(29.99)
   })
 
-  it('TESTE 5: Quantity Pricing se quantity > 1 com match exato', () => {
+  it('TESTE 6: Quantity Pricing se quantity > 1 com match exato', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'exact_match',
       confidence: 1.0,
@@ -57,13 +57,13 @@ describe('Commercial Response Strategy', () => {
         { id: '1', name: 'Cobertura Genuine', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
-    const result = applyCommercialStrategy('Se eu levar 20?', searchResult, true, 20, { unit_price: 29.99, subtotal: 599.80 })
+    const result = applyCommercialStrategy('Se eu levar 20?', searchResult, 20, { unit_price: 29.99, subtotal: 599.80 })
     expect(result.strategy).toBe('quantity_pricing')
     expect(result.quantity).toBe(20)
     expect(result.price.subtotal).toBe(599.80)
   })
 
-  it('TESTE 6: Ambiguous Product se inteno de preco em mltiplos produtos sem match exato', () => {
+  it('TESTE 7: Ambiguous Product (fallback) sem preo, mas cai em brand_specific devido a mesma marca', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
       confidence: 0.7,
@@ -72,12 +72,13 @@ describe('Commercial Response Strategy', () => {
         { id: '2', name: 'Cobertura Genuine B', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
-    const result = applyCommercialStrategy('Quanto custa cobertura Genuine', searchResult, true)
-    expect(result.strategy).toBe('ambiguous_product')
+    const result = applyCommercialStrategy('Quanto custa cobertura Genuine', searchResult)
+    // S h uma marca no DB, ento mesmo sem inteno extra de preo, ele exibe os produtos.
+    expect(result.strategy).toBe('brand_specific_discovery')
     expect(result.products.length).toBe(2)
   })
 
-  it('TESTE 7: Not Found se vazio', () => {
+  it('TESTE 8: Not Found se vazio', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'not_found',
       confidence: 0,
@@ -87,32 +88,20 @@ describe('Commercial Response Strategy', () => {
     expect(result.strategy).toBe('not_found')
   })
 
-  it('TESTE 8 e 9: Marcas deduplicadas e max limit', () => {
-    // Coberto no Teste 1 (que recebe 5, dedup seria o mesmo set se duplicados)
+  it('TESTE 9: Marcas deduplicadas case-insensitive', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
       confidence: 0.8,
       matches: [
-        { id: '1', name: 'A', brand: 'X', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '2', name: 'B', brand: 'X', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '3', name: 'C', brand: 'Y', sku: null, barcode: null, category: null, unit: null, active: true }
+        { id: '1', name: 'A', brand: 'Ki-Kakau', sku: null, barcode: null, category: null, unit: null, active: true },
+        { id: '2', name: 'B', brand: 'KI-KAKAU', sku: null, barcode: null, category: null, unit: null, active: true },
+        { id: '3', name: 'C', brand: 'Jazam', sku: null, barcode: null, category: null, unit: null, active: true },
+        { id: '4', name: 'D', brand: 'Lecacau', sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
-    const result = applyCommercialStrategy('Tem?', searchResult)
-    expect(result.brands).toEqual(['X', 'Y'])
-  })
-
-  it('TESTE 10: Somente uma marca identificada leva a brand specific discovery mesmo sem mencionar', () => {
-    const searchResult: StructuredSearchResponse = {
-      status: 'ambiguous',
-      confidence: 0.8,
-      matches: [
-        { id: '1', name: 'A', brand: 'Sumel', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '2', name: 'B', brand: 'Sumel', sku: null, barcode: null, category: null, unit: null, active: true }
-      ]
-    }
-    const result = applyCommercialStrategy('Tem?', searchResult)
-    expect(result.strategy).toBe('brand_specific_discovery')
-    expect(result.brand).toBe('Sumel')
+    const result = applyCommercialStrategy('Tem cobertura branca?', searchResult)
+    expect(result.strategy).toBe('generic_discovery')
+    // Ki-Kakau no pode estar duplicado
+    expect(result.brands).toEqual(['Ki-Kakau', 'Jazam', 'Lecacau'])
   })
 })

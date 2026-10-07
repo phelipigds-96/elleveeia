@@ -41,7 +41,7 @@ export const consultarProdutoComercialTool: ToolDefinition = {
       }
     }
 
-    const strategyPayload = applyCommercialStrategy(product_query, searchResult, true, quantity, pricingData)
+    const strategyPayload = applyCommercialStrategy(product_query, searchResult, quantity, pricingData)
 
     if (hasPricingError) {
       return {
