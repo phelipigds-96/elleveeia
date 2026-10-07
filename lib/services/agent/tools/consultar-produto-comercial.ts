@@ -1,7 +1,8 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 import { ToolDefinition } from '../tools'
 import { searchProducts } from '../../catalog/products'
 import { resolveProductPrice } from '../../commercial/pricing'
+import { applyCommercialStrategy } from '../commercial-strategy'
 
 export const consultarProdutoComercialTool: ToolDefinition = {
   name: 'consultar_produto_comercial',
@@ -17,64 +18,42 @@ export const consultarProdutoComercialTool: ToolDefinition = {
     
     const searchResult = await searchProducts(context.companyId, product_query, 5)
 
-    if (searchResult.status === 'not_found' || searchResult.matches.length === 0) {
-      return {
-        success: true,
-        data: {
-          status: 'not_found'
+    let pricingData: any = undefined
+    let hasPricingError = false
+    let pricingErrorMessage = ''
+
+    if (searchResult.status === 'exact_match' || (searchResult.matches && searchResult.matches.length === 1)) {
+      const bestProduct = searchResult.matches[0]
+      try {
+        const p = await resolveProductPrice({
+          companyId: context.companyId,
+          productId: bestProduct.id,
+          quantity,
+          priceType: price_type
+        })
+        pricingData = {
+          unit_price: p.unitPrice,
+          subtotal: p.subtotal
         }
+      } catch (err: any) {
+        hasPricingError = true
+        pricingErrorMessage = err.message
       }
     }
 
-    if (searchResult.status === 'ambiguous') {
-      return {
-        success: true,
-        data: {
-          status: 'ambiguous',
-          matches: searchResult.matches.map(m => ({
-            id: m.id,
-            name: m.name
-          }))
-        }
-      }
-    }
+    const strategyPayload = applyCommercialStrategy(product_query, searchResult, true, quantity, pricingData)
 
-    const bestProduct = searchResult.matches[0]
-
-    try {
-      const pricingResult = await resolveProductPrice({
-        companyId: context.companyId,
-        productId: bestProduct.id,
-        quantity,
-        priceType: price_type
-      })
-
-      return {
-        success: true,
-        data: {
-          status: 'exact_match',
-          product: {
-            id: bestProduct.id,
-            name: bestProduct.name
-          },
-          pricing: {
-            unit_price: pricingResult.unitPrice,
-            subtotal: pricingResult.subtotal
-          }
-        }
-      }
-    } catch (pricingError: any) {
+    if (hasPricingError) {
       return {
         success: false,
-        error: `Falha ao calcular preco: ${pricingError.message}`,
-        data: {
-          status: 'exact_match',
-          product: {
-            id: bestProduct.id,
-            name: bestProduct.name
-          }
-        }
+        error: "Falha ao calcular preco: ",
+        data: strategyPayload
       }
+    }
+
+    return {
+      success: true,
+      data: strategyPayload
     }
   }
 }
