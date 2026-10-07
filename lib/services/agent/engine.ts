@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/service'
+﻿import { createAdminClient } from '@/lib/supabase/service'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
 import { LLMProviderType, LLMRequestMessage } from '../llm/types'
@@ -45,10 +45,10 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         content: userMessage,
         message_type: 'text'
       })
-      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuÇ­rio: ${msgErr.message}`)
+      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuÃ‡Â­rio: ${msgErr.message}`)
     }
 
-    // O Context Builder agora devolve tambÇ¸m a workingMemory da Ç§ltima interaÇœo
+    // O Context Builder agora devolve tambÃ‡Â¸m a workingMemory da Ã‡Â§ltima interaÃ‡Å“o
     const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
       companyId,
       agentId,
@@ -98,10 +98,27 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
         tools: availableTools
       })
 
-      // Acumula mÇ¸tricas
+      // Acumula mÃ‡Â¸tricas
       usageMetrics.prompt_tokens += response.usage.prompt_tokens
       usageMetrics.completion_tokens += response.usage.completion_tokens
       usageMetrics.total_tokens += response.usage.total_tokens
+
+      // Fallback Determinístico de Catálogo (Zero-Shot)
+      // Se no primeiro turno o LLM ignorou uma ferramenta de catálogo disponível e tentou gerar apenas texto,
+      // forçamos a chamada da ferramenta injetando-a na resposta do LLM ANTES de processar.
+      if (iteration === 1 && (!response.tool_calls || response.tool_calls.length === 0)) {
+        const catalogTool = scopedTools.find(t => t.name === 'consultar_produto_comercial' || t.name === 'buscar_produto')
+        if (catalogTool) {
+          response.tool_calls = [{
+            callId: 'fallback_catalog_1',
+            toolName: catalogTool.name,
+            arguments: catalogTool.name === 'consultar_produto_comercial' 
+              ? { product_query: userMessage || '' } 
+              : { query: userMessage || '' }
+          }]
+          response.content = null // Anula texto alucinado
+        }
+      }
 
       llm_rounds.push({
         round: iteration,
@@ -159,14 +176,14 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     }
 
     if (!finalContent) {
-      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vÇ­lida de texto aps ${iteration} iteraes.`)
+      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vÃ‡Â­lida de texto aps ${iteration} iteraes.`)
     }
 
     // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
-    // NÃ£o inventamos dados, apenas parseamos resultados deterministicos de forma segura
+    // NÃƒÂ£o inventamos dados, apenas parseamos resultados deterministicos de forma segura
     const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
-    // 3. Salvar a resposta do agente contendo a nova memÃ³ria no campo metadata!
+    // 3. Salvar a resposta do agente contendo a nova memÃƒÂ³ria no campo metadata!
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
       messageMetadata.working_memory = newWorkingMemory

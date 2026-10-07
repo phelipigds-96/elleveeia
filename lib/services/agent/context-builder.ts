@@ -118,6 +118,8 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   systemPrompt += `\n[PRIORIDADE ABSOLUTA]\nQuando uma ferramenta disponivel retornar sucesso (ex: horas, datas, precos, etc), VOCE DEVE priorizar o resultado dessa ferramenta na resposta. O resultado de uma ferramenta tem precedencia total sobre restricoes genericas de dominio ("Responda apenas sobre produtos"). Nao finja que nao pode informar algo se a ferramenta acabou de lhe devolver os dados.`
 
+  systemPrompt += `\n[OBRIGATORIEDADE DE CATALOGO]\nQuando o usuario perguntar sobre existencia, caracteristicas, marcas, disponibilidade ou precos de produtos, voce DEVE consultar a ferramenta de catalogo ou comercial disponivel ANTES de responder. NUNCA responda afirmando ou negando existencia de um produto sem usar a ferramenta primeiro. NUNCA responda dizendo apenas que vai verificar em texto sem efetivamente realizar a chamada da funcao. Sua resposta final ao cliente devera ser sempre baseada no resultado retornado pela ferramenta.\n`
+
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
   ]
