@@ -60,7 +60,7 @@ export function applyCommercialStrategy(
     }
   }
 
-  // 2. DISCOVERY & AMBIGUOUS
+  // 2. DISCOVERY
   const uniqueBrands = extractUniqueBrands(searchResult.matches)
   const normalizedQuery = query.toLowerCase()
   const mentionedBrand = uniqueBrands.find(b => normalizedQuery.includes(b.toLowerCase()))
@@ -77,32 +77,10 @@ export function applyCommercialStrategy(
     }
   }
 
-  if (uniqueBrands.length === 1) {
-    return {
-      strategy: 'brand_specific_discovery',
-      brand: uniqueBrands[0],
-      products: searchResult.matches.slice(0, 5).map(m => ({
-        id: m.id,
-        name: m.name
-      }))
-    }
-  }
-
   // 4. GENERIC DISCOVERY
-  if (uniqueBrands.length > 1) {
-    return {
-      strategy: 'generic_discovery',
-      brands: uniqueBrands.slice(0, 4),
-      product_count: searchResult.matches.length
-    }
-  }
-
-  // Fallback
   return {
-    strategy: 'ambiguous_product',
-    products: searchResult.matches.slice(0, 5).map(m => ({
-      id: m.id,
-      name: m.name
-    }))
+    strategy: 'generic_discovery',
+    brands: uniqueBrands.slice(0, 4),
+    product_count: searchResult.matches.length
   }
 }

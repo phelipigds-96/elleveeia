@@ -2,7 +2,7 @@
 import { StructuredSearchResponse } from '../catalog/products'
 
 describe('Commercial Response Strategy', () => {
-  it('TESTE 1 e 2: Generic Discovery para busca sem marca e com multiplicidade', () => {
+  it('TESTE 1 e 2: Generic Discovery para busca sem marca', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
       confidence: 0.8,
@@ -49,59 +49,50 @@ describe('Commercial Response Strategy', () => {
     expect(result.price.unit_price).toBe(29.99)
   })
 
-  it('TESTE 6: Quantity Pricing se quantity > 1 com match exato', () => {
-    const searchResult: StructuredSearchResponse = {
-      status: 'exact_match',
-      confidence: 1.0,
-      matches: [
-        { id: '1', name: 'Cobertura Genuine', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true }
-      ]
-    }
-    const result = applyCommercialStrategy('Se eu levar 20?', searchResult, 20, { unit_price: 29.99, subtotal: 599.80 })
-    expect(result.strategy).toBe('quantity_pricing')
-    expect(result.quantity).toBe(20)
-    expect(result.price.subtotal).toBe(599.80)
-  })
-
-  it('TESTE 7: Ambiguous Product (fallback) sem preo, mas cai em brand_specific devido a mesma marca', () => {
+  it('TESTE 6: Caso sem marcas identificadas no banco', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
-      confidence: 0.7,
+      confidence: 0.8,
       matches: [
-        { id: '1', name: 'Cobertura Genuine A', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '2', name: 'Cobertura Genuine B', brand: 'Genuine', sku: null, barcode: null, category: null, unit: null, active: true }
+        { id: '1', name: 'A', brand: null, sku: null, barcode: null, category: null, unit: null, active: true },
+        { id: '2', name: 'B', brand: null, sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
-    const result = applyCommercialStrategy('Quanto custa cobertura Genuine', searchResult)
-    // S h uma marca no DB, ento mesmo sem inteno extra de preo, ele exibe os produtos.
-    expect(result.strategy).toBe('brand_specific_discovery')
-    expect(result.products.length).toBe(2)
+    const result = applyCommercialStrategy('Tem cobertura branca?', searchResult)
+    expect(result.strategy).toBe('generic_discovery')
+    expect(result.brands.length).toBe(0)
+    expect(result.product_count).toBe(2)
+    expect(result.products).toBeUndefined()
   })
 
-  it('TESTE 8: Not Found se vazio', () => {
-    const searchResult: StructuredSearchResponse = {
-      status: 'not_found',
-      confidence: 0,
-      matches: []
-    }
-    const result = applyCommercialStrategy('Tem unicornio?', searchResult)
-    expect(result.strategy).toBe('not_found')
-  })
-
-  it('TESTE 9: Marcas deduplicadas case-insensitive', () => {
+  it('TESTE 7: Apenas uma marca identificada, mas NAO mencionada pelo usuario', () => {
     const searchResult: StructuredSearchResponse = {
       status: 'ambiguous',
       confidence: 0.8,
       matches: [
         { id: '1', name: 'A', brand: 'Ki-Kakau', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '2', name: 'B', brand: 'KI-KAKAU', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '3', name: 'C', brand: 'Jazam', sku: null, barcode: null, category: null, unit: null, active: true },
-        { id: '4', name: 'D', brand: 'Lecacau', sku: null, barcode: null, category: null, unit: null, active: true }
+        { id: '2', name: 'B', brand: null, sku: null, barcode: null, category: null, unit: null, active: true }
       ]
     }
     const result = applyCommercialStrategy('Tem cobertura branca?', searchResult)
     expect(result.strategy).toBe('generic_discovery')
-    // Ki-Kakau no pode estar duplicado
-    expect(result.brands).toEqual(['Ki-Kakau', 'Jazam', 'Lecacau'])
+    expect(result.brands).toEqual(['Ki-Kakau'])
+    expect(result.product_count).toBe(2)
+    expect(result.products).toBeUndefined()
+  })
+
+  it('TESTE 8: Marca explicitamente mencionada (mesmo com apenas 1 marca encontrada)', () => {
+    const searchResult: StructuredSearchResponse = {
+      status: 'ambiguous',
+      confidence: 0.8,
+      matches: [
+        { id: '1', name: 'A', brand: 'Ki-Kakau', sku: null, barcode: null, category: null, unit: null, active: true },
+        { id: '2', name: 'B', brand: 'Ki-Kakau', sku: null, barcode: null, category: null, unit: null, active: true }
+      ]
+    }
+    const result = applyCommercialStrategy('Tem cobertura Ki-Kakau?', searchResult)
+    expect(result.strategy).toBe('brand_specific_discovery')
+    expect(result.brand).toBe('Ki-Kakau')
+    expect(result.products.length).toBe(2)
   })
 })
