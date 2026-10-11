@@ -19,9 +19,16 @@ interface AgentRunParams {
   agentId: string
   conversationId: string
   userMessage?: string
+  skipCustomerMessageInsert?: boolean
 }
 
-export async function runAgentEngine({ companyId, agentId, conversationId, userMessage }: AgentRunParams) {
+export async function runAgentEngine({ 
+  companyId, 
+  agentId, 
+  conversationId, 
+  userMessage,
+  skipCustomerMessageInsert = false 
+}: AgentRunParams) {
   const supabase = createAdminClient()
   const startTime = Date.now()
 
@@ -37,7 +44,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
   const allToolResults: any[] = []
 
   try {
-    if (userMessage) {
+    if (userMessage && !skipCustomerMessageInsert) {
       const { error: msgErr } = await supabase.from('messages').insert({
         company_id: companyId,
         conversation_id: conversationId,
@@ -189,14 +196,14 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
       messageMetadata.working_memory = newWorkingMemory
     }
 
-    const { error: insertErr } = await supabase.from('messages').insert({
+    const { data: insertedAgentMsg, error: insertErr } = await supabase.from('messages').insert({
       company_id: companyId,
       conversation_id: conversationId,
       sender_type: 'agent',
       content: finalContent,
       message_type: 'text',
       metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
-    })
+    }).select('id').single()
 
     if (insertErr) throw new Error(`Falha ao persistir resposta do agente: ${insertErr.message}`)
 
@@ -262,6 +269,7 @@ export async function runAgentEngine({ companyId, agentId, conversationId, userM
     return {
       success: true,
       message: finalContent,
+      messageId: insertedAgentMsg?.id,
       usage: usageMetrics
     }
 

@@ -57,3 +57,23 @@ create trigger companies_updated_at
 create trigger profiles_updated_at
   before update on public.profiles
   for each row execute procedure public.handle_updated_at();
+
+-- Create message_outbox table (Autonomous outbox)
+create table if not exists public.message_outbox (
+  id uuid primary key default uuid_generate_v4(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  message_id uuid references public.messages(id) on delete cascade,
+  idempotency_key text unique not null,
+  channel text not null default 'whatsapp',
+  recipient text not null,
+  payload jsonb not null,
+  status text not null default 'pending', -- 'pending', 'sent', 'failed', 'suppressed'
+  attempts integer not null default 0,
+  last_error text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  sent_at timestamp with time zone
+);
+
+alter table public.message_outbox enable row level security;
