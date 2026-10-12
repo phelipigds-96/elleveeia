@@ -117,7 +117,7 @@ async function logIntegrationEvent(supabase: any, companyId: string, integration
 // Endpoint interno usado pela tela de Integrações para validar a URL antes de salvar
 export async function testN8nConnection(url: string, secret: string) {
   if (!isSafeUrl(url)) {
-    return { success: false, message: 'URL bloqueada por políticas de segurança.' }
+    return { success: false, message: 'URL bloqueada por políticas de segurança (SSRF). Use uma URL externa pública válida.' }
   }
 
   try {
@@ -134,10 +134,12 @@ export async function testN8nConnection(url: string, secret: string) {
         event_type: 'connection.test',
         timestamp: new Date().toISOString()
       })
-    }, 5000)
+    }, 8000)
 
     if (response.ok) {
       return { success: true, message: 'Conexão estabelecida com sucesso!' }
+    } else if (response.status === 404) {
+      return { success: false, message: 'O n8n retornou HTTP 404 (Não Encontrado). Verifique se o Workflow está ATIVO (toggle "Active" ligado no topo do n8n) ou se a URL está correta.' }
     } else {
       return { success: false, message: `O n8n retornou erro: HTTP ${response.status}` }
     }

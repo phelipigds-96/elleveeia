@@ -55,10 +55,14 @@ export function N8nConfigCard({
     setSuccess(null)
 
     try {
-      await saveN8nIntegration(url, secret)
-      setSuccess('Conexão com n8n estabelecida e salva com sucesso!')
+      const res = await saveN8nIntegration(url, secret)
+      if (!res.success) {
+        setError(res.error || 'Erro ao conectar com n8n.')
+      } else {
+        setSuccess('Conexão com n8n estabelecida e salva com sucesso!')
+      }
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'Erro inesperado ao conectar com n8n.')
     } finally {
       setIsSaving(false)
     }
@@ -69,12 +73,16 @@ export function N8nConfigCard({
     setIsDisconnecting(true)
     setError(null)
     try {
-      await disconnectN8n()
-      setUrl('')
-      setSecret('')
-      setSuccess('Integração removida com sucesso.')
+      const res = await disconnectN8n()
+      if (!res.success) {
+        setError(res.error || 'Erro ao desconectar.')
+      } else {
+        setUrl('')
+        setSecret('')
+        setSuccess('Integração removida com sucesso.')
+      }
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'Erro inesperado.')
     } finally {
       setIsDisconnecting(false)
     }
