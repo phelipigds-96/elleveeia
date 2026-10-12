@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { validateWebhookPayload } from '@/lib/validations/webhook'
-import { processWebhookEvent, handleAutonomousCycle } from '@/lib/services/message-engine'
+import { processWebhookEvent, handleAutonomousCycle, AutonomousCycleResult } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 
 export async function POST(request: Request) {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     }
 
     // 5. Execucao do Ciclo Autonomo de Atendimento (Validacao, Agent Engine, Handoff check e envio via n8n)
-    const cycleResult = await handleAutonomousCycle({
+    const cycleResult: AutonomousCycleResult = await handleAutonomousCycle({
       companyId,
       conversationId: result.conversation_id,
       messageId: result.message_id,
@@ -55,11 +55,12 @@ export async function POST(request: Request) {
       payload: body
     }).catch(err => {
       console.error(`[AutonomousCycle Error req:${requestId}]`, err.message)
-      return { executed: false, reason: 'unhandled_cycle_error', error: err.message }
+      return { executed: false, dispatched: false, reason: 'unhandled_cycle_error', error: err.message }
     })
     
     // 6. Logging Seguro de Servidor (Sem vazar segredos)
-    console.log(`[Webhook success req:${requestId}] company:${companyId} event:${result.event_id} autonomous:${cycleResult?.executed ? (cycleResult.dispatched ? 'dispatched' : cycleResult.reason) : cycleResult?.reason} - ${Date.now() - startTime}ms`)
+    const statusLabel = cycleResult.dispatched ? 'dispatched' : (cycleResult.reason || 'skipped')
+    console.log(`[Webhook success req:${requestId}] company:${companyId} event:${result.event_id} autonomous:${statusLabel} - ${Date.now() - startTime}ms`)
 
     return NextResponse.json(result, { status: 200 })
 
