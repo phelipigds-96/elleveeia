@@ -8,22 +8,50 @@ export async function POST(request: Request) {
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID()
   
   try {
-    const secret = request.headers.get('x-ellevee-webhook-secret')
+    const url = new URL(request.url)
+    const secret = 
+      request.headers.get('x-ellevee-webhook-secret') ||
+      url.searchParams.get('token') ||
+      url.searchParams.get('secret') ||
+      request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+
     if (!secret) {
-      return NextResponse.json({ error: 'Credenciais de Webhook ausentes' }, { status: 401 })
+      return NextResponse.json({ error: 'Credenciais de Webhook ausentes (informe via header x-ellevee-webhook-secret ou ?token=...)' }, { status: 401 })
     }
 
     // 1. Autenticacao Isolada do Webhook
-    // Utilizamos o Supabase com Service Role pois estamos fora da sessao de usuario.
-    // O secret enviado no header identifica rigidamente o company_id no banco.
+    // Identifica rigidamente o company_id consultando api_keys ou integrations (n8n ativo)
     const supabase = createAdminClient()
-    const { data: apiKey } = await supabase.from('api_keys').select('company_id').eq('key', secret).single()
     
-    if (!apiKey) {
+    let companyId: string | null = null
+
+    // 1.1 Tenta autenticar por api_keys
+    const { data: apiKey } = await supabase
+      .from('api_keys')
+      .select('company_id')
+      .eq('key', secret)
+      .maybeSingle()
+
+    if (apiKey?.company_id) {
+      companyId = apiKey.company_id
+    } else {
+      // 1.2 Tenta autenticar pelo secret cadastrado na integracao n8n da empresa
+      const { data: integration } = await supabase
+        .from('integrations')
+        .select('company_id')
+        .eq('type', 'n8n')
+        .eq('status', 'active')
+        .eq('credentials->>webhook_secret', secret)
+        .maybeSingle()
+
+      if (integration?.company_id) {
+        companyId = integration.company_id
+      }
+    }
+    
+    if (!companyId) {
       return NextResponse.json({ error: 'Credenciais de Webhook invalidas' }, { status: 401 })
     }
-
-    const companyId = apiKey.company_id
     
     // 2. Extracao e Validacao do Payload
     let body

@@ -1,10 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { saveN8nIntegration, disconnectN8n } from '@/lib/services/integrations'
-import { CheckCircle2, XCircle, Settings2, Loader2, Link2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Settings2, Loader2, Link2, Copy, Check } from 'lucide-react'
 
-export function N8nConfigCard({ initialData }: { initialData: any }) {
+export function N8nConfigCard({ 
+  initialData, 
+  inboundData 
+}: { 
+  initialData: any
+  inboundData?: { token: string } | null 
+}) {
   const [url, setUrl] = useState(initialData?.config?.webhook_url || '')
   const [secret, setSecret] = useState(initialData?.credentials?.webhook_secret || '')
   
@@ -12,6 +18,33 @@ export function N8nConfigCard({ initialData }: { initialData: any }) {
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  const [origin, setOrigin] = useState('')
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [copiedToken, setCopiedToken] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin)
+    }
+  }, [])
+
+  const inboundToken = inboundData?.token || ''
+  const fullInboundUrl = origin && inboundToken
+    ? `${origin}/api/webhooks/messages?token=${inboundToken}`
+    : `/api/webhooks/messages?token=${inboundToken || '<TOKEN>'}`
+
+  const copyToClipboard = (text: string, type: 'url' | 'token') => {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    if (type === 'url') {
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 2000)
+    } else {
+      setCopiedToken(true)
+      setTimeout(() => setCopiedToken(false), 2000)
+    }
+  }
 
   const isConnected = !!initialData
 
@@ -141,22 +174,60 @@ export function N8nConfigCard({ initialData }: { initialData: any }) {
         </form>
       </div>
       
-      {/* Documentação Embutida de Inbound */}
-      <div className="p-6 bg-muted/30 border-t border-dashed">
-        <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
-          <Link2 className="h-4 w-4" /> Webhook Inbound (n8n &rarr; Ellevee)
-        </h4>
-        <p className="text-xs text-muted-foreground mb-4">
-          Para enviar mensagens do n8n para o Ellevee, configure no seu workflow do n8n:
-        </p>
-        <div className="space-y-2 text-xs">
-          <div className="p-2 rounded bg-muted font-mono flex items-center justify-between">
-            <span>POST /api/webhooks/messages</span>
+      {/* Documentação e Configuração de Inbound (n8n -> Ellevee) */}
+      <div className="p-6 bg-muted/30 border-t border-dashed space-y-4">
+        <div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-primary" /> Webhook Inbound (n8n &rarr; Ellevee)
+          </h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            Configure seu n8n para enviar as mensagens recebidas para a URL abaixo. A empresa é identificada automaticamente pelo token.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              URL do Webhook (Pronta para colar no n8n)
+            </label>
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                readOnly 
+                value={fullInboundUrl} 
+                className="flex h-9 w-full rounded-md border border-input bg-muted/60 px-3 py-1 text-xs font-mono select-all focus:outline-none text-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => copyToClipboard(fullInboundUrl, 'url')}
+                className="inline-flex items-center justify-center rounded-md text-xs font-medium border border-input bg-background hover:bg-accent h-9 px-3 gap-1.5 shrink-0 transition-colors"
+                title="Copiar URL completa"
+              >
+                {copiedUrl ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copiedUrl ? 'Copiado!' : 'Copiar URL'}</span>
+              </button>
+            </div>
           </div>
-          <div className="p-2 rounded bg-muted font-mono flex flex-col gap-1">
-            <span className="text-muted-foreground">Header obrigatório:</span>
-            <span>x-ellevee-webhook-secret: &lt;SEU_API_KEY&gt;</span>
+
+          <div className="pt-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Token da Empresa: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">{inboundToken || 'Indisponível'}</code>
+            </span>
+            {inboundToken && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(inboundToken, 'token')}
+                className="text-primary hover:underline flex items-center gap-1 font-medium"
+              >
+                {copiedToken ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                <span>{copiedToken ? 'Token copiado!' : 'Copiar Token'}</span>
+              </button>
+            )}
           </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Dica: No n8n, você pode usar a URL direta com <code>?token=...</code> ou enviar o token via cabeçalho <code>x-ellevee-webhook-secret</code>.
+          </p>
         </div>
       </div>
 

@@ -1,10 +1,13 @@
-import { getN8nIntegration } from '@/lib/services/integrations'
+import { getN8nIntegration, getInboundWebhookInfo } from '@/lib/services/integrations'
 import { N8nConfigCard } from './components/n8n-config-card'
 
 export const dynamic = 'force-dynamic'
 
 export default async function IntegrationsPage() {
-  const n8nData = await getN8nIntegration()
+  const [n8nData, inboundData] = await Promise.all([
+    getN8nIntegration(),
+    getInboundWebhookInfo()
+  ])
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -14,7 +17,7 @@ export default async function IntegrationsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <N8nConfigCard initialData={n8nData} />
+        <N8nConfigCard initialData={n8nData} inboundData={inboundData} />
       </div>
     </div>
   )

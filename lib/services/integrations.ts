@@ -1,9 +1,49 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import { getCompanyId } from '@/lib/services/conversations'
 import { testN8nConnection } from '@/lib/services/n8n-service'
+
+export async function getInboundWebhookInfo() {
+  const supabase = createClient()
+  const companyId = await getCompanyId()
+  if (!companyId) return null
+
+  // 1. Busca chave existente para a empresa
+  const { data: existingKey } = await supabase
+    .from('api_keys')
+    .select('key')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (existingKey?.key) {
+    return { token: existingKey.key }
+  }
+
+  // 2. Se nao existir nenhuma, gera automaticamente
+  try {
+    const adminSupabase = createAdminClient()
+    const generatedKey = 'ell_' + crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+    const { data: newKey } = await adminSupabase
+      .from('api_keys')
+      .insert({
+        company_id: companyId,
+        key: generatedKey,
+        description: 'Chave Automatica Webhook'
+      })
+      .select('key')
+      .single()
+
+    return { token: newKey?.key || generatedKey }
+  } catch (err) {
+    console.error('[getInboundWebhookInfo] Falha ao auto-gerar chave:', err)
+    return null
+  }
+}
 
 export async function getN8nIntegration() {
   const supabase = createClient()
