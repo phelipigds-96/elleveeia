@@ -98,3 +98,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Erro interno durante processamento' }, { status: 500 })
   }
 }
+
+export async function GET() {
+  return NextResponse.json({
+    status: 'active',
+    endpoint: '/api/webhooks/messages',
+    description: 'Ellevee Webhook Endpoint. Envie requisicoes POST com payload e autenticacao via secret/token.'
+  }, { status: 200 })
+}
