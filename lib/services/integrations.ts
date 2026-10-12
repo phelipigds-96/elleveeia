@@ -11,20 +11,34 @@ export async function getInboundWebhookInfo() {
   const companyId = await getCompanyId()
   if (!companyId) return null
 
-  // 1. Busca chave existente para a empresa
-  const { data: existingKey } = await supabase
+  // 1. Busca primeiro a chave automática mais recente da empresa
+  const { data: autoKey } = await supabase
     .from('api_keys')
     .select('key')
     .eq('company_id', companyId)
-    .order('created_at', { ascending: true })
+    .eq('description', 'Chave Automatica Webhook')
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  if (existingKey?.key) {
-    return { token: existingKey.key }
+  if (autoKey?.key) {
+    return { token: autoKey.key }
   }
 
-  // 2. Se nao existir nenhuma, gera automaticamente
+  // 2. Fallback: Se não houver chave com descrição automática, busca qualquer chave existente da empresa
+  const { data: fallbackKey } = await supabase
+    .from('api_keys')
+    .select('key')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (fallbackKey?.key) {
+    return { token: fallbackKey.key }
+  }
+
+  // 3. Se não existir nenhuma, gera automaticamente
   try {
     const adminSupabase = createAdminClient()
     const generatedKey = 'ell_' + crypto.randomUUID().replace(/-/g, '').slice(0, 24)
@@ -39,9 +53,65 @@ export async function getInboundWebhookInfo() {
       .single()
 
     return { token: newKey?.key || generatedKey }
-  } catch (err) {
-    console.error('[getInboundWebhookInfo] Falha ao auto-gerar chave:', err)
+  } catch (err: any) {
+    console.error('[getInboundWebhookInfo] Falha ao auto-gerar chave:', err.message)
     return null
+  }
+}
+
+/**
+ * Rotaciona de forma segura o token de entrada do Webhook.
+ * Invalida exclusivamente as chaves automáticas da empresa autenticada,
+ * preservando integrações manuais e sem alterar a configuração de saída n8n.
+ */
+export async function rotateInboundWebhookToken(): Promise<{ success: boolean; token?: string; error?: string }> {
+  try {
+    const companyId = await getCompanyId()
+    if (!companyId) {
+      return { success: false, error: 'Sessão expirada ou não autorizado.' }
+    }
+
+    const adminSupabase = createAdminClient()
+
+    // 1. Gera novo token no padrão ell_ seguido de 24 hexadecimais
+    const generatedKey = 'ell_' + crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+
+    // 2. Invalida somente as chaves automáticas anteriores desta empresa
+    const { error: deleteError } = await adminSupabase
+      .from('api_keys')
+      .delete()
+      .eq('company_id', companyId)
+      .eq('description', 'Chave Automatica Webhook')
+
+    if (deleteError) {
+      console.error('[rotateInboundWebhookToken] Falha ao invalidar token anterior:', deleteError.message)
+      return { success: false, error: 'Falha ao invalidar token anterior.' }
+    }
+
+    // 3. Persiste a nova chave
+    const { data: newKey, error: insertError } = await adminSupabase
+      .from('api_keys')
+      .insert({
+        company_id: companyId,
+        key: generatedKey,
+        description: 'Chave Automatica Webhook'
+      })
+      .select('key')
+      .single()
+
+    if (insertError) {
+      console.error('[rotateInboundWebhookToken] Falha ao persistir nova chave:', insertError.message)
+      return { success: false, error: 'Falha ao registrar novo token.' }
+    }
+
+    // Logging seguro sem expor tokens
+    console.log(`[rotateInboundWebhookToken] Token de webhook rotacionado com sucesso para company:${companyId}`)
+
+    revalidatePath('/integrations')
+    return { success: true, token: newKey?.key || generatedKey }
+  } catch (err: any) {
+    console.error('[rotateInboundWebhookToken] Erro inesperado:', err.message)
+    return { success: false, error: err.message || 'Erro inesperado ao renovar token.' }
   }
 }
 

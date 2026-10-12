@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { saveN8nIntegration, disconnectN8n } from '@/lib/services/integrations'
-import { CheckCircle2, XCircle, Settings2, Loader2, Link2, Copy, Check } from 'lucide-react'
+import { saveN8nIntegration, disconnectN8n, rotateInboundWebhookToken } from '@/lib/services/integrations'
+import { CheckCircle2, XCircle, Settings2, Loader2, Link2, Copy, Check, RotateCw } from 'lucide-react'
 
 export function N8nConfigCard({ 
   initialData, 
@@ -22,6 +22,8 @@ export function N8nConfigCard({
   const [origin, setOrigin] = useState('')
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [copiedToken, setCopiedToken] = useState(false)
+  const [isRotating, setIsRotating] = useState(false)
+  const [currentToken, setCurrentToken] = useState(inboundData?.token || '')
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -29,10 +31,15 @@ export function N8nConfigCard({
     }
   }, [])
 
-  const inboundToken = inboundData?.token || ''
-  const fullInboundUrl = origin && inboundToken
-    ? `${origin}/api/webhooks/messages?token=${inboundToken}`
-    : `/api/webhooks/messages?token=${inboundToken || '<TOKEN>'}`
+  useEffect(() => {
+    if (inboundData?.token) {
+      setCurrentToken(inboundData.token)
+    }
+  }, [inboundData?.token])
+
+  const fullInboundUrl = origin && currentToken
+    ? `${origin}/api/webhooks/messages?token=${currentToken}`
+    : `/api/webhooks/messages?token=${currentToken || '<TOKEN>'}`
 
   const copyToClipboard = (text: string, type: 'url' | 'token') => {
     if (!text) return
@@ -43,6 +50,30 @@ export function N8nConfigCard({
     } else {
       setCopiedToken(true)
       setTimeout(() => setCopiedToken(false), 2000)
+    }
+  }
+
+  const handleRotateToken = async () => {
+    if (!confirm('Deseja realmente renovar o token do webhook de entrada? O token anterior deixará de funcionar imediatamente.')) {
+      return
+    }
+
+    setIsRotating(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const res = await rotateInboundWebhookToken()
+      if (!res.success) {
+        setError(res.error || 'Falha ao renovar token.')
+      } else if (res.token) {
+        setCurrentToken(res.token)
+        setSuccess('Token de webhook renovado com sucesso! Lembre-se de atualizar a URL no seu n8n.')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado ao renovar token.')
+    } finally {
+      setIsRotating(false)
     }
   }
 
@@ -217,20 +248,33 @@ export function N8nConfigCard({
             </div>
           </div>
 
-          <div className="pt-1 flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Token da Empresa: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">{inboundToken || 'Indisponível'}</code>
-            </span>
-            {inboundToken && (
-              <button
-                type="button"
-                onClick={() => copyToClipboard(inboundToken, 'token')}
-                className="text-primary hover:underline flex items-center gap-1 font-medium"
-              >
-                {copiedToken ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                <span>{copiedToken ? 'Token copiado!' : 'Copiar Token'}</span>
-              </button>
-            )}
+          <div className="pt-1 flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span>
+                Token da Empresa: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px] text-foreground">{currentToken || 'Indisponível'}</code>
+              </span>
+              {currentToken && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(currentToken, 'token')}
+                  className="text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  {copiedToken ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedToken ? 'Copiado!' : 'Copiar Token'}</span>
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRotateToken}
+              disabled={isRotating}
+              className="inline-flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-medium hover:underline disabled:opacity-50 transition-colors ml-auto"
+              title="Invalidar token atual e gerar um novo"
+            >
+              <RotateCw className={`h-3 w-3 ${isRotating ? 'animate-spin' : ''}`} />
+              <span>{isRotating ? 'Renovando...' : 'Renovar token'}</span>
+            </button>
           </div>
 
           <p className="text-[11px] text-muted-foreground">
