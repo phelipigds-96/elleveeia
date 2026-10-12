@@ -40,8 +40,8 @@ export async function POST(request: Request) {
     // 3. Processamento via Motor de Mensagens (Idempotencia e persistencia da mensagem de entrada)
     const result = await processWebhookEvent(companyId, body)
 
-    // 4. Se for evento duplicado, interrompe imediatamente preservando o contrato HTTP (Regra 4)
-    if (result.duplicate) {
+    // 4. Se for evento duplicado ou sem IDs, interrompe imediatamente preservando o contrato HTTP (Regra 4)
+    if (result.duplicate || !result.conversation_id || !result.message_id) {
       console.log(`[Webhook duplicate req:${requestId}] company:${companyId} event:${result.event_id} - ${Date.now() - startTime}ms`)
       return NextResponse.json(result, { status: 200 })
     }

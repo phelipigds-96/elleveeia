@@ -1,9 +1,12 @@
-﻿import { createAdminClient } from '@/lib/supabase/service'
+import { createAdminClient } from '@/lib/supabase/service'
 import { WebhookPayload } from '@/lib/validations/webhook'
 import { runAgentEngine } from '@/lib/services/agent/engine'
 import { sendOutboundMessage } from '@/lib/services/n8n-service'
+export type ProcessWebhookResult = 
+  | { success: true; duplicate: true; event_id: string; conversation_id?: undefined; message_id?: undefined }
+  | { success: true; duplicate: false; event_id: string; conversation_id: string; message_id: string }
 
-export async function processWebhookEvent(companyId: string, payload: WebhookPayload) {
+export async function processWebhookEvent(companyId: string, payload: WebhookPayload): Promise<ProcessWebhookResult> {
   const supabase = createAdminClient()
 
   // 1. Controle de Idempotência
