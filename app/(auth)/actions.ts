@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase/service'
 
 export async function login(formData: FormData) {
   const supabase = createClient()
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.trim().toLowerCase()
   const password = formData.get('password') as string
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -16,7 +16,13 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    return { error: 'E-mail ou senha incorretos. Tente novamente.' }
+    if (error.message.toLowerCase().includes('email not confirmed')) {
+      return { error: 'E-mail não confirmado. Verifique sua caixa de entrada ou confirme o e-mail no Supabase.' }
+    }
+    if (error.message.toLowerCase().includes('invalid login credentials')) {
+      return { error: 'E-mail ou senha incorretos. Verifique se digitou corretamente ou redefina a senha.' }
+    }
+    return { error: error.message }
   }
 
   revalidatePath('/', 'layout')
