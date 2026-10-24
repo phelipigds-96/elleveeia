@@ -1,4 +1,4 @@
-﻿import { createAdminClient } from '@/lib/supabase/service'
+import { createAdminClient } from '@/lib/supabase/service'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
 import { LLMProviderType, LLMRequestMessage } from '../llm/types'
@@ -9,7 +9,7 @@ import { consultarPrecoTool } from './tools/consultar-preco'
 import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
-import { resolveToolScope } from './tool-scoping'
+import { resolveToolScope, hasClearProductIntent } from './tool-scoping'
 import { applyWorkingMemoryUpdate } from './working-memory'
 
 const MAX_TOOL_ITERATIONS = 5
@@ -112,8 +112,13 @@ export async function runAgentEngine({
 
       // Fallback Determinístico de Catálogo (Zero-Shot)
       // Se no primeiro turno o LLM ignorou uma ferramenta de catálogo disponível e tentou gerar apenas texto,
-      // forçamos a chamada da ferramenta injetando-a na resposta do LLM ANTES de processar.
-      if (iteration === 1 && (!response.tool_calls || response.tool_calls.length === 0)) {
+      // forçamos a chamada da ferramenta injetando-a na resposta do LLM ANTES de processar,
+      // DESDE QUE a mensagem tenha intenção explícita de produto/preço (não institucional, não encerramento).
+      if (
+        iteration === 1 && 
+        (!response.tool_calls || response.tool_calls.length === 0) &&
+        hasClearProductIntent(userMessage)
+      ) {
         const catalogTool = scopedTools.find(t => t.name === 'consultar_produto_comercial' || t.name === 'buscar_produto')
         if (catalogTool) {
           response.tool_calls = [{
@@ -123,7 +128,7 @@ export async function runAgentEngine({
               ? { product_query: userMessage || '' } 
               : { query: userMessage || '' }
           }]
-          response.content = null // Anula texto alucinado
+          response.content = null // Anula texto alucinado apenas quando a intenção de produto era explícita
         }
       }
 

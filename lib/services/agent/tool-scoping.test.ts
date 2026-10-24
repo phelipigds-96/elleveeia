@@ -123,4 +123,105 @@ describe('ToolScopeResolver (Refinado)', () => {
     const result = resolveToolScope('Quero fazer um orcamento', [], mockTools)
     expect(getToolNames(result)).toEqual(['gerar_orcamento'])
   })
+
+  // -------------------------------------------------------------------------
+  // OS 10 CENÁRIOS OBRIGATÓRIOS DA AUDITORIA (INTENÇÕES MISTAS & UNIDADES)
+  // -------------------------------------------------------------------------
+  it('Cenário 1: "Vocês aceitam Pix?" → [] (institucional, sem catálogo ou preço)', () => {
+    const result = resolveToolScope('Vocês aceitam Pix?', [], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Cenário 2: "Vocês aceitam Pix e quanto custa o produto?" → [consultar_produto_comercial] (mista: preço não suprimido)', () => {
+    const result = resolveToolScope('Vocês aceitam Pix e quanto custa o produto?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Cenário 3: "Quanto custa o chocolate Sicao com entrega?" → [consultar_produto_comercial] (mista: entrega não suprime preço)', () => {
+    const result = resolveToolScope('Quanto custa o chocolate Sicao com entrega?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Cenário 4: "Qual é o endereço e o horário de funcionamento?" → [get_current_datetime] (sem busca de produto)', () => {
+    const result = resolveToolScope('Qual é o endereço e o horário de funcionamento?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['get_current_datetime'])
+  })
+
+  it('Cenário 5: "Obrigado, era isso." → [] (encerramento cordial, sem ferramentas)', () => {
+    const result = resolveToolScope('Obrigado, era isso.', [{ role: 'assistant', content: 'Fica R$ 29,90' }], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Cenário 6: "Qual o preço do chocolate Sicao de 1 kg?" → [consultar_produto_comercial] (unidade com espaço "1 kg")', () => {
+    const result = resolveToolScope('Qual o preço do chocolate Sicao de 1 kg?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Cenário 7: "Quanto custa 500 g de chocolate Sicao?" → [consultar_produto_comercial] (unidade com espaço "500 g")', () => {
+    const result = resolveToolScope('Quanto custa 500 g de chocolate Sicao?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Cenário 8: "Quanto fica 10 unidades da cobertura Genuine?" → [consultar_produto_comercial] (unidade "10 unidades")', () => {
+    const result = resolveToolScope('Quanto fica 10 unidades da cobertura Genuine?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Cenário 9: "Vocês trabalham com chocolate Sicao?" → [buscar_produto] (busca legítima de marca/produto)', () => {
+    const result = resolveToolScope('Vocês trabalham com chocolate Sicao?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['buscar_produto'])
+  })
+
+  it('Cenário 10: "Tem filmes infantis?" → [buscar_produto] (sem forçar física ou premissas indevidas)', () => {
+    const result = resolveToolScope('Tem filmes infantis?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['buscar_produto'])
+  })
+
+  // -------------------------------------------------------------------------
+  // INTENÇÃO DE PRAZO / DURAÇÃO VS INTENÇÃO COMERCIAL
+  // -------------------------------------------------------------------------
+  it('Prazo 1: "Quanto demora?" → [] (sem ferramentas comerciais)', () => {
+    const result = resolveToolScope('Quanto demora?', [], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Prazo 1b: "Quanto demora?" com histórico → [] (não aciona fallback comercial)', () => {
+    const result = resolveToolScope('Quanto demora?', [{ role: 'assistant', content: 'Temos chocolate Sicao' }], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Prazo 2: "Quanto falta para entregar?" → [] (sem ferramentas comerciais)', () => {
+    const result = resolveToolScope('Quanto falta para entregar?', [], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Prazo 2b: "Quanto falta para entregar?" com histórico → [] (não aciona fallback comercial)', () => {
+    const result = resolveToolScope('Quanto falta para entregar?', [{ role: 'assistant', content: 'Pedido recebido' }], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Prazo 3: "Quanto tempo demora a entrega?" → [] (duração explícita de entrega)', () => {
+    const result = resolveToolScope('Quanto tempo demora a entrega?', [], mockTools)
+    expect(result).toHaveLength(0)
+  })
+
+  it('Prazo 4: "Quanto custa o chocolate Sicao?" → [consultar_produto_comercial] (preço de produto preservado)', () => {
+    const result = resolveToolScope('Quanto custa o chocolate Sicao?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Prazo 5: "Quanto custa a entrega do chocolate Sicao?" → [consultar_produto_comercial] (mista: entrega não suprime preço do produto)', () => {
+    const result = resolveToolScope('Quanto custa a entrega do chocolate Sicao?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Prazo 6: "Vocês aceitam Pix e quanto custa o produto?" → [consultar_produto_comercial] (mista preservada)', () => {
+    const result = resolveToolScope('Vocês aceitam Pix e quanto custa o produto?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
+
+  it('Prazo 7: "Quanto fica 10 unidades da cobertura Genuine?" → [consultar_produto_comercial] (quantidade/preço preservada)', () => {
+    const result = resolveToolScope('Quanto fica 10 unidades da cobertura Genuine?', [], mockTools)
+    expect(getToolNames(result)).toEqual(['consultar_produto_comercial'])
+  })
 })
