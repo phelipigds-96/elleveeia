@@ -25,7 +25,7 @@ export interface PriceResolutionResult {
  * e o início do dia (00:00:00.000) para valid_from.
  * Retorna 'INVALID' se a data for inválida ou corrompida.
  */
-export function parseCommercialValidityDate(val: string | null | undefined, isEndOfDay: boolean): Date | null | 'INVALID' {
+export function parseCommercialValidityDate(val: string | Date | null | undefined, isEndOfDay: boolean): Date | null | 'INVALID' {
   if (val === null || val === undefined) return null
   if (val instanceof Date) return isNaN(val.getTime()) ? 'INVALID' : val
   if (typeof val !== 'string') return 'INVALID'

@@ -74,6 +74,10 @@ export async function requirePlatformAdmin(
     throw new PlatformAuthError('Falha ao validar sessão de usuário.', 401, 'UNAUTHENTICATED')
   }
 
+  if (!authUser) {
+    throw new PlatformAuthError('Não autenticado. Sessão inválida ou expirada.', 401, 'UNAUTHENTICATED')
+  }
+
   const userId = authUser.id
 
   // 3. Consultar platform_admins usando o client de backend confiável (Service Role)
