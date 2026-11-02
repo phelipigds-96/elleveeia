@@ -387,7 +387,7 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
           const existingItem = existingCart.find(e => e.productId === pId)
           return {
             productId: pId,
-            name: it.productName ?? it.name ?? existingItem?.name ?? (next.activeProduct?.id === pId ? next.activeProduct.name : 'Produto'),
+            name: it.productName ?? it.name ?? existingItem?.name ?? (next.activeProduct && next.activeProduct.id === pId ? next.activeProduct.name : 'Produto'),
             quantity: it.quantity,
             unitPrice: it.unitPrice ?? it.unit_price,
             subtotal: it.subtotal,
