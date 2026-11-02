@@ -1,10 +1,77 @@
 import { createAdminClient } from '@/lib/supabase/service'
-import { OpenAIMessage } from './openai'
+import type { OpenAIMessage } from './openai'
+import type { WorkingMemory } from './working-memory'
 
 interface ContextBuilderParams {
   companyId: string
   agentId: string
   conversationId: string
+}
+
+/**
+ * Formata o bloco [WORKING MEMORY] para exibição determinística no System Prompt do LLM.
+ * Exibe o produto em foco no diálogo, dados de preço/quantidade atuais,
+ * o carrinho multi-item de negociação com status de confirmação e totais validados,
+ * e o orçamento formal caso exista.
+ */
+export function formatWorkingMemoryPrompt(workingMemory: WorkingMemory | null | undefined): string {
+  if (!workingMemory || Object.keys(workingMemory).length === 0) {
+    return ''
+  }
+
+  let prompt = `\n[WORKING MEMORY]\n`
+
+  if (workingMemory.activeProduct) {
+    prompt += `Produto em Foco: ${workingMemory.activeProduct.name} (ID: ${workingMemory.activeProduct.id})\n`
+  }
+
+  const priceQtd: string[] = []
+  if (workingMemory.activePrice && typeof workingMemory.activePrice.unitPrice === 'number') {
+    const typeStr = workingMemory.activePrice.priceType ? ` (${workingMemory.activePrice.priceType})` : ''
+    priceQtd.push(`Preco: R$ ${workingMemory.activePrice.unitPrice.toFixed(2)}${typeStr}`)
+  }
+  if (typeof workingMemory.activeQuantity === 'number') {
+    priceQtd.push(`Qtd: ${workingMemory.activeQuantity}`)
+  }
+  if (priceQtd.length > 0) {
+    prompt += priceQtd.join(' | ') + '\n'
+  }
+
+  // Exposição do carrinho multi-item (activeCart)
+  if (workingMemory.activeCart && workingMemory.activeCart.length > 0) {
+    const count = workingMemory.activeCart.length
+    prompt += `\nCarrinho de Negociação (${count} ${count === 1 ? 'item distinto' : 'itens distintos'}):\n`
+    let partialTotalCents = 0
+    const unconfirmedNames: string[] = []
+
+    for (const item of workingMemory.activeCart) {
+      const statusStr = item.isPriceConfirmed ? 'Confirmada' : 'Pendente'
+      let itemLine = `- ${item.name} (ID: ${item.productId}) | Qtd: ${item.quantity} | Precificação: ${statusStr}`
+      if (item.isPriceConfirmed && typeof item.unitPrice === 'number' && typeof item.subtotal === 'number') {
+        const typeStr = item.priceType ? ` (${item.priceType})` : ''
+        itemLine += ` | Preço Unit: R$ ${item.unitPrice.toFixed(2)}${typeStr} | Subtotal: R$ ${item.subtotal.toFixed(2)}`
+        partialTotalCents += Math.round(item.subtotal * 100)
+      } else {
+        unconfirmedNames.push(item.name)
+      }
+      prompt += itemLine + '\n'
+    }
+
+    const partialTotal = partialTotalCents / 100
+    prompt += `Total Parcial Confirmado: R$ ${partialTotal.toFixed(2)}\n`
+    if (unconfirmedNames.length > 0) {
+      prompt += `Atenção: Os seguintes produtos precisam de recálculo/confirmação de preço antes de gerar orçamento: ${unconfirmedNames.join(', ')}\n`
+    }
+  }
+
+  if (workingMemory.activeQuote) {
+    const totalFormatted = typeof workingMemory.activeQuote.total === 'number'
+      ? ` | Total: R$ ${workingMemory.activeQuote.total.toFixed(2)}`
+      : ''
+    prompt += `Orcamento Formal: ID ${workingMemory.activeQuote.id} (${workingMemory.activeQuote.status})${totalFormatted}\n`
+  }
+
+  return prompt
 }
 
 export async function buildAgentContext({ companyId, agentId, conversationId }: ContextBuilderParams) {
@@ -42,7 +109,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     throw new Error('Conversa em modo de atendimento humano (Handoff). O agente nao deve intervir.')
   }
 
-  // 3. Carregar histrico bruto (Ate 20 mensagens)
+  // 3. Carregar histórico bruto (Até 20 mensagens)
   const { data: messages } = await supabase
     .from('messages')
     .select('*')
@@ -53,7 +120,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   const rawHistory = messages || []
 
   // 4. Extrair Working Memory Operacional
-  let workingMemory: any = null
+  let workingMemory: WorkingMemory | null = null
   for (const msg of rawHistory) {
     if (msg.sender_type === 'agent' && msg.metadata?.working_memory) {
       workingMemory = msg.metadata.working_memory
@@ -101,24 +168,41 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   const now = new Date()
   systemPrompt += `\n[CONTEXTO TEMPORAL]\n${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`
 
+  // Injeção da Working Memory estruturada
   if (workingMemory && Object.keys(workingMemory).length > 0) {
-     systemPrompt += `\n[WORKING MEMORY]\n`
-     if (workingMemory.activeProduct) {
-         systemPrompt += `Produto: ${workingMemory.activeProduct.name} (ID: ${workingMemory.activeProduct.id})\n`
-     }
-     let priceQtd = []
-     if (workingMemory.activePrice) priceQtd.push(`Preco: R$ ${workingMemory.activePrice.unitPrice}`)
-     if (workingMemory.activeQuantity) priceQtd.push(`Qtd: ${workingMemory.activeQuantity}`)
-     if (priceQtd.length > 0) systemPrompt += priceQtd.join(' | ') + '\n'
-     
-     if (workingMemory.activeQuote) {
-         systemPrompt += `Orcamento: ID ${workingMemory.activeQuote.id} (${workingMemory.activeQuote.status})\n`
-     }
+    systemPrompt += formatWorkingMemoryPrompt(workingMemory)
   }
 
   systemPrompt += `\n[PRIORIDADE ABSOLUTA]\nQuando uma ferramenta disponivel retornar sucesso (ex: horas, datas, precos, etc), VOCE DEVE priorizar o resultado dessa ferramenta na resposta. O resultado de uma ferramenta tem precedencia total sobre restricoes genericas de dominio ("Responda apenas sobre produtos"). Nao finja que nao pode informar algo se a ferramenta acabou de lhe devolver os dados.`
 
-  systemPrompt += `\n[OBRIGATORIEDADE DE CATALOGO]\nQuando o usuario perguntar sobre existencia, caracteristicas, marcas, disponibilidade ou precos de produtos, voce DEVE consultar a ferramenta de catalogo ou comercial disponivel ANTES de responder. NUNCA responda afirmando ou negando existencia de um produto sem usar a ferramenta primeiro. NUNCA responda dizendo apenas que vai verificar em texto sem efetivamente realizar a chamada da funcao. Sua resposta final ao cliente devera ser sempre baseada no resultado retornado pela ferramenta.\n`
+  systemPrompt += `\n\n[OBRIGATORIEDADE DE CATALOGO E REGRAS COMERCIAIS]\n`
+  systemPrompt += `1. IDENTIFICAÇÃO DE PRODUTOS:\n`
+  systemPrompt += `- Use o catálogo importado da Sumel como fonte oficial de identificação.\n`
+  systemPrompt += `- Não invente produtos, marcas, códigos ou preços.\n`
+  systemPrompt += `- Quando houver ambiguidade de marcas ou modelos, apresente as opções disponíveis e peça esclarecimento ao cliente.\n`
+  systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou' ao não encontrar um produto. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano.\n\n`
+
+  systemPrompt += `2. CARRINHO DE NEGOCIAÇÃO:\n`
+  systemPrompt += `- Uma consulta simples não adiciona automaticamente um produto ao carrinho.\n`
+  systemPrompt += `- Quando o cliente confirmar produto e quantidade para precificação, atualize o carrinho.\n`
+  systemPrompt += `- Ao adicionar outro produto, preserve os itens anteriores no carrinho.\n`
+  systemPrompt += `- Ao alterar quantidade de um item, recalcule o preço pela ferramenta oficial antes de confirmar o novo subtotal.\n`
+  systemPrompt += `- Ao remover um item, preserve todos os demais itens do carrinho.\n`
+  systemPrompt += `- NUNCA confirme um orçamento com item de preço pendente.\n`
+  systemPrompt += `- Não trate o carrinho em memória como orçamento formal persistido.\n\n`
+
+  systemPrompt += `3. PRECIFICAÇÃO OFICIAL:\n`
+  systemPrompt += `- Use exclusivamente o motor oficial de precificação via ferramentas. Não calcule ou invente descontos por conta própria.\n`
+  systemPrompt += `- Respeite rigorosamente as regras de varejo, atacado, lotes mínimos de quantidade e vigência comercial.\n`
+  systemPrompt += `- Preço Clube Sumel só pode ser informado quando a elegibilidade estiver confirmada no sistema.\n`
+  systemPrompt += `- Se o cliente solicitar preço Clube sem elegibilidade confirmada, informe o preço regular vigente e explique que o benefício é exclusivo para membros cadastrados do Clube Sumel.\n\n`
+
+  systemPrompt += `4. GERAÇÃO E EDIÇÃO DE ORÇAMENTOS:\n`
+  systemPrompt += `- Ao solicitar orçamento, utilize os itens com preços confirmados do carrinho.\n`
+  systemPrompt += `- Ao editar um orçamento existente, atualize o registro draft existente, evitando duplicação.\n`
+  systemPrompt += `- Após qualquer inclusão, remoção ou alteração de quantidade, atualize os valores e totais formais.\n`
+  systemPrompt += `- Só informe número (ID) e total de orçamento após o retorno confirmado da ferramenta gerar_orcamento.\n`
+  systemPrompt += `- Se uma operação de ferramenta falhar, explique com clareza o motivo e não simule sucesso.\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
@@ -149,4 +233,3 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     }
   }
 }
-

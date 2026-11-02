@@ -1,6 +1,7 @@
 export const STOP_WORDS = new Set([
   'de', 'da', 'do', 'para', 'com', 'o', 'a', 'os', 'as', 'em', 'um', 'uma', 
-  'quanto', 'esta', 'ta', 'tem', 'gostaria', 'queria', 'saber', 'preco', 'valor', 'custa', 'qual', 'e', 'que'
+  'quanto', 'esta', 'ta', 'tem', 'gostaria', 'queria', 'saber', 'preco', 'valor', 'custa', 'qual', 'e', 'que',
+  'voce', 'voces', 'vc', 'vcs', 'temos', 'ola', 'oi', 'favor'
 ])
 
 export const MULTI_WORD_TOKENS = [

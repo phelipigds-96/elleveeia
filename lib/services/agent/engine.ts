@@ -1,13 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
-import { LLMProviderType, LLMRequestMessage } from '../llm/types'
+import type { LLMProviderType, LLMRequestMessage } from '../llm/types'
 import { ToolRegistry, ToolExecutor } from './tools'
 import { getCurrentDatetimeTool } from './tools/get-current-datetime'
 import { buscarProdutoTool } from './tools/buscar-produto'
 import { consultarPrecoTool } from './tools/consultar-preco'
 import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
+import { consultarOrcamentoTool } from './tools/consultar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
 import { resolveToolScope, hasClearProductIntent } from './tool-scoping'
 import { applyWorkingMemoryUpdate } from './working-memory'
@@ -20,6 +21,53 @@ interface AgentRunParams {
   conversationId: string
   userMessage?: string
   skipCustomerMessageInsert?: boolean
+}
+
+/**
+ * Constrói resposta segura quando o loop de ferramentas encerra sem texto final do LLM
+ * ou quando o teto de iterações é atingido. Evita alucinações e não confirma operações incompletas.
+ */
+export function buildSafeIterationLimitResponse(allToolResults: any[]): string {
+  const failedResults = allToolResults.filter(r => !r.success)
+  if (failedResults.length > 0) {
+    const lastError = failedResults[failedResults.length - 1]?.error?.message || 'instabilidade no processamento'
+    return `Não foi possível concluir a operação solicitada: ${lastError}. Deseja tentar novamente ou falar com um atendente?`
+  }
+
+  const lastSuccessful = allToolResults.filter(r => r.success).pop()
+  if (lastSuccessful?.toolName === 'gerar_orcamento' && lastSuccessful.data?.id) {
+    const totalStr = typeof lastSuccessful.data.total === 'number' ? ` no valor total de R$ ${lastSuccessful.data.total.toFixed(2)}` : ''
+    return `Seu orçamento foi gerado com sucesso (ID: ${lastSuccessful.data.id})${totalStr}. Deseja mais alguma informação ou falar com um atendente?`
+  }
+
+  return 'Consultei nosso sistema para atender sua solicitação, mas não consegui concluir a resposta automaticamente. Gostaria de falar com nossa equipe de atendimento?'
+}
+
+/**
+ * Higieniza metadados para telemetria, garantindo que nenhum token, senha,
+ * chave de API ou segredo seja gravado no banco de logs.
+ */
+export function sanitizeLogMetadata(metadata: any): any {
+  if (!metadata || typeof metadata !== 'object') return metadata
+  if (Array.isArray(metadata)) {
+    return metadata.map(item => sanitizeLogMetadata(item))
+  }
+
+  const sanitized: Record<string, any> = {}
+  const sensitiveKeys = ['token', 'password', 'secret', 'key', 'authorization', 'bearer', 'apikey', 'api_key', 'credential', 'credenciais']
+
+  for (const [key, val] of Object.entries(metadata)) {
+    const isSensitive = sensitiveKeys.some(s => key.toLowerCase().includes(s))
+    if (isSensitive) {
+      sanitized[key] = '[REDACTED]'
+    } else if (val && typeof val === 'object') {
+      sanitized[key] = sanitizeLogMetadata(val)
+    } else {
+      sanitized[key] = val
+    }
+  }
+
+  return sanitized
 }
 
 export async function runAgentEngine({ 
@@ -40,8 +88,9 @@ export async function runAgentEngine({
   let scopedTools: any[] = []
   const executedTools: Array<{name: string, success: boolean}> = []
 
-  // Rastreabilidade estrita e deterministica da Memria de Trabalho (Sem LLM)
+  // Rastreabilidade estrita e determinística da Memória de Trabalho (Sem LLM)
   const allToolResults: any[] = []
+  let fallbackTriggered = false
 
   try {
     if (userMessage && !skipCustomerMessageInsert) {
@@ -52,10 +101,10 @@ export async function runAgentEngine({
         content: userMessage,
         message_type: 'text'
       })
-      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuÃ‡Â­rio: ${msgErr.message}`)
+      if (msgErr) throw new Error(`Falha ao inserir mensagem do usuário: ${msgErr.message}`)
     }
 
-    // O Context Builder agora devolve tambÃ‡Â¸m a workingMemory da Ã‡Â§ltima interaÃ‡Å“o
+    // O Context Builder devolve o histórico formatado e a workingMemory da última interação
     const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
       companyId,
       agentId,
@@ -66,20 +115,21 @@ export async function runAgentEngine({
     providerUsed = (agent.provider || 'openai') as LLMProviderType
     const provider = getLLMProvider(providerUsed)
 
-    // Configurar Registry e Executor
+    // Configurar Registry e Executor com as ferramentas comerciais oficiais
     const registry = new ToolRegistry()
     registry.register(getCurrentDatetimeTool) 
     registry.register(buscarProdutoTool)
     registry.register(consultarPrecoTool)
     registry.register(calcularPrecoProdutoTool)
     registry.register(gerarOrcamentoTool)
+    registry.register(consultarOrcamentoTool)
     registry.register(consultarProdutoComercialTool)
     
     const executor = new ToolExecutor(registry)
     
-    // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg e historico limpo
+    // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg, historico limpo e Working Memory atual
     const historyForScoping = payloadMessages.filter(m => m.role === 'user' || m.role === 'assistant')
-    scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list())
+    scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list(), previousWorkingMemory)
     const availableTools = registry.getProviderPayload(scopedTools)
 
     let messagesForLLM: LLMRequestMessage[] = payloadMessages.map(msg => ({
@@ -89,10 +139,13 @@ export async function runAgentEngine({
 
     let iteration = 0
     let llm_rounds: any[] = []
-      let finalContent: string | null = null
-      let debug_tool_loop: any[] = []
+    let finalContent: string | null = null
+    let debug_tool_loop: any[] = []
 
-    // LLM Loop para Function Calling
+    // Memória de trabalho viva para propagação dinâmica entre iterações do mesmo turno
+    let currentWorkingMemory: any = previousWorkingMemory ? { ...previousWorkingMemory } : {}
+
+    // LLM Loop para Function Calling (com teto de segurança MAX_TOOL_ITERATIONS)
     while (iteration < MAX_TOOL_ITERATIONS) {
       iteration++
 
@@ -105,7 +158,7 @@ export async function runAgentEngine({
         tools: availableTools
       })
 
-      // Acumula mÃ‡Â¸tricas
+      // Acumula métricas de uso de tokens
       usageMetrics.prompt_tokens += response.usage.prompt_tokens
       usageMetrics.completion_tokens += response.usage.completion_tokens
       usageMetrics.total_tokens += response.usage.total_tokens
@@ -121,6 +174,7 @@ export async function runAgentEngine({
       ) {
         const catalogTool = scopedTools.find(t => t.name === 'consultar_produto_comercial' || t.name === 'buscar_produto')
         if (catalogTool) {
+          fallbackTriggered = true
           response.tool_calls = [{
             callId: 'fallback_catalog_1',
             toolName: catalogTool.name,
@@ -153,33 +207,45 @@ export async function runAgentEngine({
 
       if (response.tool_calls && response.tool_calls.length > 0) {
         messagesForLLM.push({
-            role: 'assistant',
-            content: response.content || undefined,
-            tool_calls: response.tool_calls
-          })
+          role: 'assistant',
+          content: response.content || undefined,
+          tool_calls: response.tool_calls
+        })
 
-          debug_tool_loop.push({
-            round: iteration,
-            tool_calls_requested: response.tool_calls.map(tc => tc.toolName)
-          })
+        debug_tool_loop.push({
+          round: iteration,
+          tool_calls_requested: response.tool_calls.map(tc => tc.toolName)
+        })
 
         for (const call of response.tool_calls) {
-          const result = await executor.execute(call, { companyId, agentId, conversationId })
+          const result = await executor.execute(call, { 
+            companyId, 
+            agentId, 
+            conversationId,
+            customerId: conversation?.customer_id || undefined,
+            workingMemory: currentWorkingMemory // Propagação viva da memória de trabalho atualizada
+          })
           
           executedTools.push({ name: call.toolName, success: result.success })
-          allToolResults.push(result) // Salvamos para o parser da Working Memory
+          allToolResults.push(result) // Registrado para o consolidador da Working Memory
 
-          messagesForLLM.push({
-              role: 'tool',
-              tool_result: result
-            })
+          // Se a ferramenta retornou dados com sucesso, atualiza a memória de trabalho viva
+          // para que iterações seguintes deste mesmo turno tenham acesso imediato aos novos itens/preços
+          if (result.success && result.data) {
+            currentWorkingMemory = applyWorkingMemoryUpdate(currentWorkingMemory, [result])
           }
 
-          debug_tool_loop.push({
-            round: iteration + 1,
-            tool_results_sent: allToolResults.map(r => ({ tool_name: r.toolName, success: r.success, data: r.data }))
+          messagesForLLM.push({
+            role: 'tool',
+            tool_result: result
           })
-        
+        }
+
+        debug_tool_loop.push({
+          round: iteration + 1,
+          tool_results_sent: allToolResults.map(r => ({ tool_name: r.toolName, success: r.success, data: r.data }))
+        })
+      
         continue
       }
 
@@ -187,15 +253,17 @@ export async function runAgentEngine({
       break
     }
 
+    // Tratamento resiliente de encerramento do loop:
+    // Se o teto de iterações foi atingido sem texto final do LLM, produz resposta segura baseada nos dados reais
     if (!finalContent) {
-      throw new Error(`O LLM encerrou o fluxo sem prover uma resposta vÃ‡Â­lida de texto aps ${iteration} iteraes.`)
+      finalContent = buildSafeIterationLimitResponse(allToolResults)
     }
 
     // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
-    // NÃƒÂ£o inventamos dados, apenas parseamos resultados deterministicos de forma segura
+    // Não inventamos dados, apenas parseamos resultados determinísticos de forma segura
     const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
-    // 3. Salvar a resposta do agente contendo a nova memÃƒÂ³ria no campo metadata!
+    // 3. Salvar a resposta do agente contendo a nova memória no campo metadata
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
       messageMetadata.working_memory = newWorkingMemory
@@ -220,29 +288,40 @@ export async function runAgentEngine({
 
     runStatus = 'success'
 
-      // Calcular metricas de cache agregadas
-      let total_cached_tokens = 0
-      let total_input_tokens = 0
-      for (const round of llm_rounds) {
-        if (round.cached_input_tokens) total_cached_tokens += round.cached_input_tokens
-        if (round.input_tokens) total_input_tokens += round.input_tokens
-      }
-      
-      let cache_hit_ratio: number | undefined = undefined
-      if (total_input_tokens > 0 && total_cached_tokens > 0) {
-        cache_hit_ratio = parseFloat((total_cached_tokens / total_input_tokens).toFixed(4))
-      }
+    // Calcular métricas de cache agregadas
+    let total_cached_tokens = 0
+    let total_input_tokens = 0
+    for (const round of llm_rounds) {
+      if (round.cached_input_tokens) total_cached_tokens += round.cached_input_tokens
+      if (round.input_tokens) total_input_tokens += round.input_tokens
+    }
+    
+    let cache_hit_ratio: number | undefined = undefined
+    if (total_input_tokens > 0 && total_cached_tokens > 0) {
+      cache_hit_ratio = parseFloat((total_cached_tokens / total_input_tokens).toFixed(4))
+    }
 
-      // Observabilidade das Metricas de Contexto
-      const runMetadata: any = {
-          debug_tool_loop,
-          llm_rounds,
-        caching: {
-          total_cached_tokens,
-          cache_hit: total_cached_tokens > 0,
-          cache_hit_ratio
-        },
+    // Observabilidade e Telemetria Segura (sem dados confidenciais ou tokens sensíveis)
+    const runMetadata: any = {
+      debug_tool_loop,
+      llm_rounds,
+      caching: {
+        total_cached_tokens,
+        cache_hit: total_cached_tokens > 0,
+        cache_hit_ratio
+      },
       tools_available: scopedTools.map(t => t.name),
+      cart: {
+        item_count: newWorkingMemory.activeCart ? newWorkingMemory.activeCart.length : 0,
+        has_items: Boolean(newWorkingMemory.activeCart && newWorkingMemory.activeCart.length > 0)
+      },
+      orchestration: {
+        iterations: iteration,
+        fallback_catalog_triggered: fallbackTriggered,
+        executed_tools: executedTools.map(t => ({ tool: t.name, success: t.success })),
+        has_active_quote: Boolean(newWorkingMemory.activeQuote?.id),
+        quote_id: newWorkingMemory.activeQuote?.id || null
+      },
       context: {
         history_messages_available: contextMetrics.availableMessages,
         history_messages_used: contextMetrics.usedMessages,
@@ -251,6 +330,7 @@ export async function runAgentEngine({
           has_active_product: !!newWorkingMemory.activeProduct,
           has_active_price: !!newWorkingMemory.activePrice,
           has_active_quantity: !!newWorkingMemory.activeQuantity,
+          has_active_cart: Boolean(newWorkingMemory.activeCart && newWorkingMemory.activeCart.length > 0),
           has_active_quote: !!newWorkingMemory.activeQuote
         }
       }
@@ -319,17 +399,8 @@ async function logAgentRun(supabase: any, { companyId, agentId, conversationId, 
   }
   
   if (metadata) {
-    payload.metadata = metadata
+    payload.metadata = sanitizeLogMetadata(metadata)
   }
 
   await supabase.from('agent_runs').insert(payload)
 }
-
-
-
-
-
-
-
-
-

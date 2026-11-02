@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ToolDefinition } from '../tools'
+import type { ToolDefinition } from '../tools'
 import { resolveProductPrice } from '@/lib/services/commercial/pricing'
 
 const InputSchema = z.object({

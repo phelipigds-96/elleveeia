@@ -59,9 +59,13 @@ export function parseQuery(query: string): ParsedProductQuery {
   if (weightMatches) {
     for (const w of weightMatches) {
       const normalizedW = w.replace(/\s+/g, '').replace(',', '.')
+      const variants = [normalizedW, w, normalizedW.replace('.', ' ')]
+      if (normalizedW === '1kg') {
+        variants.push('1 01kg', '1.01kg', '1 05kg', '1.05kg', '1 01 kg', '1 05 kg')
+      }
       groups.push({
         original: normalizedW,
-        variants: [normalizedW, w, normalizedW.replace('.', ' ')],
+        variants,
         isGeneric: false,
         isUnit: true
       })
@@ -127,7 +131,7 @@ export function calculateMatchScore(
   let score = 0
   let penalty = 0
   
-  const paddedName = ` ${productName} `
+  const paddedName = ` ${productName.toLowerCase()} `
   const brandNorm = productBrand ? productBrand.toLowerCase() : null
   const catNorm = productCategory ? productCategory.toLowerCase() : null
 

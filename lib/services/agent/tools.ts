@@ -5,6 +5,8 @@ export interface ToolExecutionContext {
   companyId: string
   agentId: string
   conversationId: string
+  customerId?: string
+  workingMemory?: any
 }
 
 export interface InternalToolCall {
@@ -37,6 +39,7 @@ export interface ToolDefinition<T extends z.ZodTypeAny = z.ZodTypeAny> {
   metadata?: ToolMetadata
   execute: (input: z.infer<T>, context: ToolExecutionContext) => Promise<any>
 }
+export const ToolDefinition = undefined as any
 
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map()
@@ -84,7 +87,10 @@ export class ToolRegistry {
 }
 
 export class ToolExecutor {
-  constructor(private registry: ToolRegistry) {}
+  private registry: ToolRegistry
+  constructor(registry: ToolRegistry) {
+    this.registry = registry
+  }
 
   async execute(call: InternalToolCall, context: ToolExecutionContext): Promise<InternalToolResult> {
     try {

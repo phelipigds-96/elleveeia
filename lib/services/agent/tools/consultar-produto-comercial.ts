@@ -1,5 +1,5 @@
-﻿import { z } from 'zod'
-import { ToolDefinition } from '../tools'
+import { z } from 'zod'
+import type { ToolDefinition } from '../tools'
 import { searchProducts } from '../../catalog/products'
 import { resolveProductPrice } from '../../commercial/pricing'
 import { applyCommercialStrategy } from '../commercial-strategy'
@@ -18,35 +18,55 @@ export const consultarProdutoComercialTool: ToolDefinition = {
     
     const searchResult = await searchProducts(context.companyId, product_query, 5)
 
+    // Resolução individual de preços para os candidatos retornados (máximo 5)
+    const candidatePrices = new Map<string, { unit_price: number, subtotal: number }>()
+    const candidateErrors = new Map<string, string>()
+
+    if (searchResult.matches && searchResult.matches.length > 0) {
+      const targetMatches = searchResult.matches.slice(0, 5)
+      await Promise.all(
+        targetMatches.map(async (prod) => {
+          try {
+            const p = await resolveProductPrice({
+              companyId: context.companyId,
+              productId: prod.id,
+              quantity,
+              priceType: price_type
+            })
+            candidatePrices.set(prod.id, {
+              unit_price: p.unitPrice,
+              subtotal: p.subtotal
+            })
+          } catch (err: any) {
+            // Tratamento individual: produtos sem preço configurado não travam os demais,
+            // mas preservamos a mensagem de erro específica para o diagnóstico
+            candidateErrors.set(prod.id, err?.message || 'Produto não possui preço configurado ou está indisponível.')
+          }
+        })
+      )
+    }
+
     let pricingData: any = undefined
     let hasPricingError = false
     let pricingErrorMessage = ''
 
     if (searchResult.status === 'exact_match' || (searchResult.matches && searchResult.matches.length === 1)) {
       const bestProduct = searchResult.matches[0]
-      try {
-        const p = await resolveProductPrice({
-          companyId: context.companyId,
-          productId: bestProduct.id,
-          quantity,
-          priceType: price_type
-        })
-        pricingData = {
-          unit_price: p.unitPrice,
-          subtotal: p.subtotal
-        }
-      } catch (err: any) {
+      const resolved = candidatePrices.get(bestProduct.id)
+      if (resolved) {
+        pricingData = resolved
+      } else {
         hasPricingError = true
-        pricingErrorMessage = err.message
+        pricingErrorMessage = candidateErrors.get(bestProduct.id) || 'Produto não possui preço configurado ou está indisponível.'
       }
     }
 
-    const strategyPayload = applyCommercialStrategy(product_query, searchResult, quantity, pricingData)
+    const strategyPayload = applyCommercialStrategy(product_query, searchResult, quantity, pricingData, candidatePrices)
 
-    if (hasPricingError) {
+    if (hasPricingError && (searchResult.status === 'exact_match' || (searchResult.matches && searchResult.matches.length === 1))) {
       return {
         success: false,
-        error: "Falha ao calcular preco: ",
+        error: `Falha ao calcular preco: ${pricingErrorMessage}`,
         data: strategyPayload
       }
     }

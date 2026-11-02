@@ -1,4 +1,4 @@
-import { LLMProvider, LLMProviderType } from './types'
+import type { LLMProvider, LLMProviderType } from './types'
 import { OpenAIProvider } from './providers/openai'
 import { GeminiProvider } from './providers/gemini'
 

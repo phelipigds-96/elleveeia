@@ -1,5 +1,5 @@
-﻿import { LLMProvider, LLMRequest, LLMResponse } from '../types'
-import { InternalToolCall } from '../../agent/tools'
+import type { LLMProvider, LLMRequest, LLMResponse } from '../types'
+import type { InternalToolCall } from '../../agent/tools'
 
 export class OpenAIProvider implements LLMProvider {
   async generateResponse(request: LLMRequest): Promise<LLMResponse> {

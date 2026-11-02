@@ -1,4 +1,4 @@
-import { ToolDefinition } from './tools'
+import type { ToolDefinition } from './tools'
 
 /**
  * Normaliza o texto para matching robusto
@@ -59,6 +59,47 @@ const INSTITUTIONAL_KEYWORDS = [
 ]
 
 /**
+ * Padrões de intenção de remoção de item do carrinho ou orçamento.
+ */
+const REMOVAL_PATTERNS = [
+  /\b(?:tira|tire|retira|retire|remove|remova|exclui|exclua)\s+(?:o|a|os|as|esse|essa|este|esta|aquele|aquela|o\s+item|um|uma|do\s+carrinho|do\s+orcamento|do\s+pedido)\b/i,
+  /\b(?:tira|tire|retira|retire|remove|remova|exclui|exclua)\s+[a-z0-9]+/i,
+  /\bnao\s+quero\s+mais\b/i,
+  /\bcancel(?:a|ar|e)\s+(?:esse|este|o)\s+item\b/i,
+  /\bdeixa\s+so\s+(?:o|a|os|as|esse|essa)\b/i
+]
+
+/**
+ * Padrões de intenção de alteração de quantidade ou orçamento.
+ */
+const MODIFICATION_PATTERNS = [
+  /\b(?:muda|mude|altera|altere|troca|troque)\s+(?:para|pra|por)\s+\d+\b/i,
+  /\b(?:muda|mude|altera|altere|atualiza|atualize)\s+(?:o|meu)\s+(?:orcamento|pedido|carrinho)\b/i,
+  /\bcoloca\s+\d+\b/i,
+  /\bquero\s+\d+\s+(?:unidades?|un|und|caixas?|fardos?|pacotes?|barras?|kilos?|kg|litros?|l)\b/i
+]
+
+/**
+ * Padrões de intenção de inclusão de produto no carrinho/orçamento.
+ */
+const INCLUSION_PATTERNS = [
+  /\b(?:adiciona|adicione|inclui|inclua|acrescenta|acrescente|bota)\s+(?:mais|tambem|outro|outra|o|a|um|uma|\d+)\b/i,
+  /\bcoloca\s+tambem\b/i,
+  /\bquero\s+mais\s+um\b/i,
+  /\be\s+esse\s+tambem\b/i,
+  /\be\s+essa\s+tambem\b/i,
+  /\bmais\s+\d+\s+(?:de|do|da|unidades?|caixas?|fardos?|pacotes?)\b/i
+]
+
+/**
+ * Padrões explícitos de orçamento / cotação.
+ */
+const QUOTE_PATTERNS = [
+  /\b(?:fecha|fechar|atualiza|atualizar|altera|alterar|passa|passar)\s+(?:o|meu|um)?\s*(?:orcamento|cotacao|pedido|total)\b/i,
+  /\b(?:resumo|detalhes)\s+(?:do|de)?\s*(?:orcamento|pedido)\b/i
+]
+
+/**
  * Verifica se a mensagem possui intenção clara de produto ou consulta comercial.
  * Usado pelo engine para evitar disparar fallbacks determinísticos em mensagens
  * puramente institucionais, encerramentos ou dúvidas gerais.
@@ -100,7 +141,13 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
   // Unidade de medida explícita (ex: 1kg, 1 kg, 500g, 500 g, 1,5kg, 10 un)
   const hasUnitMeasure = UNIT_MEASURE_REGEX.test(userMessage)
 
-  const hasExplicitCommercialIntent = hasPriceIntent || hasQuantityIntent || hasCatalogKeyword || hasUnitMeasure
+  // Intenções de edição comercial
+  const hasEditIntent = REMOVAL_PATTERNS.some(p => p.test(msg)) ||
+                        MODIFICATION_PATTERNS.some(p => p.test(msg)) ||
+                        INCLUSION_PATTERNS.some(p => p.test(msg)) ||
+                        QUOTE_PATTERNS.some(p => p.test(msg))
+
+  const hasExplicitCommercialIntent = hasPriceIntent || hasQuantityIntent || hasCatalogKeyword || hasUnitMeasure || hasEditIntent
 
   // Se contiver termos institucionais e NÃO houver intenção comercial explícita, nunca é intenção de produto
   const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
@@ -110,18 +157,18 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
 }
 
 /**
- * Resolve quais ferramentas devem ser enviadas ao LLM com base na mensagem atual
- * e no contexto da conversa, reduzindo cirurgicamente o consumo de tokens.
+ * Resolve quais ferramentas devem ser enviadas ao LLM com base na mensagem atual,
+ * no histórico e na Working Memory (activeCart e activeQuote), reduzindo cirurgicamente o consumo de tokens.
  */
 export function resolveToolScope(
   userMessage: string | undefined,
   history: any[],
-  availableTools: ToolDefinition[]
+  availableTools: ToolDefinition[],
+  workingMemory?: any
 ): ToolDefinition[] {
   if (!userMessage) return availableTools
 
   const msg = normalizeText(userMessage)
-
   const words = msg.split(/\s+/)
 
   // 1. Identificar se é apenas Greeting/Confirmação/Encerramento (NÃO precisa de tools, mesmo com histórico)
@@ -142,24 +189,38 @@ export function resolveToolScope(
   const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
   const isAskingTimeDuration = isAskingDuration(msg)
 
-  const selectedTools = new Set<ToolDefinition>()
+  // 2. Extrair Working Memory Operacional (via parâmetro direto ou histórico de mensagens)
+  let wm = workingMemory
+  if (!wm && Array.isArray(history)) {
+    for (const m of history) {
+      if (m.metadata?.working_memory) {
+        wm = m.metadata.working_memory
+        break
+      }
+    }
+  }
 
-  // 2. Extrair Intenções Específicas
+  const hasActiveCart = Boolean(wm?.activeCart && Array.isArray(wm.activeCart) && wm.activeCart.length > 0)
+  const hasActiveQuote = Boolean(wm?.activeQuote?.id)
+  const hasCartOrQuote = hasActiveCart || hasActiveQuote
+
+  // 3. Extrair Intenções Específicas
   let hasTimeIntent = false
   let hasQuoteIntent = false
   let hasCatalogSearchIntent = false
   let hasProductPriceIntent = false
   let hasQuantityPriceIntent = false
+  let hasRemovalIntent = false
+  let hasModificationIntent = false
+  let hasInclusionIntent = false
 
   const timeKeywords = ['hora', 'horas', 'horario', 'dia', 'hoje', 'data', 'agora', 'atualmente', 'funcionamento']
   const quoteKeywords = ['orcamento', 'cotacao', 'pedido', 'fechar', 'finalizar', 'resumo']
 
   // Intenção de preço comercial:
-  // Expressões de prazo/duração (ex: "quanto tempo", "quanto demora", "quanto falta") não são preço de produto
   const productPriceKeywords = ['preco', 'valor', 'custa', 'custam', 'fica', 'sair', 'cair']
   const quantityPriceKeywords = ['unidades', 'caixas', 'fardos', 'pacotes']
 
-  // NOTA CIRÚRGICA: 'qual' e 'quais' removidos para não classificar dúvidas institucionais ou gerais como busca de catálogo
   const catalogSearchKeywords = [
     'tem', 'buscar', 'procura', 'catalogo', 'produto', 'marca',
     'opcao', 'opcoes', 'sabor', 'sabores', 'vende', 'vendem', 'temos', 'queria', 'quero', 'gostaria', 'trabalham'
@@ -173,21 +234,62 @@ export function resolveToolScope(
     if (quantityPriceKeywords.includes(w)) hasQuantityPriceIntent = true
 
     if (catalogSearchKeywords.includes(w)) {
-      // Se a mensagem contiver termos institucionais (ex: "Tem Pix?", "Tem entrega?", "Vocês têm nota fiscal?"),
-      // o verbo genérico "tem" NÃO deve acionar busca de catálogo isoladamente.
-      // Mas se houver palavras explícitas de produto/marca ou se não for institucional, ativa normalmente.
       if (!isInstitutional || (w !== 'tem' && w !== 'temos')) {
         hasCatalogSearchIntent = true
       }
     }
   }
 
-  // Unidade de medida aciona intenção de catálogo (ex: "1kg", "1 kg", "500g", "500 g", "1,5kg", "10 un")
+  // "total" indica intenção de orçamento se houver contexto comercial ou menção a orçamento
+  if (words.includes('total') && (hasCartOrQuote || hasQuoteIntent || hasProductPriceIntent || hasQuantityPriceIntent)) {
+    hasQuoteIntent = true
+  }
+
+  // Padrões de regex para orçamento
+  if (QUOTE_PATTERNS.some(p => p.test(msg))) {
+    hasQuoteIntent = true
+  }
+
+  // Padrões de remoção (ignora conversas como "tira uma duvida", "tira duvida")
+  const isQuestionHelp = /\b(?:duvida|foto|print)\b/i.test(msg)
+  if (!isQuestionHelp) {
+    if (REMOVAL_PATTERNS.some(p => p.test(msg))) {
+      hasRemovalIntent = true
+    } else if (hasCartOrQuote && /^(?:tira|retira|remove|exclui)(?:\s+(?:esse|essa|este|esta|ele|ela|isso))?$/i.test(msg)) {
+      hasRemovalIntent = true
+    }
+  }
+
+  // Padrões de alteração (apenas quando há quantidade ou alvo claro de orçamento/carrinho)
+  if (MODIFICATION_PATTERNS.some(p => p.test(msg))) {
+    hasModificationIntent = true
+  } else if (hasCartOrQuote && /^(?:muda|mude|altera|altere|troca|troque)\s+(?:pra|para|por)\s+\d+$/i.test(msg)) {
+    hasModificationIntent = true
+  }
+
+  // Padrões de inclusão
+  if (INCLUSION_PATTERNS.some(p => p.test(msg))) {
+    hasInclusionIntent = true
+  }
+
+  // Unidade de medida aciona intenção de catálogo
   if (UNIT_MEASURE_REGEX.test(userMessage)) {
     hasCatalogSearchIntent = true
   }
 
-  // 3. Mapeamento de Intenção para Capability
+  // Se a mensagem for institucional e NÃO tiver intenções comerciais explícitas, bloqueia vazamento de tools
+  if (isInstitutional && !hasProductPriceIntent && !hasQuantityPriceIntent && !hasRemovalIntent && !hasModificationIntent && !hasInclusionIntent && !hasQuoteIntent) {
+    // Apenas permite datetime se perguntou horário de funcionamento
+    if (hasTimeIntent) {
+      const dtTool = availableTools.find(t => t.name === 'get_current_datetime')
+      return dtTool ? [dtTool] : []
+    }
+    return []
+  }
+
+  const selectedTools = new Set<ToolDefinition>()
+
+  // 4. Mapeamento de Intenção para Capability
   for (const tool of availableTools) {
     const name = tool.name
     const category = tool.metadata?.category || 'general'
@@ -196,43 +298,62 @@ export function resolveToolScope(
       selectedTools.add(tool)
     }
     
-    if (category === 'quotes' && hasQuoteIntent) {
-      selectedTools.add(tool)
+    // Ferramentas de orçamento (gerar_orcamento e consultar_orcamento)
+    if (category === 'quotes') {
+      if (hasQuoteIntent) {
+        selectedTools.add(tool)
+      } else if (hasRemovalIntent && hasCartOrQuote) {
+        selectedTools.add(tool)
+      } else if (hasModificationIntent && hasActiveQuote) {
+        selectedTools.add(tool)
+      } else if (hasInclusionIntent && hasActiveQuote) {
+        selectedTools.add(tool)
+      }
     }
 
-    // Ferramenta Composta (Prioridade 1 para vendas)
+    // Ferramenta Composta (consultar_produto_comercial)
     if (name === 'consultar_produto_comercial') {
-      if (hasProductPriceIntent || hasQuantityPriceIntent) {
+      if (hasProductPriceIntent || hasQuantityPriceIntent || hasModificationIntent || hasInclusionIntent) {
         selectedTools.add(tool)
-      } else if (hasCatalogSearchIntent && history.length > 0) {
-        // Se há histórico (ex: respondendo a desambiguação), priorizamos a composta para já trazer o preço
+      } else if (hasRemovalIntent && hasCartOrQuote) {
+        selectedTools.add(tool)
+      } else if (hasCatalogSearchIntent && (history.length > 0 || !availableTools.some(t => t.name === 'buscar_produto'))) {
+        selectedTools.add(tool)
+      }
+    }
+
+    // Ferramentas de Preço Específico por ID
+    if (name === 'consultar_preco') {
+      if (hasProductPriceIntent || hasModificationIntent || hasInclusionIntent) {
+        selectedTools.add(tool)
+      }
+    }
+
+    if (name === 'calcular_preco_produto') {
+      if (hasProductPriceIntent || hasQuantityPriceIntent || hasModificationIntent || hasInclusionIntent) {
         selectedTools.add(tool)
       }
     }
 
     // Ferramenta de Busca Simples
     if (name === 'buscar_produto') {
-      if (hasCatalogSearchIntent && !hasProductPriceIntent && !hasQuantityPriceIntent && !hasQuoteIntent) {
+      if ((hasCatalogSearchIntent || hasInclusionIntent) && !hasProductPriceIntent && !hasQuantityPriceIntent && !hasQuoteIntent && !hasModificationIntent) {
         selectedTools.add(tool)
       }
     }
   }
 
-  // 4. Fallback Seguro Contextual
+  // 5. Fallback Seguro Contextual
   // Apenas aciona se houver histórico de conversa (continuação de atendimento) e NÃO for institucional, saudação nem prazo/duração
   if (selectedTools.size === 0 && !isOnlyGreeting && !isClosing && !isInstitutional && !isAskingTimeDuration && history.length > 0) {
     const fallbackTool = availableTools.find(t => t.name === 'consultar_produto_comercial')
     if (fallbackTool) selectedTools.add(fallbackTool)
   }
 
-  // 5. Otimização de Conflitos: Se a Composta for carregada, as auxiliares perdem necessidade no fluxo inicial
+  // 6. Otimização de Conflitos: Se a Composta for carregada, a busca simples perde necessidade
   const hasComercial = Array.from(selectedTools).some(t => t.name === 'consultar_produto_comercial')
   if (hasComercial) {
-    return Array.from(selectedTools).filter(t => 
-      t.name !== 'buscar_produto' && 
-      t.name !== 'consultar_preco' && 
-      t.name !== 'calcular_preco_produto'
-    )
+    return Array.from(selectedTools).filter(t => t.name !== 'buscar_produto')
   }
 
   return Array.from(selectedTools)

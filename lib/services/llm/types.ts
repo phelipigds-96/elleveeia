@@ -1,4 +1,4 @@
-import { InternalToolCall, InternalToolResult } from '../agent/tools'
+import type { InternalToolCall, InternalToolResult } from '../agent/tools'
 
 export type LLMProviderType = 'openai' | 'gemini'
 
