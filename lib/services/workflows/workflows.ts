@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { requireActiveCompany } from '@/lib/services/platform/tenant-access'
 
 export interface Workflow {
   id: string
@@ -20,17 +21,69 @@ export interface WorkflowStage {
   is_active: boolean
 }
 
-async function getCompanyId(supabase: any) {
-  const { data: userData } = await supabase.auth.getUser()
-  if (!userData?.user) throw new Error("Unauthorized")
-  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user.id).single()
-  if (!profile?.company_id) throw new Error("Company not found")
-  return profile.company_id
+export interface WorkflowServiceOptions {
+  supabaseClient?: any
+  adminClient?: any
 }
 
-export async function getCompanyWorkflows() {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
+export interface AuthenticatedUserContext {
+  userId: string
+  companyId: string
+  role: string
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isValidUuid(id: string): boolean {
+  return typeof id === 'string' && UUID_REGEX.test(id.trim())
+}
+
+/**
+ * Resolve a identidade, empresa e papel do usuário autenticado no servidor.
+ */
+async function getAuthContext(supabase: any): Promise<AuthenticatedUserContext> {
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData?.user) {
+    throw new Error('Unauthorized')
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('company_id, role')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (profileError || !profile?.company_id) {
+    throw new Error('Company not found')
+  }
+
+  return {
+    userId: userData.user.id,
+    companyId: profile.company_id,
+    role: profile.role || 'attendant'
+  }
+}
+
+function requireAdminRole(role: string): void {
+  if (!['admin', 'owner'].includes(role)) {
+    throw new Error('Não autorizado: apenas administradores podem gerenciar workflows e etapas.')
+  }
+}
+
+function requireMovePermission(role: string): void {
+  if (!['admin', 'owner', 'attendant'].includes(role)) {
+    throw new Error('Não autorizado: permissão insuficiente para movimentar conversas.')
+  }
+}
+
+function getSupabaseClient(options?: WorkflowServiceOptions): any {
+  if (options?.supabaseClient) return options.supabaseClient
+  return createClient()
+}
+
+export async function getCompanyWorkflows(options?: WorkflowServiceOptions) {
+  const supabase = getSupabaseClient(options)
+  const { companyId } = await getAuthContext(supabase)
   
   const { data, error } = await supabase
     .from('workflows')
@@ -41,7 +94,7 @@ export async function getCompanyWorkflows() {
   if (error) throw new Error(error.message)
 
   // Order stages by position
-  const workflows = data?.map(wf => {
+  const workflows = data?.map((wf: any) => {
     const stages = (wf.workflow_stages || []).sort((a: any, b: any) => a.position - b.position)
     return { ...wf, workflow_stages: stages }
   })
@@ -49,31 +102,355 @@ export async function getCompanyWorkflows() {
   return workflows || []
 }
 
-export async function createWorkflow(name: string, description?: string) {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
+export const DEFAULT_WORKFLOW_STAGES = [
+  { name: 'Novo Contato', stage_type: 'initial' as const, position: 0 },
+  { name: 'Em Atendimento', stage_type: 'in_progress' as const, position: 1 },
+  { name: 'Finalizado', stage_type: 'final' as const, position: 2 }
+] as const
 
-  const { count } = await supabase.from('workflows').select('*', { count: 'exact', head: true }).eq('company_id', companyId)
-  const isDefault = count === 0
+/**
+ * Recupera de forma segura o workflow padrão persistido após colisão 23505.
+ * Lança erro explícito se a consulta falhar ou se o registro não for encontrado,
+ * impedindo retorno de { workflow: undefined, created: false }.
+ */
+async function fetchPersistedDefaultWorkflow(supabase: any, companyId: string) {
+  const { data: persistedDefault, error: fetchError } = await supabase
+    .from('workflows')
+    .select('*, workflow_stages(*)')
+    .eq('company_id', companyId)
+    .eq('is_default', true)
+    .maybeSingle()
+
+  if (fetchError || !persistedDefault) {
+    throw new Error(`Falha ao recuperar o workflow padrão concorrente: ${fetchError?.message || 'registro não encontrado'}`)
+  }
+
+  return persistedDefault
+}
+
+/**
+ * Garante que todas as etapas padrão essenciais existam no workflow.
+ * Se alguma estiver ausente (por exemplo, após falha parcial anterior), cria apenas as ausentes
+ * preservando nomes, posições e stage_types padrão.
+ * Não duplica etapas existentes e não altera ou remove etapas customizadas criadas pelo cliente.
+ * 
+ * LIMITAÇÃO DE CONCORRÊNCIA:
+ * Como a tabela `workflow_stages` não possui constraint física UNIQUE em (workflow_id, name),
+ * chamadas simultâneas concorrentes sem transação RPC/lock no banco de dados podem gerar etapas duplicadas.
+ * A solução em nível de serviço é idempotente para execuções sequenciais, mas a garantia estrita contra
+ * corridas concorrentes depende de RPC atômica ou constraint UNIQUE no schema do PostgreSQL.
+ */
+async function ensureDefaultStages(
+  workflowId: string,
+  companyId: string,
+  currentStages: any[] = [],
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+
+  let stagesList = currentStages
+  if (!stagesList || stagesList.length === 0) {
+    const { data: dbStages } = await supabase
+      .from('workflow_stages')
+      .select('name')
+      .eq('workflow_id', workflowId)
+      .eq('company_id', companyId)
+    if (dbStages && dbStages.length > 0) {
+      stagesList = dbStages
+    }
+  }
+
+  const existingStageNames = new Set(
+    (stagesList || [])
+      .map((s: any) => s.name?.trim().toLowerCase())
+      .filter(Boolean)
+  )
+
+  for (const defStage of DEFAULT_WORKFLOW_STAGES) {
+    if (!existingStageNames.has(defStage.name.toLowerCase())) {
+      const { error: insertStageError } = await supabase
+        .from('workflow_stages')
+        .insert({
+          company_id: companyId,
+          workflow_id: workflowId,
+          name: defStage.name,
+          position: defStage.position,
+          stage_type: defStage.stage_type,
+          is_active: true
+        })
+
+      if (insertStageError) {
+        throw new Error(`Falha ao criar etapa padrão "${defStage.name}": ${insertStageError.message}`)
+      }
+    }
+  }
+}
+
+/**
+ * Cria ou recupera de forma estritamente idempotente o workflow padrão da empresa.
+ * 
+ * Regras de governança (Etapa 8.4.3P.4):
+ * 1. Resolução segura de identidade e tenant no servidor.
+ * 2. Exigência estrita de papel administrativo (admin ou owner).
+ * 3. Validação de ciclo de vida (requireActiveCompany).
+ * 4. Idempotência: se já houver workflow padrão ativo, recupera etapas faltantes e retorna sem duplicar.
+ * 5. Se houver workflow padrão inativo, não cria outro silenciosamente; exige reativação operacional.
+ * 6. Se já existir workflow com nome "Atendimento Principal", promove-o a padrão sem criar duplicatas
+ *    e trata colisões 23505 durante a promoção.
+ * 7. Concorrência: captura violações da constraint uq_workflows_company_default (23505) e retorna
+ *    o registro efetivamente persistido pela transação vencedora, validando erros da busca.
+ * 8. Recuperação idempotente de etapas padrão ausentes se houver falha parcial anterior.
+ */
+export async function getOrCreateDefaultWorkflow(options?: WorkflowServiceOptions) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  requireAdminRole(role)
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  // 1. Verificar se já existe um workflow padrão para a empresa
+  const { data: existingDefault, error: defaultError } = await supabase
+    .from('workflows')
+    .select('*, workflow_stages(*)')
+    .eq('company_id', companyId)
+    .eq('is_default', true)
+    .maybeSingle()
+
+  if (defaultError) throw new Error(defaultError.message)
+
+  if (existingDefault) {
+    if (!existingDefault.is_active) {
+      throw new Error('Já existe um workflow padrão configurado para esta empresa que se encontra inativo. Reative o workflow existente antes de criar um novo.')
+    }
+
+    // Recupera etapas padrão faltantes caso tenha ocorrido falha parcial prévia
+    await ensureDefaultStages(existingDefault.id, companyId, existingDefault.workflow_stages, options)
+
+    const { data: refreshedWf, error: refreshError } = await supabase
+      .from('workflows')
+      .select('*, workflow_stages(*)')
+      .eq('id', existingDefault.id)
+      .eq('company_id', companyId)
+      .single()
+
+    if (refreshError) {
+      throw new Error(`Falha ao recarregar workflow padrão: ${refreshError.message}`)
+    }
+
+    return { workflow: refreshedWf || existingDefault, created: false }
+  }
+
+  // 2. Se não há padrão, verificar se já existe um workflow chamado 'Atendimento Principal'
+  const { data: existingNamed, error: namedError } = await supabase
+    .from('workflows')
+    .select('*, workflow_stages(*)')
+    .eq('company_id', companyId)
+    .eq('name', 'Atendimento Principal')
+    .maybeSingle()
+
+  if (namedError) throw new Error(namedError.message)
+
+  if (existingNamed) {
+    if (!existingNamed.is_active) {
+      throw new Error('Já existe um workflow com o nome "Atendimento Principal" inativo. Reative-o antes de configurar o padrão.')
+    }
+    // Promover a padrão sem duplicar
+    const { data: updatedWf, error: updateError } = await supabase
+      .from('workflows')
+      .update({ is_default: true })
+      .eq('id', existingNamed.id)
+      .eq('company_id', companyId)
+      .select('*, workflow_stages(*)')
+      .single()
+
+    if (updateError) {
+      // Trata colisão concorrente 23505 durante a promoção
+      if (updateError.code === '23505' || updateError.message?.includes('uq_workflows_company_default')) {
+        const persistedDefault = await fetchPersistedDefaultWorkflow(supabase, companyId)
+        if (!persistedDefault.is_active) {
+          throw new Error('Já existe um workflow padrão configurado para esta empresa que se encontra inativo. Reative o workflow existente antes de criar um novo.')
+        }
+        await ensureDefaultStages(persistedDefault.id, companyId, persistedDefault.workflow_stages, options)
+        const refreshed = await fetchPersistedDefaultWorkflow(supabase, companyId)
+        return { workflow: refreshed, created: false }
+      }
+      throw new Error(updateError.message)
+    }
+
+    // Garante as etapas essenciais no workflow promovido
+    await ensureDefaultStages(existingNamed.id, companyId, existingNamed.workflow_stages, options)
+
+    const { data: refreshedNamed, error: refreshNamedError } = await supabase
+      .from('workflows')
+      .select('*, workflow_stages(*)')
+      .eq('id', existingNamed.id)
+      .eq('company_id', companyId)
+      .single()
+
+    if (refreshNamedError) {
+      throw new Error(`Falha ao recarregar workflow promovido: ${refreshNamedError.message}`)
+    }
+
+    return { workflow: refreshedNamed || updatedWf || existingNamed, created: false }
+  }
+
+  // 3. Criação resiliente a concorrência
+  let newWorkflow: any
+  try {
+    const { data: createdWf, error: insertError } = await supabase
+      .from('workflows')
+      .insert({
+        company_id: companyId,
+        name: 'Atendimento Principal',
+        description: 'Funil padrão de conversas',
+        is_default: true,
+        is_active: true
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      // Captura corrida concorrente interceptada pelo índice uq_workflows_company_default
+      if (insertError.code === '23505' || insertError.message?.includes('uq_workflows_company_default')) {
+        const persistedDefault = await fetchPersistedDefaultWorkflow(supabase, companyId)
+        if (!persistedDefault.is_active) {
+          throw new Error('Já existe um workflow padrão configurado para esta empresa que se encontra inativo. Reative o workflow existente antes de criar um novo.')
+        }
+        await ensureDefaultStages(persistedDefault.id, companyId, persistedDefault.workflow_stages, options)
+        const refreshed = await fetchPersistedDefaultWorkflow(supabase, companyId)
+        return { workflow: refreshed, created: false }
+      }
+      throw new Error(insertError.message)
+    }
+    newWorkflow = createdWf
+  } catch (err: any) {
+    if (err.code === '23505' || err.message?.includes('uq_workflows_company_default')) {
+      const persistedDefault = await fetchPersistedDefaultWorkflow(supabase, companyId)
+      if (!persistedDefault.is_active) {
+        throw new Error('Já existe um workflow padrão configurado para esta empresa que se encontra inativo. Reative o workflow existente antes de criar um novo.')
+      }
+      await ensureDefaultStages(persistedDefault.id, companyId, persistedDefault.workflow_stages, options)
+      const refreshed = await fetchPersistedDefaultWorkflow(supabase, companyId)
+      return { workflow: refreshed, created: false }
+    }
+    throw err
+  }
+
+  // 4. Criação das etapas iniciais caso tenha sido criado nesta chamada
+  await ensureDefaultStages(newWorkflow.id, companyId, [], options)
+
+  const { data: fullWorkflow, error: fullError } = await supabase
+    .from('workflows')
+    .select('*, workflow_stages(*)')
+    .eq('id', newWorkflow.id)
+    .eq('company_id', companyId)
+    .single()
+
+  if (fullError) {
+    throw new Error(`Falha ao buscar workflow criado: ${fullError.message}`)
+  }
+
+  return { workflow: fullWorkflow || newWorkflow, created: true }
+}
+
+export async function createWorkflow(name: string, description?: string, options?: WorkflowServiceOptions) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  // RBAC: apenas admin ou owner podem criar workflow
+  requireAdminRole(role)
+
+  // Ciclo de vida: bloqueia provisioning, suspended e cancelled
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error('Nome do workflow é obrigatório.')
+  }
+
+  // Verifica se já existe um workflow padrão na empresa
+  const { count: defaultCount } = await supabase
+    .from('workflows')
+    .select('*', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .eq('is_default', true)
+
+  const isDefault = defaultCount === 0
 
   const { data, error } = await supabase
     .from('workflows')
-    .insert({ company_id: companyId, name, description, is_default: isDefault })
+    .insert({
+      company_id: companyId,
+      name: name.trim(),
+      description: description ? description.trim() : null,
+      is_default: isDefault
+    })
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error.code === '23505' && isDefault) {
+      // Em colisão de concorrência no default, recupera o workflow padrão existente
+      const { data: existingDefault, error: fetchError } = await supabase
+        .from('workflows')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('is_default', true)
+        .maybeSingle()
+
+      if (fetchError || !existingDefault) {
+        throw new Error(`Falha ao recuperar o workflow padrão concorrente: ${fetchError?.message || 'registro não encontrado'}`)
+      }
+      return existingDefault
+    }
+    throw new Error(error.message)
+  }
+
   return data
 }
 
-export async function createWorkflowStage(workflowId: string, name: string, stageType: string = 'in_progress') {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
+export async function createWorkflowStage(
+  workflowId: string, 
+  name: string, 
+  stageType: string = 'in_progress',
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  // RBAC: apenas admin ou owner podem criar etapas
+  requireAdminRole(role)
+
+  // Ciclo de vida: bloqueia provisioning, suspended e cancelled
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  if (!isValidUuid(workflowId)) {
+    throw new Error('Workflow não encontrado.')
+  }
+
+  // Validação de propriedade do workflow pela empresa autenticada
+  const { data: workflow, error: wfError } = await supabase
+    .from('workflows')
+    .select('id')
+    .eq('id', workflowId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (wfError || !workflow) {
+    throw new Error('Workflow não encontrado.')
+  }
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error('Nome da etapa é obrigatório.')
+  }
+
+  const validStageTypes = ['initial', 'in_progress', 'final']
+  const finalStageType = validStageTypes.includes(stageType) ? stageType : 'in_progress'
 
   const { data: stages } = await supabase
     .from('workflow_stages')
     .select('position')
     .eq('workflow_id', workflowId)
+    .eq('company_id', companyId)
     .order('position', { ascending: false })
     .limit(1)
 
@@ -84,9 +461,9 @@ export async function createWorkflowStage(workflowId: string, name: string, stag
     .insert({
       company_id: companyId,
       workflow_id: workflowId,
-      name,
+      name: name.trim(),
       position: nextPos,
-      stage_type: stageType
+      stage_type: finalStageType
     })
     .select()
     .single()
@@ -95,28 +472,113 @@ export async function createWorkflowStage(workflowId: string, name: string, stag
   return data
 }
 
-export async function updateWorkflowStage(stageId: string, updates: any) {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
-  
-  // Clean payload
-  delete updates.id
-  delete updates.company_id
-  delete updates.workflow_id
-  
+export async function updateWorkflowStage(
+  stageId: string, 
+  updates: any,
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  // RBAC: apenas admin ou owner podem atualizar etapas
+  requireAdminRole(role)
+
+  // Ciclo de vida: bloqueia provisioning, suspended e cancelled
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  if (!isValidUuid(stageId)) {
+    throw new Error('Etapa não encontrada.')
+  }
+
+  // Validação de propriedade da etapa pela empresa autenticada
+  const { data: existingStage, error: stageError } = await supabase
+    .from('workflow_stages')
+    .select('id, workflow_id')
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (stageError || !existingStage) {
+    throw new Error('Etapa não encontrada.')
+  }
+
+  // Whitelist estrita de campos atualizáveis
+  const sanitizedUpdates: Record<string, any> = {}
+
+  if (updates && typeof updates === 'object') {
+    if (updates.name !== undefined) {
+      if (typeof updates.name !== 'string' || updates.name.trim().length === 0) {
+        throw new Error('Nome da etapa não pode ser vazio.')
+      }
+      sanitizedUpdates.name = updates.name.trim()
+    }
+
+    if (updates.description !== undefined) {
+      sanitizedUpdates.description = updates.description === null ? null : String(updates.description).trim()
+    }
+
+    if (updates.position !== undefined) {
+      const pos = Number(updates.position)
+      if (isNaN(pos) || pos < 0 || !Number.isInteger(pos)) {
+        throw new Error('Posição da etapa deve ser um número inteiro não negativo.')
+      }
+      sanitizedUpdates.position = pos
+    }
+
+    if (updates.stage_type !== undefined) {
+      if (!['initial', 'in_progress', 'final'].includes(updates.stage_type)) {
+        throw new Error('Tipo de etapa inválido.')
+      }
+      sanitizedUpdates.stage_type = updates.stage_type
+    }
+
+    if (updates.is_active !== undefined) {
+      sanitizedUpdates.is_active = Boolean(updates.is_active)
+    }
+  }
+
+  if (Object.keys(sanitizedUpdates).length === 0) {
+    return
+  }
+
   const { error } = await supabase
     .from('workflow_stages')
-    .update(updates)
+    .update(sanitizedUpdates)
     .eq('id', stageId)
     .eq('company_id', companyId)
 
   if (error) throw new Error(error.message)
 }
 
-export async function deleteWorkflowStage(stageId: string) {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
-  
+export async function deleteWorkflowStage(
+  stageId: string,
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  // RBAC: apenas admin ou owner podem excluir etapas
+  requireAdminRole(role)
+
+  // Ciclo de vida: bloqueia provisioning, suspended e cancelled
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  if (!isValidUuid(stageId)) {
+    throw new Error('Etapa não encontrada.')
+  }
+
+  // Validação de propriedade da etapa pela empresa autenticada
+  const { data: existingStage, error: stageError } = await supabase
+    .from('workflow_stages')
+    .select('id')
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (stageError || !existingStage) {
+    throw new Error('Etapa não encontrada.')
+  }
+
   const { error } = await supabase
     .from('workflow_stages')
     .delete()
@@ -126,15 +588,82 @@ export async function deleteWorkflowStage(stageId: string) {
   if (error) throw new Error(error.message)
 }
 
-export async function moveConversationStage(conversationId: string, stageId: string) {
-  const supabase = createClient()
-  const companyId = await getCompanyId(supabase)
-  
-  const { error } = await supabase
+/**
+ * Movimenta uma conversa para uma etapa válida no Kanban.
+ * 
+ * Blindagens obrigatórias:
+ * 1. Autenticação e perfil resolvidos no servidor.
+ * 2. Validação de papel (admin, owner, attendant).
+ * 3. Validação de ciclo de vida (requireActiveCompany).
+ * 4. Consulta simultânea de conversa por id + company_id.
+ * 5. Consulta simultânea de etapa por id + company_id.
+ * 6. Validação de pertencimento da etapa ao workflow da conversa (se já vinculado).
+ * 7. Atualização atômica coerente de workflow_id e workflow_stage_id.
+ */
+export async function moveConversationStage(
+  conversationId: string, 
+  stageId: string,
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+  const { companyId, role } = await getAuthContext(supabase)
+
+  // RBAC: atendentes, admins e owners têm permissão operacional no Kanban
+  requireMovePermission(role)
+
+  // Ciclo de vida: bloqueia provisioning, suspended e cancelled
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  if (!isValidUuid(conversationId)) {
+    throw new Error('Conversa não encontrada.')
+  }
+
+  if (!isValidUuid(stageId)) {
+    throw new Error('Etapa não encontrada.')
+  }
+
+  // 1. Consultar a conversa usando id e company_id
+  const { data: conversation, error: convError } = await supabase
     .from('conversations')
-    .update({ workflow_stage_id: stageId })
+    .select('id, company_id, workflow_id, workflow_stage_id')
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (convError || !conversation) {
+    throw new Error('Conversa não encontrada.')
+  }
+
+  // 2. Consultar a etapa informada usando id e company_id
+  const { data: stage, error: stageError } = await supabase
+    .from('workflow_stages')
+    .select('id, company_id, workflow_id, is_active')
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (stageError || !stage) {
+    throw new Error('Etapa não encontrada.')
+  }
+
+  if (stage.is_active === false) {
+    throw new Error('Não é possível mover a conversa para uma etapa inativa.')
+  }
+
+  // 3. Validar se a etapa pertence ao workflow correto
+  if (conversation.workflow_id && stage.workflow_id !== conversation.workflow_id) {
+    throw new Error('Etapa de outro workflow é rejeitada.')
+  }
+
+  // 4. Executar a atualização mantendo workflow_id e workflow_stage_id coerentes
+  const { error: updateError } = await supabase
+    .from('conversations')
+    .update({
+      workflow_id: stage.workflow_id,
+      workflow_stage_id: stage.id
+    })
     .eq('id', conversationId)
     .eq('company_id', companyId)
 
-  if (error) throw new Error(error.message)
+  if (updateError) throw new Error(updateError.message)
 }

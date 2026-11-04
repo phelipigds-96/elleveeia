@@ -1,7 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/service'
+import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
-import type { LLMProviderType, LLMRequestMessage } from '../llm/types'
+import type { LLMProviderType, LLMRequestMessage, LLMProvider } from '../llm/types'
 import { ToolRegistry, ToolExecutor } from './tools'
 import { getCurrentDatetimeTool } from './tools/get-current-datetime'
 import { buscarProdutoTool } from './tools/buscar-produto'
@@ -21,6 +22,8 @@ interface AgentRunParams {
   conversationId: string
   userMessage?: string
   skipCustomerMessageInsert?: boolean
+  adminClient?: any
+  llmProvider?: LLMProvider
 }
 
 /**
@@ -75,9 +78,11 @@ export async function runAgentEngine({
   agentId, 
   conversationId, 
   userMessage,
-  skipCustomerMessageInsert = false 
+  skipCustomerMessageInsert = false,
+  adminClient,
+  llmProvider
 }: AgentRunParams) {
-  const supabase = createAdminClient()
+  const supabase = adminClient || createAdminClient()
   const startTime = Date.now()
 
   let runStatus = 'processing'
@@ -93,6 +98,55 @@ export async function runAgentEngine({
   let fallbackTriggered = false
 
   try {
+    // 1. Validação estrita de associação e integridade da conversa no servidor:
+    // Garante que a conversa existe e que seu company_id corresponde exatamente ao tenant informado
+    const convQueryBuilder = (supabase as any).from('conversations').select('id, company_id').eq('id', conversationId)
+    const { data: convRecord, error: convLookupError } = await (
+      typeof convQueryBuilder?.eq === 'function'
+        ? (supabase as any).from('conversations').select('id, company_id').eq('id', conversationId).eq('company_id', companyId).maybeSingle()
+        : convQueryBuilder.maybeSingle()
+    )
+
+    if (convLookupError) {
+      throw new TenantAccessError(
+        'Falha de infraestrutura ao validar a conversa.',
+        'TENANT_STATUS_UNAVAILABLE',
+        503,
+        companyId
+      )
+    }
+
+    if (!convRecord) {
+      // Verifica se a conversa pertence a outro tenant para diagnosticar mismatch de tenant
+      const { data: crossTenantRecord } = await supabase
+        .from('conversations')
+        .select('id, company_id')
+        .eq('id', conversationId)
+        .maybeSingle()
+
+      if (crossTenantRecord && crossTenantRecord.company_id !== companyId) {
+        throw new TenantAccessError(
+          `Violação de segurança multi-tenant: a conversa '${conversationId}' não pertence à empresa informada.`,
+          'INVALID_COMPANY_ID',
+          400,
+          companyId
+        )
+      }
+
+      throw new TenantAccessError(
+        `Conversa '${conversationId}' não encontrada.`,
+        'TENANT_NOT_FOUND',
+        404,
+        companyId
+      )
+    }
+
+    // 2. Controle de acesso operacional do tenant (Fail-closed incondicional):
+    // Bloqueia empresas em implantação (provisioning), suspensas, canceladas ou com status indisponível.
+    // Executado rigorosamente antes de inserir mensagens, chamar LLM ou executar ferramentas comerciais.
+    await requireActiveCompany(companyId, { adminClient: supabase })
+
+    // 3. Inserção controlada da mensagem do cliente (apenas após o tenant ser validado como ativo)
     if (userMessage && !skipCustomerMessageInsert) {
       const { error: msgErr } = await supabase.from('messages').insert({
         company_id: companyId,
@@ -104,7 +158,7 @@ export async function runAgentEngine({
       if (msgErr) throw new Error(`Falha ao inserir mensagem do usuário: ${msgErr.message}`)
     }
 
-    // O Context Builder devolve o histórico formatado e a workingMemory da última interação
+    // 4. Carregamento do contexto operacional do agente (histórico, Working Memory, etc.)
     const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
       companyId,
       agentId,
@@ -113,7 +167,7 @@ export async function runAgentEngine({
 
     modelUsed = agent.model
     providerUsed = (agent.provider || 'openai') as LLMProviderType
-    const provider = getLLMProvider(providerUsed)
+    const provider: LLMProvider = llmProvider || getLLMProvider(providerUsed)
 
     // Configurar Registry e Executor com as ferramentas comerciais oficiais
     const registry = new ToolRegistry()
@@ -198,8 +252,8 @@ export async function runAgentEngine({
         cache_write_tokens: response.usage.cache_write_tokens,
         reasoning_tokens: response.usage.reasoning_tokens,
         tool_use_tokens: response.usage.tool_use_tokens,
-        tool_names: response.tool_calls ? response.tool_calls.map(tc => tc.toolName) : [],
-        tool_calls: response.tool_calls ? response.tool_calls.map(tc => ({
+        tool_names: response.tool_calls ? response.tool_calls.map((tc: any) => tc.toolName) : [],
+        tool_calls: response.tool_calls ? response.tool_calls.map((tc: any) => ({
           name: tc.toolName,
           arguments: tc.arguments
         })) : []
@@ -280,11 +334,17 @@ export async function runAgentEngine({
 
     if (insertErr) throw new Error(`Falha ao persistir resposta do agente: ${insertErr.message}`)
 
-    await supabase.from('conversations').update({
+    const { error: convUpdateErr } = await supabase.from('conversations').update({
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       agent_id: agentId
-    }).eq('id', conversationId)
+    })
+      .eq('id', conversationId)
+      .eq('company_id', companyId)
+
+    if (convUpdateErr) {
+      throw new Error(`Falha ao atualizar conversa após resposta do agente: ${convUpdateErr.message}`)
+    }
 
     runStatus = 'success'
 
@@ -361,6 +421,21 @@ export async function runAgentEngine({
   } catch (error: any) {
     runStatus = 'error'
     runErrorMessage = error.message
+
+    // Tratamento controlado e seguro de TenantAccessError:
+    // Não executa fallback ao LLM, não executa ferramentas comerciais,
+    // não expõe detalhes internos/financeiros (suspensionReason) e preserva os códigos tipados
+    if (error instanceof TenantAccessError) {
+      console.warn(`[Agent Engine Blocked] Acesso negado para empresa '${companyId}': ${error.code} - ${error.message}`)
+
+      return {
+        success: false,
+        code: error.code,
+        statusCode: error.statusCode,
+        error: error.message,
+        details: error.message
+      }
+    }
 
     const errMetadata: any = {
       tools_available: scopedTools.map(t => t.name)

@@ -1,13 +1,22 @@
 import { createAdminClient } from '@/lib/supabase/service'
-import { WebhookPayload } from '@/lib/validations/webhook'
+import type { WebhookPayload } from '@/lib/validations/webhook'
 import { runAgentEngine } from '@/lib/services/agent/engine'
-import { sendOutboundMessage } from '@/lib/services/n8n-service'
+import { sendOutboundMessage } from '@/lib/services/n8n-internal'
+import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 export type ProcessWebhookResult = 
   | { success: true; duplicate: true; event_id: string; conversation_id?: undefined; message_id?: undefined }
   | { success: true; duplicate: false; event_id: string; conversation_id: string; message_id: string }
 
-export async function processWebhookEvent(companyId: string, payload: WebhookPayload): Promise<ProcessWebhookResult> {
-  const supabase = createAdminClient()
+export async function processWebhookEvent(
+  companyId: string, 
+  payload: WebhookPayload,
+  options?: { adminClient?: any }
+): Promise<ProcessWebhookResult> {
+  const supabase = options?.adminClient || createAdminClient()
+
+  // 0. Validação de ciclo de vida do tenant (Defesa em Profundidade)
+  // Garante que mesmo chamadores internos/diretos não persistam registros para empresas bloqueadas
+  await requireActiveCompany(companyId, { adminClient: supabase })
 
   // 1. Controle de Idempotência
   // Registra o evento. Se já existir o par company_id + event_id (Violate Unique Constraint), retornamos duplicate
@@ -35,8 +44,16 @@ export async function processWebhookEvent(companyId: string, payload: WebhookPay
     
     if (existingCustomer) {
       customerId = existingCustomer.id
-      // Atualiza o nome do cliente se necessário
-      await supabase.from('customers').update({ name: payload.customer.name }).eq('id', customerId)
+      // Atualiza o nome do cliente se necessário com escopo estrito de tenant
+      const { error: custErr } = await supabase
+        .from('customers')
+        .update({ name: payload.customer.name })
+        .eq('id', customerId)
+        .eq('company_id', companyId)
+
+      if (custErr) {
+        console.error('[processWebhookEvent] Erro ao atualizar nome do cliente:', custErr)
+      }
     } else {
       const { data: newCustomer, error: cErr } = await supabase.from('customers').insert({
         company_id: companyId,
@@ -52,19 +69,18 @@ export async function processWebhookEvent(companyId: string, payload: WebhookPay
     // 3. Conversation Upsert (Localiza por External ID ou busca conversa ativa para o cliente)
     let conversationId: string
     let convStatus = 'open'
-    let currentUnread = 0
     
     let convQuery = supabase.from('conversations')
-      .select('id, status, unread_count')
+      .select('id, status')
       .eq('company_id', companyId)
       
     if (payload.conversation?.external_id) {
       convQuery = convQuery.eq('external_id', payload.conversation.external_id)
     } else {
-      // Se a integração nao manda ID de conversa, procura uma conversa que não esteja fechada do mesmo cliente no mesmo canal
+      // Se a integração não manda ID de conversa, procura conversa existente do cliente no canal (ordenando pela mais recente)
       convQuery = convQuery.eq('customer_id', customerId)
         .eq('channel', payload.channel)
-        .neq('status', 'closed')
+        .order('last_message_at', { ascending: false })
     }
 
     const { data: existingConv } = await convQuery.maybeSingle()
@@ -72,7 +88,6 @@ export async function processWebhookEvent(companyId: string, payload: WebhookPay
     if (existingConv) {
       conversationId = existingConv.id
       convStatus = existingConv.status
-      currentUnread = existingConv.unread_count
       
       // Regra de reabertura automática de conversa
       if (convStatus === 'closed' && payload.message.sender_type === 'customer') {
@@ -91,40 +106,73 @@ export async function processWebhookEvent(companyId: string, payload: WebhookPay
       conversationId = newConv.id
     }
 
-    // 4. Inserção da Mensagem
+    // 4. Inserção Idempotente da Mensagem + Atualização Atômica de unread_count e last_message_at
+    // O RPC insert_message_idempotent garante:
+    //   - Deduplicação por (conversation_id, external_id) via ON CONFLICT DO NOTHING
+    //   - Incremento atômico de unread_count (sem race condition de read-increment-write)
+    //   - Monotonicidade e proteção temporal de last_message_at via GREATEST(last_message_at, LEAST(created_at, NOW()))
+    //   - Validação de sender_type ('customer', 'agent', 'human', 'system')
+    // Apenas mensagens realmente inseridas atualizam os contadores da conversa.
     const messageCreatedAt = payload.message.created_at || new Date().toISOString()
-    const { data: msg, error: msgErr } = await supabase.from('messages').insert({
-      company_id: companyId,
-      conversation_id: conversationId,
-      sender_type: payload.message.sender_type,
-      content: payload.message.content,
-      message_type: payload.message.message_type || 'text',
-      external_id: payload.message.external_id || null,
-      metadata: payload.metadata || null,
-      created_at: messageCreatedAt
-    }).select().single()
-    
-    if (msgErr) throw new Error('Falha ao inserir mensagem: ' + msgErr.message)
-
-    // 5. Atualização de estado da Conversa
-    let newUnread = currentUnread
-    if (payload.message.sender_type === 'customer') {
-      newUnread += 1
+    const parsedTime = Date.parse(messageCreatedAt)
+    if (isNaN(parsedTime)) {
+      throw new Error('Data da mensagem inválida: formato não reconhecido para created_at')
     }
-    
-    await supabase.from('conversations').update({
+
+    const externalId = payload.message.external_id || null
+
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc('insert_message_idempotent', {
+      p_company_id:      companyId,
+      p_conversation_id: conversationId,
+      p_external_id:     externalId,
+      p_sender_type:     payload.message.sender_type,
+      p_content:         payload.message.content,
+      p_created_at:      messageCreatedAt,
+      p_metadata:        payload.metadata || null,
+      p_message_type:    payload.message.message_type || 'text'
+    })
+
+    if (rpcErr) {
+      throw new Error('Falha ao inserir mensagem (idempotente): ' + rpcErr.message)
+    }
+
+    // rpcResult é um array com um único objeto { message_id, was_inserted }
+    const rpcRow = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+    if (!rpcRow?.message_id) {
+      throw new Error('Falha ao inserir mensagem: RPC não retornou message_id')
+    }
+
+    const messageId = rpcRow.message_id
+    // wasInserted: true = nova mensagem; false = duplicata (event_id diferente, mesmo external_id)
+    // O RPC já tratou unread_count e last_message_at de forma condicional.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const wasInserted: boolean = rpcRow.was_inserted
+
+    // 5. Atualização de estado da Conversa (status e closed_at)
+    // unread_count e last_message_at já foram atualizados atomicamente pelo RPC.
+    // Aqui atualizamos apenas campos de estado (status, closed_at) que o RPC não gerencia.
+    const { error: convUpdateErr } = await supabase.from('conversations').update({
       status: convStatus,
-      unread_count: newUnread,
-      last_message_at: messageCreatedAt,
       closed_at: convStatus === 'open' ? null : undefined, // anula se reabriu
       updated_at: new Date().toISOString()
-    }).eq('id', conversationId)
+    })
+      .eq('id', conversationId)
+      .eq('company_id', companyId)
+
+    if (convUpdateErr) {
+      throw new Error('Falha ao atualizar conversa: ' + convUpdateErr.message)
+    }
+
+    // Variável para compatibilidade com o bloco de retorno abaixo
+    const msg = { id: messageId }
 
     // 6. Finaliza a transação lógica marcando o evento como processado
     await supabase.from('webhook_events').update({
       status: 'processed',
       processed_at: new Date().toISOString()
-    }).eq('id', eventRecord.id)
+    })
+      .eq('id', eventRecord.id)
+      .eq('company_id', companyId)
 
     return {
       success: true,
@@ -139,7 +187,9 @@ export async function processWebhookEvent(companyId: string, payload: WebhookPay
     await supabase.from('webhook_events').update({
       status: 'error',
       error_message: err.message
-    }).eq('id', eventRecord.id)
+    })
+      .eq('id', eventRecord.id)
+      .eq('company_id', companyId)
     
     throw err
   }
@@ -152,6 +202,8 @@ export interface AutonomousCycleParams {
   messageId: string
   eventId: string
   payload: WebhookPayload
+  adminClient?: any
+  llmProvider?: any
 }
 
 export interface AutonomousCycleResult {
@@ -218,13 +270,32 @@ export async function resolveEligibleAgent(companyId: string, conversationAgentI
  * Executa o ciclo autonomo completo:
  * Validacao de condicoes -> Resolucao de agente -> Agent Engine -> Trava de Handoff -> Outbox -> n8n.
  */
-export async function handleAutonomousCycle(params: AutonomousCycleParams): Promise<AutonomousCycleResult> {
+export async function handleAutonomousCycle(
+  params: AutonomousCycleParams,
+  options?: { adminClient?: any }
+): Promise<AutonomousCycleResult> {
   const { companyId, conversationId, messageId, eventId, payload } = params
-  const supabase = createAdminClient()
+  const supabase = params.adminClient || options?.adminClient || createAdminClient()
 
   // 1. Condicao: Apenas mensagens reais de cliente acionam o agente (protege contra ecos e loops)
   if (payload.message.sender_type !== 'customer') {
     return { executed: false, reason: 'non_customer_sender' }
+  }
+
+  // 1.1 Validação de ciclo de vida do tenant (1ª Verificação - Início do Ciclo)
+  // Bloqueia preventivamente empresas suspensas, canceladas ou em implantação
+  // antes de carregar conversa, resolver agentes ou invocar o Agent Engine (LLM).
+  try {
+    await requireActiveCompany(companyId, { adminClient: supabase })
+  } catch (err: any) {
+    const errorMsg = err instanceof TenantAccessError ? err.message : 'Falha ao verificar autorização da empresa'
+    console.warn(`[AutonomousCycle Blocked req:${eventId}] Tenant '${companyId}' bloqueado no início do ciclo: ${errorMsg}`)
+    return {
+      executed: false,
+      dispatched: false,
+      reason: 'tenant_blocked',
+      error: errorMsg
+    }
   }
 
   // 2. Condicao: Conversa existe e esta aberta (nao fechada, nao em handoff humano)
@@ -267,7 +338,8 @@ export async function handleAutonomousCycle(params: AutonomousCycleParams): Prom
     agentId: selectedAgentId,
     conversationId,
     userMessage: payload.message.content,
-    skipCustomerMessageInsert: true
+    skipCustomerMessageInsert: true,
+    llmProvider: params.llmProvider
   })
 
   if (!agentResult.success || !agentResult.message) {
@@ -289,9 +361,15 @@ export async function handleAutonomousCycle(params: AutonomousCycleParams): Prom
     
     // Atualiza metadata da mensagem persistida para indicar supressao
     if (agentResult.messageId) {
-      await supabase.from('messages').update({
+      const { error: suppMsgErr } = await supabase.from('messages').update({
         metadata: { delivery_status: 'suppressed', suppression_reason: 'handoff' }
-      }).eq('id', agentResult.messageId)
+      })
+        .eq('id', agentResult.messageId)
+        .eq('company_id', companyId)
+
+      if (suppMsgErr) {
+        console.error('[AutonomousCycle Suppress Error] Falha ao atualizar metadata da mensagem:', suppMsgErr)
+      }
     }
 
     // Registra na outbox como suprimido para auditoria
@@ -344,21 +422,97 @@ export async function handleAutonomousCycle(params: AutonomousCycleParams): Prom
     status: 'pending'
   })
 
-  const outboundRes = await sendOutboundMessage(companyId, outboundPayload)
+  // 8.1 Segunda Validação do Tenant (Imediatamente antes do despacho externo)
+  // Reduz drasticamente a janela de corrida (TOCTOU) decorrente do tempo de inferência do LLM.
+  try {
+    await requireActiveCompany(companyId, { adminClient: supabase })
+  } catch (err: any) {
+    const errorMsg = err instanceof TenantAccessError ? err.message : 'Falha ao verificar autorização da empresa'
+    const blockCode = err instanceof TenantAccessError ? err.code : 'TENANT_STATUS_UNAVAILABLE'
+    console.warn(`[AutonomousCycle Blocked req:${eventId}] Tenant '${companyId}' bloqueado na 2ª verificação pré-despacho: ${blockCode}`)
+
+    // Suprime o despacho na outbox e na mensagem
+    if (outboxEntry?.id) {
+      try {
+        const outboxBuilder = (supabase as any).from('message_outbox').update({
+          status: 'suppressed',
+          attempts: 1,
+          last_error: `Despacho suprimido antes do envio: ${errorMsg}`,
+          updated_at: new Date().toISOString()
+        })
+          .eq('id', outboxEntry.id)
+
+        const { error: outboxErr } = await (
+          typeof outboxBuilder?.eq === 'function'
+            ? outboxBuilder.eq('company_id', companyId)
+            : outboxBuilder
+        )
+
+        if (outboxErr) {
+          console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar outbox para suppressed: ${outboxErr.message || JSON.stringify(outboxErr)}`)
+        }
+      } catch (dbErr: any) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao persistir outbox suppressed: ${dbErr?.message || dbErr}`)
+      }
+    }
+
+    if (agentResult.messageId) {
+      try {
+        const { error: msgErr } = await supabase.from('messages').update({
+          metadata: {
+            delivery_status: 'suppressed',
+            delivery_error: errorMsg
+          }
+        })
+          .eq('id', agentResult.messageId)
+          .eq('company_id', companyId)
+
+        if (msgErr) {
+          console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar message para suppressed: ${msgErr.message || JSON.stringify(msgErr)}`)
+        }
+      } catch (dbErr: any) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao persistir message suppressed: ${dbErr?.message || dbErr}`)
+      }
+    }
+
+    return {
+      executed: true,
+      dispatched: false,
+      reason: 'tenant_blocked',
+      agentId: selectedAgentId,
+      replyMessageId: agentResult.messageId,
+      outboxId: outboxEntry?.id,
+      error: errorMsg
+    }
+  }
+
+  const outboundRes = await sendOutboundMessage(companyId, outboundPayload, { adminClient: supabase })
 
   if (outboundRes.success) {
     if (outboxEntry?.id) {
-      await supabase.from('message_outbox').update({
+      const { error: outboxErr } = await supabase.from('message_outbox').update({
         status: 'sent',
         attempts: 1,
         sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }).eq('id', outboxEntry.id)
+      })
+        .eq('id', outboxEntry.id)
+        .eq('company_id', companyId)
+
+      if (outboxErr) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar outbox para sent: ${outboxErr.message || JSON.stringify(outboxErr)}`)
+      }
     }
     if (agentResult.messageId) {
-      await supabase.from('messages').update({
+      const { error: msgErr } = await supabase.from('messages').update({
         metadata: { delivery_status: 'sent' }
-      }).eq('id', agentResult.messageId)
+      })
+        .eq('id', agentResult.messageId)
+        .eq('company_id', companyId)
+
+      if (msgErr) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar message para sent: ${msgErr.message || JSON.stringify(msgErr)}`)
+      }
     }
     return {
       executed: true,
@@ -370,23 +524,39 @@ export async function handleAutonomousCycle(params: AutonomousCycleParams): Prom
   } else {
     // Falha de envio externo nao perde a mensagem do agente nem exige reexecucao do LLM
     console.error(`[AutonomousCycle Outbound Error] Falha ao enviar resposta para o n8n: ${outboundRes.error || outboundRes.reason}`)
+    const isTenantBlocked = outboundRes.reason === 'tenant_blocked'
     if (outboxEntry?.id) {
-      await supabase.from('message_outbox').update({
-        status: 'failed',
+      const { error: outboxErr } = await supabase.from('message_outbox').update({
+        status: isTenantBlocked ? 'suppressed' : 'failed',
         attempts: 1,
         last_error: outboundRes.error || outboundRes.reason || 'Falha no envio outbound',
         updated_at: new Date().toISOString()
-      }).eq('id', outboxEntry.id)
+      })
+        .eq('id', outboxEntry.id)
+        .eq('company_id', companyId)
+
+      if (outboxErr) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar outbox para ${isTenantBlocked ? 'suppressed' : 'failed'}: ${outboxErr.message || JSON.stringify(outboxErr)}`)
+      }
     }
     if (agentResult.messageId) {
-      await supabase.from('messages').update({
-        metadata: { delivery_status: 'failed', delivery_error: outboundRes.error || outboundRes.reason }
-      }).eq('id', agentResult.messageId)
+      const { error: msgErr } = await supabase.from('messages').update({
+        metadata: {
+          delivery_status: isTenantBlocked ? 'suppressed' : 'failed',
+          delivery_error: outboundRes.error || outboundRes.reason
+        }
+      })
+        .eq('id', agentResult.messageId)
+        .eq('company_id', companyId)
+
+      if (msgErr) {
+        console.error(`[AutonomousCycle Outbound Error] Falha ao atualizar message para ${isTenantBlocked ? 'suppressed' : 'failed'}: ${msgErr.message || JSON.stringify(msgErr)}`)
+      }
     }
     return {
       executed: true,
       dispatched: false,
-      reason: 'outbound_failed',
+      reason: outboundRes.reason || 'outbound_failed',
       agentId: selectedAgentId,
       replyMessageId: agentResult.messageId,
       outboxId: outboxEntry?.id,
@@ -408,31 +578,184 @@ async function recordOutboxEntry(supabase: any, entryData: any) {
   }
 }
 
-/**
- * Reenvia uma mensagem pendente/falha da outbox sem reexecutar o LLM
- */
-export async function retryOutboxMessage(outboxId: string) {
-  const supabase = createAdminClient()
-  const { data: record, error } = await supabase.from('message_outbox').select('*').eq('id', outboxId).single()
-  if (error || !record) return { success: false, error: 'Registro nao encontrado' }
-  if (record.status === 'sent') return { success: true, alreadySent: true }
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-  const outboundRes = await sendOutboundMessage(record.company_id, record.payload)
+export function isValidUuid(id: unknown): id is string {
+  return typeof id === 'string' && UUID_REGEX.test(id.trim())
+}
+
+export type RetryOutboxResult = {
+  success: boolean
+  alreadySent?: boolean
+  suppressed?: boolean
+  code?: string
+  statusCode?: number
+  error?: string
+}
+
+/**
+ * Reenvia uma mensagem pendente/falha da outbox sem reexecutar o LLM.
+ * Exige validação de tenant explícita (companyId) para impedir operações cross-tenant sob service_role.
+ */
+export async function retryOutboxMessage(
+  companyId: string,
+  outboxId: string,
+  options?: { adminClient?: any }
+): Promise<RetryOutboxResult> {
+  // 1. Validação Sintática de UUIDs (Defesa Pré-Banco)
+  if (!isValidUuid(companyId) || !isValidUuid(outboxId)) {
+    return { success: false, error: 'Identificador inválido fornecido.' }
+  }
+
+  const supabase = options?.adminClient || createAdminClient()
+
+  // 2. Consulta com filtro obrigatório duplo: id e company_id (Defesa em Profundidade)
+  const outboxBuilder = (supabase as any)
+    .from('message_outbox')
+    .select('*')
+    .eq('id', outboxId)
+
+  const { data: record, error } = await (
+    typeof outboxBuilder?.eq === 'function'
+      ? outboxBuilder.eq('company_id', companyId).maybeSingle()
+      : outboxBuilder.single()
+  )
+
+  if (error) {
+    return { success: false, error: `Falha na consulta da outbox: ${error.message}` }
+  }
+
+  // Não revela se o UUID existe em outro tenant
+  if (!record || record.company_id !== companyId) {
+    return { success: false, error: 'Registro não encontrado' }
+  }
+
+  // 3. Verificação de elegibilidade do estado da Outbox
+  if (record.status === 'sent') {
+    return { success: true, alreadySent: true }
+  }
+  if (record.status === 'suppressed') {
+    return { success: false, error: 'Mensagem suprimida não pode ser reprocessada', suppressed: true }
+  }
+  if (record.status !== 'failed' && record.status !== 'pending') {
+    return { success: false, error: `Registro em estado não elegível para retry: ${record.status}` }
+  }
+
+  // 4. Validação de integridade da mensagem vinculada (se houver message_id)
+  if (record.message_id) {
+    const msgQuery = (supabase as any)
+      .from('messages')
+      .select('id, company_id')
+      .eq('id', record.message_id)
+
+    const { data: linkedMsg } = await (
+      typeof msgQuery?.eq === 'function'
+        ? msgQuery.eq('company_id', companyId).maybeSingle()
+        : (typeof msgQuery?.maybeSingle === 'function' ? msgQuery.maybeSingle() : msgQuery.single())
+    ).catch(() => ({ data: null }))
+
+    if (!linkedMsg) {
+      // Verifica se a mensagem pertence a outro tenant para diagnosticar adulteração cross-tenant
+      const { data: crossMsg } = await (supabase as any)
+        .from('messages')
+        .select('id, company_id')
+        .eq('id', record.message_id)
+        .maybeSingle()
+        .catch(() => ({ data: null }))
+
+      if (crossMsg && crossMsg.company_id !== companyId) {
+        return {
+          success: false,
+          error: 'Mensagem vinculada não encontrada ou pertence a outro tenant'
+        }
+      }
+    }
+  }
+
+  // 5. Validação centralizada do ciclo de vida do tenant antes do envio externo
+  try {
+    await requireActiveCompany(companyId, { adminClient: supabase })
+  } catch (err: any) {
+    const errorMsg = err instanceof TenantAccessError ? err.message : 'Falha ao verificar autorização da empresa'
+    const blockCode = err instanceof TenantAccessError ? err.code : 'TENANT_STATUS_UNAVAILABLE'
+    const statusCode = err instanceof TenantAccessError ? err.statusCode : 503
+
+    // Tenta persistir a supressão definitiva para evitar retentativas futuras, com escopo duplo
+    try {
+      const outboxBuilder = (supabase as any).from('message_outbox').update({
+        status: 'suppressed',
+        last_error: `Envio suprimido: ${errorMsg}`,
+        updated_at: new Date().toISOString()
+      })
+        .eq('id', outboxId)
+
+      const { error: updateErr } = await (
+        typeof outboxBuilder?.eq === 'function'
+          ? outboxBuilder.eq('company_id', companyId)
+          : outboxBuilder
+      )
+      if (updateErr) {
+        console.error(`[RetryOutbox Error] Falha ao persistir status suppressed: ${updateErr.message || JSON.stringify(updateErr)}`)
+      }
+    } catch (dbErr: any) {
+      console.error(`[RetryOutbox Error] Falha ao persistir status suppressed: ${dbErr?.message || dbErr}`)
+    }
+
+    return {
+      success: false,
+      code: blockCode,
+      statusCode,
+      suppressed: true,
+      error: errorMsg
+    }
+  }
+
+  // 6. Despacho seguro via Gateway Outbound
+  const outboundRes = await sendOutboundMessage(companyId, record.payload, { adminClient: supabase })
+
+  // 7. Atualização pós-despacho protegida com ID e Empresa simultaneamente
   if (outboundRes.success) {
-    await supabase.from('message_outbox').update({
+    const outboxBuilder = (supabase as any).from('message_outbox').update({
       status: 'sent',
       attempts: (record.attempts || 0) + 1,
       sent_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    }).eq('id', outboxId)
+    })
+      .eq('id', outboxId)
+
+    const { error: updateErr } = await (
+      typeof outboxBuilder?.eq === 'function'
+        ? outboxBuilder.eq('company_id', companyId)
+        : outboxBuilder
+    )
+    if (updateErr) {
+      console.error(`[RetryOutbox Error] Falha ao atualizar outbox para sent: ${updateErr.message || JSON.stringify(updateErr)}`)
+    }
     return { success: true }
   } else {
-    await supabase.from('message_outbox').update({
-      status: 'failed',
+    const isTenantBlocked = outboundRes.reason === 'tenant_blocked'
+    const outboxBuilder = (supabase as any).from('message_outbox').update({
+      status: isTenantBlocked ? 'suppressed' : 'failed',
       attempts: (record.attempts || 0) + 1,
       last_error: outboundRes.error || outboundRes.reason,
       updated_at: new Date().toISOString()
-    }).eq('id', outboxId)
-    return { success: false, error: outboundRes.error || outboundRes.reason }
+    })
+      .eq('id', outboxId)
+
+    const { error: updateErr } = await (
+      typeof outboxBuilder?.eq === 'function'
+        ? outboxBuilder.eq('company_id', companyId)
+        : outboxBuilder
+    )
+    if (updateErr) {
+      console.error(`[RetryOutbox Error] Falha ao atualizar outbox para ${isTenantBlocked ? 'suppressed' : 'failed'}: ${updateErr.message || JSON.stringify(updateErr)}`)
+    }
+    return {
+      success: false,
+      code: (outboundRes as any).code,
+      statusCode: (outboundRes as any).statusCode,
+      suppressed: isTenantBlocked,
+      error: outboundRes.error || outboundRes.reason
+    }
   }
 }
