@@ -74,3 +74,39 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Background icons animation for login */
+@layer components {
+  .animated-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+    color: rgba(99,102,241,0.12); /* subtle indigo */
+  }
+
+  .bg-icon {
+    position: absolute;
+    opacity: 0.06;
+    width: 160px;
+    height: 160px;
+    will-change: transform, opacity;
+    transform-origin: center;
+    color: inherit;
+    animation: float 18s ease-in-out infinite;
+  }
+
+  .bg-icon.icon-1 { left: 5%; top: 10%; }
+  .bg-icon.icon-2 { right: 8%; top: 18%; width: 120px; height:120px; animation-duration: 26s; opacity: 0.05 }
+  .bg-icon.icon-3 { left: 20%; bottom: 8%; width: 140px; height:140px; animation-duration: 22s; opacity: 0.04 }
+  .bg-icon.icon-4 { right: 20%; bottom: 18%; width: 180px; height:180px; animation-duration: 30s; opacity: 0.03 }
+
+  @keyframes float {
+    0% { transform: translateY(0) rotate(0deg) scale(1); }
+    25% { transform: translateY(-12px) rotate(6deg) scale(1.02); }
+    50% { transform: translateY(0) rotate(0deg) scale(1); }
+    75% { transform: translateY(10px) rotate(-6deg) scale(0.98); }
+    100% { transform: translateY(0) rotate(0deg) scale(1); }
+  }
+}
