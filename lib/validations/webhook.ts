@@ -42,5 +42,15 @@ export function validateWebhookPayload(payload: any): payload is WebhookPayload 
   const validSenders = ['customer', 'agent', 'human', 'system']
   if (!validSenders.includes(payload.message.sender_type)) return false
 
+  // Validador de timestamp da mensagem (quando informado)
+  if (payload.message.created_at !== undefined) {
+    if (typeof payload.message.created_at !== 'string') return false
+    const parsedTime = Date.parse(payload.message.created_at)
+    if (isNaN(parsedTime)) return false
+    // Tolerância temporal razoável para fusos horários internacionais (UTC+14) e jitter: máx. 48 horas no futuro
+    const maxFutureMs = Date.now() + 48 * 60 * 60 * 1000
+    if (parsedTime > maxFutureMs) return false
+  }
+
   return true
 }

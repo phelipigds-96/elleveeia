@@ -109,13 +109,18 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     throw new Error('Conversa em modo de atendimento humano (Handoff). O agente nao deve intervir.')
   }
 
-  // 3. Carregar histórico bruto (Até 20 mensagens)
-  const { data: messages } = await supabase
+  // 3. Carregar histórico bruto com isolamento estrito de tenant (Até 20 mensagens)
+  const { data: messages, error: messagesError } = await supabase
     .from('messages')
     .select('*')
     .eq('conversation_id', conversationId)
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false })
     .limit(20)
+
+  if (messagesError) {
+    console.error('[buildAgentContext] Erro ao carregar histórico de mensagens:', messagesError)
+  }
 
   const rawHistory = messages || []
 

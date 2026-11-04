@@ -1,53 +1,82 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { createWorkflow, createWorkflowStage, updateWorkflowStage, deleteWorkflowStage } from '@/lib/services/workflows/workflows'
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import {
+  createWorkflowStage,
+  updateWorkflowStage,
+  deleteWorkflowStage,
+  moveConversationStage,
+  getOrCreateDefaultWorkflow
+} from '@/lib/services/workflows/workflows'
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const updateWorkflowStageSchema = z.object({
+  name: z.string().trim().min(1, 'Nome da etapa não pode ser vazio.').max(100).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  position: z.number().int().min(0, 'Posição deve ser maior ou igual a 0.').optional(),
+  stage_type: z.enum(['initial', 'in_progress', 'final'], {
+    errorMap: () => ({ message: 'Tipo de etapa deve ser initial, in_progress ou final.' })
+  }).optional(),
+  is_active: z.boolean().optional(),
+}).strict('Campos adicionais ou não autorizados não podem ser informados na atualização da etapa.')
+
+/**
+ * Cria ou recupera de forma idempotente o workflow padrão da empresa.
+ * Não duplica funis em chamadas repetidas ou concorrentes.
+ */
 export async function createDefaultWorkflowAction() {
-  const workflow = await createWorkflow('Atendimento Principal', 'Funil padrão de conversas')
-
-  await createWorkflowStage(workflow.id, 'Novo Contato', 'initial')
-  await createWorkflowStage(workflow.id, 'Em Atendimento', 'in_progress')
-  await createWorkflowStage(workflow.id, 'Finalizado', 'final')
+  const result = await getOrCreateDefaultWorkflow()
 
   revalidatePath('/settings/workflows')
   revalidatePath('/conversations')
   
-  return workflow
+  return result.workflow
 }
 
 export async function createWorkflowStageAction(workflowId: string, name: string) {
-  const stage = await createWorkflowStage(workflowId, name, 'in_progress')
+  if (!workflowId || !UUID_REGEX.test(workflowId.trim())) {
+    throw new Error('Identificador de workflow inválido.')
+  }
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error('Nome da etapa é obrigatório.')
+  }
+
+  const stage = await createWorkflowStage(workflowId.trim(), name.trim(), 'in_progress')
   revalidatePath('/settings/workflows')
   return stage
 }
 
 export async function updateWorkflowStageAction(stageId: string, updates: any) {
-  await updateWorkflowStage(stageId, updates)
+  if (!stageId || !UUID_REGEX.test(stageId.trim())) {
+    throw new Error('Identificador de etapa inválido.')
+  }
+
+  // Validação estrita via Zod com whitelist (rejeita id, company_id, workflow_id, etc.)
+  const validatedUpdates = updateWorkflowStageSchema.parse(updates)
+
+  await updateWorkflowStage(stageId.trim(), validatedUpdates)
   revalidatePath('/settings/workflows')
 }
 
 export async function deleteWorkflowStageAction(stageId: string) {
-  await deleteWorkflowStage(stageId)
+  if (!stageId || !UUID_REGEX.test(stageId.trim())) {
+    throw new Error('Identificador de etapa inválido.')
+  }
+
+  await deleteWorkflowStage(stageId.trim())
   revalidatePath('/settings/workflows')
 }
 
 export async function moveConversationStageAction(conversationId: string, stageId: string) {
-  const supabase = createClient()
-  const { data: userData } = await supabase.auth.getUser()
-  if (!userData?.user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user.id).single()
-  const companyId = profile?.company_id
-  if (!companyId) throw new Error('Company not found')
+  if (!conversationId || !UUID_REGEX.test(conversationId.trim())) {
+    throw new Error('Identificador de conversa inválido.')
+  }
+  if (!stageId || !UUID_REGEX.test(stageId.trim())) {
+    throw new Error('Identificador de etapa inválido.')
+  }
 
-  const { error } = await supabase
-    .from('conversations')
-    .update({ workflow_stage_id: stageId })
-    .eq('id', conversationId)
-    .eq('company_id', companyId)
-
-  if (error) throw new Error(error.message)
-
+  await moveConversationStage(conversationId.trim(), stageId.trim())
   revalidatePath('/conversations')
 }

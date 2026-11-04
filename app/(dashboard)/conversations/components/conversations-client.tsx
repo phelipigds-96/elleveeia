@@ -29,6 +29,8 @@ export function ConversationsClient({
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [messageInput, setMessageInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [sendWarning, setSendWarning] = useState<string | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -46,6 +48,8 @@ export function ConversationsClient({
   }, [activeTab, search])
 
   useEffect(() => {
+    setSendError(null)
+    setSendWarning(null)
     if (selectedConvId) {
       setLoadingMessages(true)
       getMessages(selectedConvId).then((data) => {
@@ -70,17 +74,27 @@ export function ConversationsClient({
     if (!messageInput.trim() || !selectedConvId) return
     
     setSending(true)
+    setSendError(null)
+    setSendWarning(null)
     const content = messageInput
     setMessageInput('') // Optimistic clear
 
-    const newMessage = await sendMessage(selectedConvId, content)
-    if (newMessage) {
-      setMessages((prev) => [...prev, newMessage])
+    const result = await sendMessage(selectedConvId, content)
+    if (result.success) {
+      setMessages((prev) => [...prev, result.message])
       scrollToBottom()
       // Optimistically update conversation list last_message_at
       setConversations(prev => prev.map(c => 
         c.id === selectedConvId ? { ...c, last_message_at: new Date().toISOString() } : c
       ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()))
+
+      if (result.warning) {
+        setSendWarning(result.warning)
+      }
+    } else {
+      // Reverter o texto para o atendente não perder o rascunho
+      setMessageInput(content)
+      setSendError(result.error || 'Não foi possível enviar a mensagem no momento.')
     }
     setSending(false)
   }
@@ -292,8 +306,28 @@ export function ConversationsClient({
                         <span className="text-[10px] font-medium text-muted-foreground">
                           {isCustomer ? (selectedConv.customers?.name || 'Cliente') : (isAgent ? 'Agente IA' : 'Humano')}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/70">
+                        <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {!isCustomer && msg.metadata?.delivery_status === 'pending' && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 font-medium ml-1">
+                              <Clock className="h-2.5 w-2.5" /> Pendente
+                            </span>
+                          )}
+                          {!isCustomer && msg.metadata?.delivery_status === 'sent' && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium ml-1" title="Mensagem transmitida e aceite confirmado pelo gateway">
+                              <Send className="h-2.5 w-2.5" /> Despacho aceito
+                            </span>
+                          )}
+                          {!isCustomer && msg.metadata?.delivery_status === 'suppressed' && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] text-red-600 dark:text-red-400 font-medium ml-1" title="Envio bloqueado pelas regras da empresa">
+                              <AlertCircle className="h-2.5 w-2.5" /> Bloqueado
+                            </span>
+                          )}
+                          {!isCustomer && msg.metadata?.delivery_status === 'failed' && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] text-destructive font-medium ml-1" title="Falha na transmissão ao gateway">
+                              <AlertCircle className="h-2.5 w-2.5" /> Falha no envio
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div 
@@ -312,7 +346,33 @@ export function ConversationsClient({
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 bg-background border-t shrink-0">
+            <div className="p-4 bg-background border-t shrink-0 space-y-2">
+              {sendWarning && (
+                <div className="flex items-center gap-2 p-2.5 text-xs rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{sendWarning}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setSendWarning(null)} 
+                    className="text-amber-700/60 dark:text-amber-300/60 hover:text-amber-700 dark:hover:text-amber-300 text-xs font-semibold ml-2"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              {sendError && (
+                <div className="flex items-center gap-2 p-2.5 text-xs rounded-md bg-destructive/10 text-destructive border border-destructive/20">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{sendError}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setSendError(null)} 
+                    className="text-destructive/60 hover:text-destructive text-xs font-semibold ml-2"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                 <input
                   type="text"

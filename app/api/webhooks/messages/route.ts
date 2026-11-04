@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { validateWebhookPayload } from '@/lib/validations/webhook'
-import { processWebhookEvent, handleAutonomousCycle, AutonomousCycleResult } from '@/lib/services/message-engine'
+import { processWebhookEvent, handleAutonomousCycle, type AutonomousCycleResult } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
+import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 
 export async function POST(request: Request) {
   const startTime = Date.now()
@@ -51,6 +52,30 @@ export async function POST(request: Request) {
     
     if (!companyId) {
       return NextResponse.json({ error: 'Credenciais de Webhook invalidas' }, { status: 401 })
+    }
+
+    // 1.3 Validação de Ciclo de Vida do Tenant (Fail-closed)
+    // Impede que eventos de empresas suspensas, canceladas ou em implantação
+    // gerem registros operacionais, mensagens, conversas ou chamadas a LLMs.
+    try {
+      await requireActiveCompany(companyId, { adminClient: supabase })
+    } catch (err: any) {
+      if (err instanceof TenantAccessError) {
+        if (err.code === 'TENANT_STATUS_UNAVAILABLE') {
+          return NextResponse.json({ accepted: false, error: 'Serviço temporariamente indisponível' }, { status: 503 })
+        }
+        const reasonMap: Record<string, string> = {
+          TENANT_SUSPENDED: 'tenant_suspended',
+          TENANT_CANCELLED: 'tenant_cancelled',
+          TENANT_PROVISIONING: 'tenant_provisioning',
+          TENANT_NOT_FOUND: 'tenant_not_found',
+          INVALID_COMPANY_ID: 'invalid_company_id'
+        }
+        const reason = reasonMap[err.code] || 'tenant_blocked'
+        console.warn(`[Webhook Tenant Blocked req:${requestId}] company:${companyId} code:${err.code} reason:${reason}`)
+        return NextResponse.json({ accepted: false, reason }, { status: 200 })
+      }
+      return NextResponse.json({ accepted: false, error: 'Falha ao verificar autorização da empresa' }, { status: 503 })
     }
     
     // 2. Extracao e Validacao do Payload

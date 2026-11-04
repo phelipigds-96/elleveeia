@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import { normalizeCatalogText } from './normalization'
+import { requireActiveCompany } from '@/lib/services/platform/tenant-access'
 
 export interface CatalogImportRow {
   codigo: string
@@ -19,15 +20,68 @@ export interface CatalogImportResult {
   errors: string[]
 }
 
+export interface ImportProductsBatchOptions {
+  adminClient?: any
+}
+
 /**
  * Serviço genérico para importar produtos de um arquivo.
  * Recebe o formato limpo validado pelo Server Action.
  * Utiliza o ID externo (código/sku) como chave de idempotência do produto
  * e (company_id, product_id, price_type, min_quantity) como chave de preço.
+ * 
+ * Regras de governança da plataforma:
+ * - Valida requireActiveCompany(companyId) antes de qualquer leitura ou escrita.
+ * - Valida a cota comercial max_catalog_items de company_limits.
+ * - Não conta atualizações de produtos existentes como novos produtos.
+ * - Deduplica códigos/SKUs dentro da própria carga para não inflar a contagem.
  */
-export async function importProductsBatch(companyId: string, rows: CatalogImportRow[]): Promise<CatalogImportResult> {
-  const supabase = createAdminClient()
+export async function importProductsBatch(
+  companyId: string, 
+  rows: CatalogImportRow[],
+  options?: ImportProductsBatchOptions
+): Promise<CatalogImportResult> {
+  // 1. Validação estrita do ciclo de vida do tenant (fail-closed incondicional)
+  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
+
+  const supabase = options?.adminClient || createAdminClient()
   
+  // 2. Verificação defensiva de limites comerciais de catálogo (max_catalog_items)
+  const { data: limits } = await supabase
+    .from('company_limits')
+    .select('max_catalog_items')
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  const maxCatalogItems = limits?.max_catalog_items ?? 50000
+
+  // Obter catálogo existente da empresa para distinguir inserções de atualizações
+  const { data: existingProducts } = await supabase
+    .from('products')
+    .select('id, sku')
+    .eq('company_id', companyId)
+
+  const currentProductCount = existingProducts ? existingProducts.length : 0
+  const existingSkuSet = new Set((existingProducts || []).map((p: any) => p.sku))
+
+  // Deduplicar SKUs válidos dentro do lote recebido
+  const validRows = rows.filter(r => r.codigo && String(r.codigo).trim().length > 0)
+  const uniqueIncomingSkus = new Set(validRows.map(r => String(r.codigo).trim()))
+
+  // Identificar quantos SKUs novos de fato serão adicionados
+  let newProductsCount = 0
+  uniqueIncomingSkus.forEach((sku) => {
+    if (!existingSkuSet.has(sku)) {
+      newProductsCount++
+    }
+  })
+
+  if (currentProductCount + newProductsCount > maxCatalogItems) {
+    throw new Error(
+      `Limite de catálogo excedido: limite de ${maxCatalogItems} itens (atuais: ${currentProductCount}, novos a importar: ${newProductsCount}). Operação cancelada.`
+    )
+  }
+
   let successCount = 0
   let errorCount = 0
   const errors: string[] = []
@@ -69,7 +123,7 @@ export async function importProductsBatch(companyId: string, rows: CatalogImport
     for (const row of batch) {
       if (row.preco !== null && row.preco > 0) {
         // Encontra o ID interno gerado/retornado pelo Upsert do Produto
-        const productDb = upsertedProducts.find(p => p.sku === row.codigo)
+        const productDb = upsertedProducts.find((p: any) => p.sku === row.codigo)
         if (productDb) {
           const priceType = row.price_type || 'retail'
           const minQuantity = row.min_quantity && row.min_quantity > 0 ? Number(row.min_quantity) : 1
