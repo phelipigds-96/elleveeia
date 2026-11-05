@@ -1,33 +1,37 @@
 "use client"
-import React from 'react'
-import { Search, Plus } from 'lucide-react'
 
-export default function CompaniesHeader({ onCreate }: { onCreate: () => void }) {
+import React from "react"
+import { Building2, Plus, Users, Zap, ShieldCheck } from "lucide-react"
+import { Button } from "@/components/ui/button"
+
+interface CompaniesHeaderProps {
+  onCreate: () => void
+  totalCount?: number
+}
+
+export default function CompaniesHeader({ onCreate, totalCount = 6 }: CompaniesHeaderProps) {
   return (
-    <header className="flex items-start justify-between gap-6">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-slate-200/80">
       <div>
-        <h1 className="text-3xl lg:text-4xl font-extrabold text-gray-900">Empresas e Clientes</h1>
-        <p className="mt-2 text-sm text-gray-600">Gerencie tenants, planos e o status das empresas na plataforma.</p>
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
+            <Building2 className="h-5 w-5 text-indigo-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Empresas & Tenants</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Gestão da infraestrutura multi-tenant, alocação de planos e limites do motor de IA.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="relative">
-          <span className="sr-only">Buscar empresas</span>
-          <input
-            className="pl-10 pr-4 py-2 rounded-md border border-gray-200 bg-white text-sm shadow-sm placeholder-gray-400 w-64"
-            placeholder="Buscar empresa, slug ou CNPJ"
-          />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-        </label>
-
-        <button
-          onClick={onCreate}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm hover:bg-indigo-700"
-        >
-          <Plus size={16} />
+        <Button onClick={onCreate} variant="primary" className="shadow-sm">
+          <Plus className="h-4 w-4 mr-1.5" />
           Nova Empresa
-        </button>
+        </Button>
       </div>
-    </header>
+    </div>
   )
 }
