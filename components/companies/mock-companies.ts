@@ -111,12 +111,63 @@ export const INITIAL_MOCK_COMPANIES: CompanyMock[] = [
     status: "Ativo",
     agentsCount: 1,
     maxAgents: 1,
-    messagesUsed: 820,
+    messagesUsed: 800,
     messagesLimit: 1000,
-    tokensUsed: 82000,
+    tokensUsed: 80000,
     tokensLimit: 100000,
     aiProvider: "gemini",
     createdAt: "2026-10-25",
     adminEmail: "financeiro@vanguardlaw.com.br",
   },
 ]
+
+export function formatCompactNumber(value: number): string {
+  if (value >= 1000000) {
+    const val = value / 1000000
+    return val % 1 === 0 ? `${val}M` : `${val.toFixed(1).replace(".", ",")}M`
+  }
+  if (value >= 1000) {
+    const val = value / 1000
+    return val % 1 === 0 ? `${val}K` : `${val.toFixed(1).replace(".", ",")}K`
+  }
+  return value.toString()
+}
+
+export function calculateUsagePercent(used: number, limit: number): number {
+  if (!limit || limit === 0) return 0
+  return Math.round((used / limit) * 100)
+}
+
+export function getUsageStatus(percent: number): {
+  barColor: string
+  textColor: string
+  label: string
+} {
+  if (percent > 100) {
+    return {
+      barColor: "bg-rose-700",
+      textColor: "text-rose-700 font-bold",
+      label: "Excedente",
+    }
+  }
+  if (percent >= 95) {
+    return {
+      barColor: "bg-rose-600",
+      textColor: "text-rose-600 font-bold",
+      label: "Alerta Crítico",
+    }
+  }
+  if (percent >= 80) {
+    return {
+      barColor: "bg-amber-500",
+      textColor: "text-amber-700 font-semibold",
+      label: "Atenção",
+    }
+  }
+  return {
+    barColor: "bg-ellevee-sage",
+    textColor: "text-ellevee-sage font-medium",
+    label: "Normal",
+  }
+}
+

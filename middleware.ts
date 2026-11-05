@@ -3,10 +3,14 @@ import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
   // 1. Permite acesso aos webhooks e crons sem exigir sessão de usuário
-  // A autenticação é realizada diretamente nos Route Handlers via secret/token
+  // 2. Permite acesso às rotas mock do SuperAdmin durante a fase de prototipagem/homologação visual
   if (
     request.nextUrl.pathname.startsWith('/api/webhooks') ||
-    request.nextUrl.pathname.startsWith('/api/cron')
+    request.nextUrl.pathname.startsWith('/api/cron') ||
+    request.nextUrl.pathname.startsWith('/paineladmin') ||
+    request.nextUrl.pathname.startsWith('/companies') ||
+    request.nextUrl.pathname.startsWith('/audit') ||
+    request.nextUrl.pathname.startsWith('/admin-settings')
   ) {
     return NextResponse.next()
   }
