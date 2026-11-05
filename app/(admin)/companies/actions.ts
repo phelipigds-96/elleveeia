@@ -340,3 +340,373 @@ export async function createCompanyAction(
     }
   }
 }
+
+/**
+ * Server Action para alternar o status operacional do tenant (Ativo / Suspenso)
+ */
+export async function updateCompanyStatusAction(
+  companyId: string,
+  newStatus: "active" | "suspended" | "Ativo" | "Suspenso",
+  reason?: string
+): Promise<ActionResult<{ id: string; status: string; suspension_reason: string | null }>> {
+  try {
+    if (!companyId) {
+      return { success: false, error: "Identificador da empresa inválido." }
+    }
+
+    const normalizedStatus: "active" | "suspended" =
+      newStatus === "suspended" || newStatus === "Suspenso" ? "suspended" : "active"
+
+    const adminClient = createAdminClient()
+
+    // 1. Verificar se a empresa existe
+    const { data: company, error: fetchErr } = await adminClient
+      .from("companies")
+      .select("id, name, slug, status, suspension_reason")
+      .eq("id", companyId)
+      .maybeSingle()
+
+    if (fetchErr || !company) {
+      return { success: false, error: "Empresa não encontrada no banco de dados." }
+    }
+
+    const suspensionReason =
+      normalizedStatus === "suspended"
+        ? (reason?.trim() || "Suspensão manual realizada pelo SuperAdmin")
+        : null
+
+    // 2. Atualizar status na tabela companies
+    const { data: updated, error: updateErr } = await adminClient
+      .from("companies")
+      .update({
+        status: normalizedStatus,
+        suspension_reason: suspensionReason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", companyId)
+      .select("id, name, slug, status, suspension_reason")
+      .single()
+
+    if (updateErr || !updated) {
+      console.error("[SuperAdmin] Erro ao atualizar status:", updateErr)
+      return {
+        success: false,
+        error: `Falha ao atualizar status da empresa: ${updateErr?.message || "Erro desconhecido"}`,
+      }
+    }
+
+    // 3. Registrar auditoria em platform_audit_logs
+    try {
+      const actor = await getAuditActor()
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: normalizedStatus === "suspended" ? "company.suspended" : "company.reactivated",
+        target_company_id: companyId,
+        payload_summary: {
+          company_name: company.name,
+          company_slug: company.slug,
+          previous_status: company.status,
+          new_status: normalizedStatus,
+          suspension_reason: suspensionReason,
+        },
+        reason:
+          suspensionReason ||
+          (normalizedStatus === "suspended"
+            ? "Suspensão manual de tenant"
+            : "Reativação operacional de tenant"),
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria não-bloqueante:", auditErr.message)
+    }
+
+    // 4. Revalidar rotas administrativas do Next.js
+    revalidatePath("/companies")
+    revalidatePath("/paineladmin")
+    revalidatePath("/audit")
+
+    return {
+      success: true,
+      data: updated,
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Exceção em updateCompanyStatusAction:", err)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${err.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+/**
+ * Server Action para alterar o plano contratado do tenant
+ */
+export async function updateCompanyPlanAction(
+  companyId: string,
+  newPlan: "Trial" | "Starter" | "Pro" | "Enterprise"
+): Promise<ActionResult<{ id: string; plan: string; plan_tier: string }>> {
+  try {
+    if (!companyId) {
+      return { success: false, error: "Identificador da empresa inválido." }
+    }
+
+    let planTierDb = "standard"
+    if (newPlan === "Trial") planTierDb = "trial"
+    else if (newPlan === "Starter") planTierDb = "standard"
+    else if (newPlan === "Pro") planTierDb = "pro"
+    else if (newPlan === "Enterprise") planTierDb = "enterprise"
+
+    const adminClient = createAdminClient()
+
+    // 1. Obter registro atual
+    const { data: company, error: fetchErr } = await adminClient
+      .from("companies")
+      .select("id, name, slug, plan_tier")
+      .eq("id", companyId)
+      .maybeSingle()
+
+    if (fetchErr || !company) {
+      return { success: false, error: "Empresa não encontrada no banco de dados." }
+    }
+
+    // 2. Atualizar plano na tabela companies
+    const { data: updated, error: updateErr } = await adminClient
+      .from("companies")
+      .update({
+        plan_tier: planTierDb,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", companyId)
+      .select("id, name, slug, plan_tier")
+      .single()
+
+    if (updateErr || !updated) {
+      console.error("[SuperAdmin] Erro ao atualizar plano:", updateErr)
+      return {
+        success: false,
+        error: `Falha ao atualizar plano da empresa: ${updateErr?.message || "Erro desconhecido"}`,
+      }
+    }
+
+    // 3. Atualizar cotas padrão correspondentes ao plano em company_limits
+    const defaultQuotas = {
+      Trial: { messages: 1000, agents: 1 },
+      Starter: { messages: 5000, agents: 2 },
+      Pro: { messages: 25000, agents: 5 },
+      Enterprise: { messages: 100000, agents: 15 },
+    }[newPlan]
+
+    const { data: existingLimits } = await adminClient
+      .from("company_limits")
+      .select("id, max_monthly_messages, max_agents")
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    if (existingLimits) {
+      await adminClient
+        .from("company_limits")
+        .update({
+          max_monthly_messages: defaultQuotas.messages,
+          max_agents: defaultQuotas.agents,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+    } else {
+      await adminClient
+        .from("company_limits")
+        .insert({
+          company_id: companyId,
+          max_monthly_messages: defaultQuotas.messages,
+          max_agents: defaultQuotas.agents,
+          max_monthly_quotes: 1000,
+          max_catalog_items: 50000,
+          allowed_llm_providers: ["gemini"],
+        })
+    }
+
+    // 4. Registrar auditoria em platform_audit_logs
+    try {
+      const actor = await getAuditActor()
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: "company.plan_changed",
+        target_company_id: companyId,
+        payload_summary: {
+          company_name: company.name,
+          company_slug: company.slug,
+          previous_plan: company.plan_tier,
+          new_plan_tier: planTierDb,
+          new_plan_ui: newPlan,
+          adjusted_limits: defaultQuotas,
+        },
+        reason: `Alteração de plano contratado para ${newPlan} via Painel SuperAdmin`,
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria não-bloqueante:", auditErr.message)
+    }
+
+    // 5. Revalidar rotas administrativas do Next.js
+    revalidatePath("/companies")
+    revalidatePath("/paineladmin")
+    revalidatePath("/audit")
+
+    return {
+      success: true,
+      data: {
+        id: companyId,
+        plan: newPlan,
+        plan_tier: planTierDb,
+      },
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Exceção em updateCompanyPlanAction:", err)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${err.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+export interface UpdateLimitsInput {
+  maxMonthlyMessages: number
+  maxAgents: number
+  allowedLlmProviders?: string[]
+  maxMonthlyQuotes?: number
+  maxCatalogItems?: number
+  tokensLimit?: number
+}
+
+/**
+ * Server Action para ajustar cotas de infraestrutura na tabela company_limits
+ */
+export async function updateCompanyLimitsAction(
+  companyId: string,
+  newLimits: UpdateLimitsInput
+): Promise<ActionResult<any>> {
+  try {
+    if (!companyId) {
+      return { success: false, error: "Identificador da empresa inválido." }
+    }
+
+    const adminClient = createAdminClient()
+
+    // 1. Obter empresa
+    const { data: company, error: fetchErr } = await adminClient
+      .from("companies")
+      .select("id, name, slug")
+      .eq("id", companyId)
+      .maybeSingle()
+
+    if (fetchErr || !company) {
+      return { success: false, error: "Empresa não encontrada no banco de dados." }
+    }
+
+    // 2. Obter limites atuais
+    const { data: currentLimits } = await adminClient
+      .from("company_limits")
+      .select("*")
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    const providers =
+      newLimits.allowedLlmProviders && newLimits.allowedLlmProviders.length > 0
+        ? newLimits.allowedLlmProviders
+        : ["gemini"]
+
+    const maxMessages = Math.max(0, Math.floor(Number(newLimits.maxMonthlyMessages) || 0))
+    const maxAgents = Math.max(1, Math.floor(Number(newLimits.maxAgents) || 1))
+
+    const updatePayload: Record<string, any> = {
+      max_monthly_messages: maxMessages,
+      max_agents: maxAgents,
+      allowed_llm_providers: providers,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (newLimits.maxMonthlyQuotes !== undefined) {
+      updatePayload.max_monthly_quotes = Math.max(0, Math.floor(Number(newLimits.maxMonthlyQuotes) || 0))
+    }
+    if (newLimits.maxCatalogItems !== undefined) {
+      updatePayload.max_catalog_items = Math.max(0, Math.floor(Number(newLimits.maxCatalogItems) || 0))
+    }
+
+    let limitsResult: any
+    if (currentLimits) {
+      const { data, error } = await adminClient
+        .from("company_limits")
+        .update(updatePayload)
+        .eq("company_id", companyId)
+        .select("*")
+        .single()
+
+      if (error) {
+        console.error("[SuperAdmin] Erro ao atualizar company_limits:", error)
+        return { success: false, error: `Falha ao atualizar limites: ${error.message}` }
+      }
+      limitsResult = data
+    } else {
+      const { data, error } = await adminClient
+        .from("company_limits")
+        .insert({
+          company_id: companyId,
+          ...updatePayload,
+          max_monthly_quotes: 1000,
+          max_catalog_items: 50000,
+        })
+        .select("*")
+        .single()
+
+      if (error) {
+        console.error("[SuperAdmin] Erro ao criar company_limits:", error)
+        return { success: false, error: `Falha ao salvar limites: ${error.message}` }
+      }
+      limitsResult = data
+    }
+
+    // 3. Registrar auditoria em platform_audit_logs
+    try {
+      const actor = await getAuditActor()
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: "company.limits_changed",
+        target_company_id: companyId,
+        payload_summary: {
+          company_name: company.name,
+          company_slug: company.slug,
+          previous_limits: currentLimits
+            ? {
+                max_monthly_messages: currentLimits.max_monthly_messages,
+                max_agents: currentLimits.max_agents,
+                allowed_llm_providers: currentLimits.allowed_llm_providers,
+              }
+            : null,
+          new_limits: updatePayload,
+        },
+        reason: "Ajuste de cotas operacionais e limites pelo SuperAdmin",
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria não-bloqueante:", auditErr.message)
+    }
+
+    // 4. Revalidar rotas administrativas do Next.js
+    revalidatePath("/companies")
+    revalidatePath("/paineladmin")
+    revalidatePath("/audit")
+
+    return {
+      success: true,
+      data: limitsResult,
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Exceção em updateCompanyLimitsAction:", err)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${err.message || "Falha desconhecida"}`,
+    }
+  }
+}

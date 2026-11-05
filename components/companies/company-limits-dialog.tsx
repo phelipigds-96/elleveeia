@@ -1,11 +1,14 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Sliders, Zap, Bot, MessageSquare, Check, Sparkles } from "lucide-react"
+import { Sliders, Zap, Bot, MessageSquare } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
+import { updateCompanyLimitsAction } from "@/app/(admin)/companies/actions"
+import { toast } from "@/components/ui/toast"
 
 interface CompanyLimitsDialogProps {
   company: CompanyMock | null
@@ -20,6 +23,7 @@ export default function CompanyLimitsDialog({
   onClose,
   onSave,
 }: CompanyLimitsDialogProps) {
+  const router = useRouter()
   const [messagesLimit, setMessagesLimit] = useState<number>(0)
   const [tokensLimit, setTokensLimit] = useState<number>(0)
   const [maxAgents, setMaxAgents] = useState<number>(0)
@@ -41,20 +45,53 @@ export default function CompanyLimitsDialog({
 
   if (!company) return null
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true)
-    setTimeout(() => {
-      setIsSaving(false)
-      if (onSave) {
-        onSave({
-          ...company,
-          messagesLimit,
-          tokensLimit,
-          maxAgents,
-        })
+    try {
+      const allowedProviders: string[] = []
+      if (allowOpenAI) allowedProviders.push("openai")
+      if (allowGemini) allowedProviders.push("gemini")
+      if (allowAnthropic) allowedProviders.push("anthropic")
+      if (allowedProviders.length === 0) allowedProviders.push("gemini")
+
+      const result = await updateCompanyLimitsAction(company.id, {
+        maxMonthlyMessages: messagesLimit,
+        maxAgents: maxAgents,
+        allowedLlmProviders: allowedProviders,
+        tokensLimit: tokensLimit,
+      })
+
+      if (result.success) {
+        toast.success(
+          "Limites atualizados com sucesso",
+          `Cotas de infraestrutura de ${company.name} configuradas com sucesso.`
+        )
+
+        let providerUI: "openai" | "gemini" | "hybrid" = "gemini"
+        if (allowOpenAI && allowGemini) providerUI = "hybrid"
+        else if (allowOpenAI) providerUI = "openai"
+        else providerUI = "gemini"
+
+        if (onSave) {
+          onSave({
+            ...company,
+            messagesLimit,
+            tokensLimit,
+            maxAgents,
+            aiProvider: providerUI,
+          })
+        }
+
+        router.refresh()
+        onClose()
+      } else {
+        toast.error("Falha ao salvar limites", result.error || "Ocorreu um erro no servidor.")
       }
-      onClose()
-    }, 500)
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha na comunicação com o servidor.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -90,6 +127,7 @@ export default function CompanyLimitsDialog({
             value={messagesLimit}
             onChange={(e) => setMessagesLimit(Number(e.target.value))}
             className="bg-white font-mono text-xs"
+            disabled={isSaving}
           />
           <p className="text-[11px] text-ellevee-sage">
             Total de mensagens que o motor de atendimento (humano e IA) pode transacionar por mês.
@@ -112,6 +150,7 @@ export default function CompanyLimitsDialog({
             value={tokensLimit}
             onChange={(e) => setTokensLimit(Number(e.target.value))}
             className="bg-white font-mono text-xs"
+            disabled={isSaving}
           />
           <p className="text-[11px] text-ellevee-sage">
             Cota de tokens consumidos em chamadas ao Agent Engine e inferência de modelos.
@@ -134,6 +173,7 @@ export default function CompanyLimitsDialog({
             value={maxAgents}
             onChange={(e) => setMaxAgents(Number(e.target.value))}
             className="bg-white font-mono text-xs"
+            disabled={isSaving}
           />
           <p className="text-[11px] text-ellevee-sage">
             Número de bots especializados ou instâncias simultâneas no catálogo do tenant.
@@ -152,6 +192,7 @@ export default function CompanyLimitsDialog({
                 checked={allowOpenAI}
                 onChange={(e) => setAllowOpenAI(e.target.checked)}
                 className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                disabled={isSaving}
               />
               OpenAI
             </label>
@@ -161,6 +202,7 @@ export default function CompanyLimitsDialog({
                 checked={allowGemini}
                 onChange={(e) => setAllowGemini(e.target.checked)}
                 className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                disabled={isSaving}
               />
               Google Gemini
             </label>
@@ -170,6 +212,7 @@ export default function CompanyLimitsDialog({
                 checked={allowAnthropic}
                 onChange={(e) => setAllowAnthropic(e.target.checked)}
                 className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                disabled={isSaving}
               />
               Anthropic
             </label>

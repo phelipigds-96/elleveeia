@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   ExternalLink
 } from "lucide-react"
+import { Toaster } from "@/components/ui/toast"
 
 interface AdminShellProps {
   children: React.ReactNode
@@ -273,6 +274,9 @@ export default function AdminShell({ children }: AdminShellProps) {
           {children}
         </main>
       </div>
+
+      {/* Notificações Toaster Globais */}
+      <Toaster />
     </div>
   )
 }
