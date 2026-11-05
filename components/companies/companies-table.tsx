@@ -40,6 +40,7 @@ import {
 import CompanyLimitsDialog from "./company-limits-dialog"
 import CompanyPlanDialog from "./company-plan-dialog"
 import CompanyStatusDialog from "./company-status-dialog"
+import { toast } from "@/components/ui/toast"
 
 export default function CompaniesTable({
   companies = INITIAL_MOCK_COMPANIES,
@@ -57,7 +58,6 @@ export default function CompaniesTable({
   const [activeCompanyForLimits, setActiveCompanyForLimits] = useState<CompanyMock | null>(null)
   const [activeCompanyForPlan, setActiveCompanyForPlan] = useState<CompanyMock | null>(null)
   const [activeCompanyForStatus, setActiveCompanyForStatus] = useState<CompanyMock | null>(null)
-  const [impersonateToast, setImpersonateToast] = useState<string | null>(null)
 
   // Filtros ativos?
   const hasActiveFilters = searchTerm !== "" || planFilter !== "ALL" || statusFilter !== "ALL" || providerFilter !== "ALL"
@@ -86,8 +86,10 @@ export default function CompaniesTable({
   }, [companies, searchTerm, planFilter, statusFilter, providerFilter])
 
   const handleImpersonate = (company: CompanyMock) => {
-    setImpersonateToast(`Sessão administrativa iniciada como ${company.name} (@${company.slug})`)
-    setTimeout(() => setImpersonateToast(null), 3500)
+    toast.info(
+      "Modo Impersonate Ativo",
+      `Sessão administrativa iniciada como ${company.name} (@${company.slug})`
+    )
   }
 
   const getPlanBadge = (plan: CompanyMock["plan"]) => {
@@ -141,19 +143,6 @@ export default function CompaniesTable({
 
   return (
     <div className="space-y-4">
-      {/* Toast Simulado de Impersonate */}
-      {impersonateToast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-ellevee-ink text-white p-4 shadow-2xl flex items-center gap-3 border border-white/10 animate-in slide-in-from-bottom-5">
-          <div className="h-8 w-8 rounded-md bg-white/10 flex items-center justify-center text-ellevee-accent">
-            <LogIn className="h-4 w-4" />
-          </div>
-          <div>
-            <p className="text-xs font-bold font-display">Modo Impersonate Ativo</p>
-            <p className="text-[11px] text-[#A6B5A6]">{impersonateToast}</p>
-          </div>
-        </div>
-      )}
-
       {/* Barra de Filtros e Busca */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-ellevee-stone shadow-sm">
         <div className="relative flex-1 max-w-md">

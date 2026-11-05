@@ -1,11 +1,14 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Award, Check } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
+import { updateCompanyPlanAction } from "@/app/(admin)/companies/actions"
+import { toast } from "@/components/ui/toast"
 
 interface CompanyPlanDialogProps {
   company: CompanyMock | null
@@ -55,6 +58,7 @@ export default function CompanyPlanDialog({
   onClose,
   onSave,
 }: CompanyPlanDialogProps) {
+  const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<"Trial" | "Starter" | "Pro" | "Enterprise">("Pro")
   const [isSaving, setIsSaving] = useState(false)
 
@@ -64,18 +68,44 @@ export default function CompanyPlanDialog({
 
   if (!company) return null
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true)
-    setTimeout(() => {
-      setIsSaving(false)
-      if (onSave) {
-        onSave({
-          ...company,
-          plan: selectedPlan,
-        })
+    try {
+      const result = await updateCompanyPlanAction(company.id, selectedPlan)
+
+      if (result.success) {
+        toast.success(
+          "Plano atualizado com sucesso",
+          `O plano de ${company.name} foi atualizado para ${selectedPlan}.`
+        )
+
+        const defaultLimits = {
+          Trial: { msgs: 1000, agents: 1, tokens: 100000 },
+          Starter: { msgs: 5000, agents: 2, tokens: 500000 },
+          Pro: { msgs: 25000, agents: 5, tokens: 2000000 },
+          Enterprise: { msgs: 100000, agents: 15, tokens: 10000000 },
+        }[selectedPlan]
+
+        if (onSave) {
+          onSave({
+            ...company,
+            plan: selectedPlan,
+            messagesLimit: defaultLimits.msgs,
+            maxAgents: defaultLimits.agents,
+            tokensLimit: defaultLimits.tokens,
+          })
+        }
+
+        router.refresh()
+        onClose()
+      } else {
+        toast.error("Falha ao alterar plano", result.error || "Ocorreu um erro no servidor.")
       }
-      onClose()
-    }, 400)
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha na comunicação com o servidor.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (

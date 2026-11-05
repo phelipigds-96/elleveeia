@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select"
 import { Building2, CheckCircle2, Shield, AlertCircle } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
 import { createCompanyAction } from "@/app/(admin)/companies/actions"
+import { toast } from "@/components/ui/toast"
 
 interface CompanyFormProps {
   open: boolean
@@ -60,10 +61,15 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
       if (!res.success) {
         setErrorMessage(res.error || "Falha ao provisionar a empresa.")
+        toast.error("Erro ao cadastrar empresa", res.error || "Falha ao provisionar a empresa.")
         setIsSubmitting(false)
         return
       }
 
+      toast.success(
+        "Empresa provisionada com sucesso",
+        `A organização "${name}" (@${res.data?.slug || slug}) foi criada no banco de dados.`
+      )
       setSuccess(true)
       setIsSubmitting(false)
 

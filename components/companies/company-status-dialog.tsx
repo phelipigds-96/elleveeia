@@ -1,10 +1,13 @@
 "use client"
 
 import React, { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
+import { updateCompanyStatusAction } from "@/app/(admin)/companies/actions"
+import { toast } from "@/components/ui/toast"
 
 interface CompanyStatusDialogProps {
   company: CompanyMock | null
@@ -19,6 +22,7 @@ export default function CompanyStatusDialog({
   onClose,
   onSave,
 }: CompanyStatusDialogProps) {
+  const router = useRouter()
   const [reason, setReason] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -26,19 +30,36 @@ export default function CompanyStatusDialog({
 
   const isSuspending = company.status === "Ativo"
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setIsProcessing(true)
-    setTimeout(() => {
-      setIsProcessing(false)
-      if (onSave) {
-        onSave({
-          ...company,
-          status: isSuspending ? "Suspenso" : "Ativo",
-        })
+    try {
+      const targetStatus = isSuspending ? "suspended" : "active"
+      const result = await updateCompanyStatusAction(company.id, targetStatus, reason)
+
+      if (result.success) {
+        toast.success(
+          isSuspending ? "Empresa suspensa com sucesso" : "Empresa reativada com sucesso",
+          isSuspending
+            ? `As operações de ${company.name} foram suspensas temporariamente.`
+            : `O acesso e as operações de ${company.name} foram restabelecidos com sucesso.`
+        )
+        if (onSave) {
+          onSave({
+            ...company,
+            status: isSuspending ? "Suspenso" : "Ativo",
+          })
+        }
+        router.refresh()
+        setReason("")
+        onClose()
+      } else {
+        toast.error("Falha ao atualizar status", result.error || "Ocorreu um erro no servidor.")
       }
-      setReason("")
-      onClose()
-    }, 500)
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha na comunicação com o servidor.")
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -94,6 +115,7 @@ export default function CompanyStatusDialog({
               placeholder="Ex: Pendência de faturamento, solicitação contratual ou manutenção programada."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              disabled={isProcessing}
             />
           </div>
         )}
