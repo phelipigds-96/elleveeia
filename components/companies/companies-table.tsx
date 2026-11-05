@@ -10,16 +10,12 @@ import {
   CheckCircle2, 
   LogIn, 
   Search, 
-  Filter, 
   Bot,
-  X,
-  Calendar,
-  Layers
+  X
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -34,7 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { CompanyMock, INITIAL_MOCK_COMPANIES } from "./mock-companies"
+import { 
+  CompanyMock, 
+  INITIAL_MOCK_COMPANIES,
+  formatCompactNumber,
+  calculateUsagePercent,
+  getUsageStatus
+} from "./mock-companies"
 import CompanyLimitsDialog from "./company-limits-dialog"
 import CompanyPlanDialog from "./company-plan-dialog"
 import CompanyStatusDialog from "./company-status-dialog"
@@ -51,13 +53,13 @@ export default function CompaniesTable({
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [providerFilter, setProviderFilter] = useState<string>("ALL")
 
-  // Modals state
+  // Modais de Ação
   const [activeCompanyForLimits, setActiveCompanyForLimits] = useState<CompanyMock | null>(null)
   const [activeCompanyForPlan, setActiveCompanyForPlan] = useState<CompanyMock | null>(null)
   const [activeCompanyForStatus, setActiveCompanyForStatus] = useState<CompanyMock | null>(null)
   const [impersonateToast, setImpersonateToast] = useState<string | null>(null)
 
-  // Has active filters?
+  // Filtros ativos?
   const hasActiveFilters = searchTerm !== "" || planFilter !== "ALL" || statusFilter !== "ALL" || providerFilter !== "ALL"
 
   const handleClearFilters = () => {
@@ -67,7 +69,7 @@ export default function CompaniesTable({
     setProviderFilter("ALL")
   }
 
-  // Filtered companies
+  // Lista Filtrada
   const filtered = useMemo(() => {
     return companies.filter((c) => {
       const matchesSearch =
@@ -91,14 +93,14 @@ export default function CompaniesTable({
   const getPlanBadge = (plan: CompanyMock["plan"]) => {
     switch (plan) {
       case "Trial":
-        return <Badge variant="outline">Trial</Badge>
+        return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">Trial</Badge>
       case "Starter":
-        return <Badge variant="secondary">Starter</Badge>
+        return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">Starter</Badge>
       case "Pro":
-        return <Badge variant="default">Pro</Badge>
+        return <Badge variant="default" className="text-[10px] px-1.5 py-0 font-medium">Pro</Badge>
       case "Enterprise":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-ellevee-ink text-white">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-ellevee-ink text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
             Enterprise
           </span>
@@ -110,19 +112,19 @@ export default function CompaniesTable({
     switch (provider) {
       case "openai":
         return (
-          <span className="text-[11px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-2 py-0.5 rounded border border-ellevee-stone">
+          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
             OpenAI
           </span>
         )
       case "gemini":
         return (
-          <span className="text-[11px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-2 py-0.5 rounded border border-ellevee-stone">
+          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
             Gemini
           </span>
         )
       case "hybrid":
         return (
-          <span className="text-[11px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-2 py-0.5 rounded border border-ellevee-stone">
+          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
             Híbrido
           </span>
         )
@@ -147,20 +149,20 @@ export default function CompaniesTable({
           </div>
           <div>
             <p className="text-xs font-bold font-display">Modo Impersonate Ativo</p>
-            <p className="text-[11px] text-ellevee-sage">{impersonateToast}</p>
+            <p className="text-[11px] text-[#A6B5A6]">{impersonateToast}</p>
           </div>
         </div>
       )}
 
-      {/* Barra de Filtros e Busca (Quiet Technology) */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-ellevee-stone shadow-sm">
+      {/* Barra de Filtros e Busca */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-ellevee-stone shadow-sm">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-sage" />
           <Input
             placeholder="Buscar por nome, slug ou CNPJ..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-xs"
+            className="pl-9 h-8.5 text-xs bg-[#FBFBFA]"
           />
         </div>
 
@@ -169,7 +171,7 @@ export default function CompaniesTable({
           <select
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
-            className="h-9 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-3 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
           >
             <option value="ALL">Todos os Planos</option>
             <option value="Trial">Trial</option>
@@ -182,7 +184,7 @@ export default function CompaniesTable({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-3 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
           >
             <option value="ALL">Todos os Status</option>
             <option value="Ativo">Ativas</option>
@@ -193,7 +195,7 @@ export default function CompaniesTable({
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
-            className="h-9 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-3 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
           >
             <option value="ALL">Todos os Provedores</option>
             <option value="openai">OpenAI</option>
@@ -207,7 +209,7 @@ export default function CompaniesTable({
               onClick={handleClearFilters}
               variant="outline"
               size="sm"
-              className="h-9 px-2.5 text-xs text-ellevee-sage hover:text-ellevee-ink border-ellevee-stone gap-1"
+              className="h-8.5 px-2.5 text-xs text-ellevee-sage hover:text-ellevee-ink border-ellevee-stone gap-1"
             >
               <X className="h-3.5 w-3.5" />
               <span>Limpar filtros</span>
@@ -216,163 +218,176 @@ export default function CompaniesTable({
         </div>
       </div>
 
-      {/* Data Table de Empresas (8 Colunas) */}
+      {/* Data Table de Empresas — Estrutura Compacta e Sem Rolagem Horizontal em 1366px/1440px */}
       <div className="rounded-lg border border-ellevee-stone bg-white shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[260px]">Empresa</TableHead>
-              <TableHead>Plano</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[200px]">Consumo</TableHead>
-              <TableHead>Agentes</TableHead>
-              <TableHead>Provedor</TableHead>
-              <TableHead>Cadastro</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-xs text-ellevee-sage">
-                  Nenhuma organização encontrada para os filtros selecionados.
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table className="table-fixed w-full min-w-[880px]">
+            <TableHeader>
+              <TableRow className="border-b border-ellevee-stone bg-[#F8F8F5]">
+                <TableHead className="w-[230px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Empresa</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Plano</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Status</TableHead>
+                <TableHead className="w-[195px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Consumo</TableHead>
+                <TableHead className="w-[80px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Agentes</TableHead>
+                <TableHead className="w-[90px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Provedor</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Cadastro</TableHead>
+                <TableHead className="w-[45px] text-right text-xs font-semibold text-ellevee-sage py-2.5 px-3">Ações</TableHead>
               </TableRow>
-            ) : (
-              filtered.map((company) => {
-                const usagePercent = Math.round(
-                  (company.messagesUsed / company.messagesLimit) * 100
-                )
-                const isNearLimit = usagePercent >= 80
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-28 text-center text-xs text-ellevee-sage">
+                    Nenhuma organização encontrada para os filtros selecionados.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((company) => {
+                  const usagePercent = calculateUsagePercent(company.messagesUsed, company.messagesLimit)
+                  const usageStatus = getUsageStatus(usagePercent)
 
-                return (
-                  <TableRow key={company.id} className="hover:bg-[#FBFBFA]">
-                    {/* 1. Empresa: Monograma + Nome + Slug/CNPJ */}
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center font-display font-bold text-xs shrink-0">
-                          {company.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-xs text-ellevee-ink truncate font-sans">
-                            {company.name}
-                          </span>
-                          <div className="flex items-center gap-1.5 text-[10px] text-ellevee-sage">
-                            <span className="font-mono text-ellevee-sage">@{company.slug}</span>
-                            <span>•</span>
-                            <span>{company.cnpj}</span>
+                  return (
+                    <TableRow key={company.id} className="hover:bg-[#FBFBFA] border-b border-ellevee-stone/60">
+                      {/* 1. Empresa: Monograma 32px + Vertical Stack */}
+                      <TableCell className="py-2.5 px-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center font-display font-bold text-xs shrink-0">
+                            {company.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold text-xs text-ellevee-ink truncate leading-tight block">
+                              {company.name}
+                            </span>
+                            <div className="flex items-center gap-1 text-[10px] text-ellevee-sage leading-tight mt-0.5 truncate">
+                              <span className="font-mono text-ellevee-sage/90">@{company.slug}</span>
+                              <span>•</span>
+                              <span className="truncate">{company.cnpj}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </TableCell>
+                      </TableCell>
 
-                    {/* 2. Plano */}
-                    <TableCell>{getPlanBadge(company.plan)}</TableCell>
+                      {/* 2. Plano */}
+                      <TableCell className="py-2.5 px-3">
+                        {getPlanBadge(company.plan)}
+                      </TableCell>
 
-                    {/* 3. Status */}
-                    <TableCell>
-                      {company.status === "Ativo" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]/50">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent ring-1 ring-ellevee-ink/10" />
-                          Ativo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
-                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                          Suspenso
-                        </span>
-                      )}
-                    </TableCell>
-
-                    {/* 4. Consumo com Progress Bar */}
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px] font-medium font-mono">
-                          <span className="text-ellevee-ink">
-                            {(company.messagesUsed / 1000).toFixed(1)}K / {(company.messagesLimit / 1000).toFixed(0)}K msgs
+                      {/* 3. Status */}
+                      <TableCell className="py-2.5 px-3">
+                        {company.status === "Ativo" ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]/50">
+                            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent ring-1 ring-ellevee-ink/10" />
+                            Ativo
                           </span>
-                          <span className={`text-[10px] font-bold ${isNearLimit ? "text-rose-600" : "text-ellevee-sage"}`}>
-                            {usagePercent}%
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            Suspenso
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* 4. Consumo: Line 1 (Msgs • %) + Line 2 (Barra) + Line 3 (Tokens) */}
+                      <TableCell className="py-2.5 px-3">
+                        <div className="space-y-1.5">
+                          {/* Linha 1: 48,5K / 50K msgs • 97% */}
+                          <div className="flex items-center justify-between text-[11px] font-mono leading-none">
+                            <span className="text-ellevee-ink font-medium">
+                              {formatCompactNumber(company.messagesUsed)} / {formatCompactNumber(company.messagesLimit)} msgs
+                            </span>
+                            <span className={usageStatus.textColor}>
+                              {usagePercent}%
+                            </span>
+                          </div>
+
+                          {/* Linha 2: Barra de Progresso com Cor Condicional */}
+                          <div className="w-full bg-[#EAE8E1] h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${usageStatus.barColor}`}
+                              style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                            />
+                          </div>
+
+                          {/* Linha 3: 3,8M / 5M tokens */}
+                          <div className="text-[10px] text-ellevee-sage font-mono leading-none">
+                            {formatCompactNumber(company.tokensUsed)} / {formatCompactNumber(company.tokensLimit)} tokens
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* 5. Agentes */}
+                      <TableCell className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-ellevee-ink font-mono">
+                          <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
+                          <span>
+                            {company.agentsCount} / {company.maxAgents}
                           </span>
                         </div>
-                        <Progress value={usagePercent} />
-                        <div className="flex justify-between text-[9px] text-ellevee-sage font-mono">
-                          <span>{(company.tokensUsed / 1000000).toFixed(1)}M tokens</span>
-                          <span>Cap: {(company.tokensLimit / 1000000).toFixed(1)}M</span>
-                        </div>
-                      </div>
-                    </TableCell>
+                      </TableCell>
 
-                    {/* 5. Agentes */}
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-ellevee-ink font-mono">
-                        <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
-                        <span>
-                          {company.agentsCount} / {company.maxAgents}
+                      {/* 6. Provedor IA */}
+                      <TableCell className="py-2.5 px-3">
+                        {getAiProviderBadge(company.aiProvider)}
+                      </TableCell>
+
+                      {/* 7. Cadastro */}
+                      <TableCell className="py-2.5 px-3">
+                        <span className="text-xs text-ellevee-sage font-mono">
+                          {formatDate(company.createdAt)}
                         </span>
-                      </div>
-                    </TableCell>
+                      </TableCell>
 
-                    {/* 6. Provedor de IA */}
-                    <TableCell>{getAiProviderBadge(company.aiProvider)}</TableCell>
-
-                    {/* 7. Cadastro */}
-                    <TableCell>
-                      <span className="text-xs text-ellevee-sage font-mono">
-                        {formatDate(company.createdAt)}
-                      </span>
-                    </TableCell>
-
-                    {/* 8. Ações */}
-                    <TableCell className="text-right">
-                      <DropdownMenu
-                        trigger={
-                          <button className="h-7 w-7 rounded-md border border-ellevee-stone bg-white text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5] inline-flex items-center justify-center transition-colors">
-                            <MoreVertical className="h-3.5 w-3.5" />
-                          </button>
-                        }
-                      >
-                        <DropdownMenuLabel>Ações da Empresa</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => setActiveCompanyForPlan(company)}>
-                          <Award className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
-                          Editar Plano
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setActiveCompanyForLimits(company)}>
-                          <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
-                          Ajustar Limites
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleImpersonate(company)}>
-                          <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
-                          Acessar como (Impersonate)
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          destructive={company.status === "Ativo"}
-                          onClick={() => setActiveCompanyForStatus(company)}
+                      {/* 8. Ações: Sempre Visível */}
+                      <TableCell className="py-2.5 px-3 text-right">
+                        <DropdownMenu
+                          trigger={
+                            <button className="h-7 w-7 rounded border border-ellevee-stone bg-white text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5] inline-flex items-center justify-center transition-colors">
+                              <MoreVertical className="h-3.5 w-3.5" />
+                            </button>
+                          }
                         >
-                          {company.status === "Ativo" ? (
-                            <>
-                              <Ban className="h-3.5 w-3.5 mr-2" />
-                              Suspender Empresa
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" />
-                              Reativar Empresa
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                )
-              })
-            )}
-          </TableBody>
-        </Table>
+                          <DropdownMenuLabel>Ações da Empresa</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => setActiveCompanyForPlan(company)}>
+                            <Award className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            Editar Plano
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setActiveCompanyForLimits(company)}>
+                            <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            Ajustar Limites
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleImpersonate(company)}>
+                            <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            Acessar como (Impersonate)
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            destructive={company.status === "Ativo"}
+                            onClick={() => setActiveCompanyForStatus(company)}
+                          >
+                            {company.status === "Ativo" ? (
+                              <>
+                                <Ban className="h-3.5 w-3.5 mr-2" />
+                                Suspender Empresa
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" />
+                                Reativar Empresa
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
         {/* Rodapé da Tabela */}
-        <div className="px-6 py-3 border-t border-ellevee-stone bg-[#FBFBFA] flex items-center justify-between text-xs text-ellevee-sage">
+        <div className="px-4 py-2.5 border-t border-ellevee-stone bg-[#FBFBFA] flex items-center justify-between text-xs text-ellevee-sage">
           <span>
             Exibindo <strong className="text-ellevee-ink font-mono">{filtered.length}</strong> de{" "}
             <strong className="text-ellevee-ink font-mono">{companies.length}</strong> organizações

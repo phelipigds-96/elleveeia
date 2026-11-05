@@ -84,8 +84,8 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   return (
     <div className="min-h-screen bg-ellevee-ivory text-ellevee-ink flex antialiased font-sans selection:bg-ellevee-accent selection:text-ellevee-ink">
-      {/* Sidebar Lateral - Deep Ink (#202520) */}
-      <aside className="w-64 bg-ellevee-ink text-white flex flex-col justify-between shrink-0 border-r border-white/5 z-20">
+      {/* Sidebar Lateral - Deep Ink (#202520) com Excelente Contraste */}
+      <aside className="w-64 bg-ellevee-ink text-white flex flex-col justify-between shrink-0 border-r border-white/10 z-20">
         <div>
           {/* Header da Marca: Símbolo minimalista + Ellevee IA + ADMINISTRATION */}
           <div className="h-16 flex items-center px-6 border-b border-white/10 gap-3">
@@ -110,21 +110,21 @@ export default function AdminShell({ children }: AdminShellProps) {
                 <span className="font-display font-bold text-base tracking-tight text-white leading-none">
                   Ellevee IA
                 </span>
-                <span className="text-[9px] font-semibold tracking-wider uppercase text-ellevee-sage bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+                <span className="text-[9px] font-semibold tracking-wider uppercase text-ellevee-accent bg-white/10 border border-white/15 px-1.5 py-0.5 rounded">
                   ADMIN
                 </span>
               </div>
-              <span className="text-[10px] text-ellevee-sage font-medium tracking-tight mt-0.5">
+              <span className="text-[10px] text-[#A6B5A6] font-medium tracking-tight mt-0.5">
                 Plataforma de Governança
               </span>
             </div>
           </div>
 
           {/* Menus Estruturados */}
-          <nav className="p-3.5 space-y-6">
+          <nav className="p-3.5 space-y-5">
             {NAVIGATION_SECTIONS.map((section) => (
               <div key={section.title} className="space-y-1">
-                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-ellevee-sage/70 font-sans">
+                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#A6B5A6] font-sans">
                   {section.title}
                 </div>
                 {section.items.map((item) => {
@@ -135,14 +135,14 @@ export default function AdminShell({ children }: AdminShellProps) {
                     return (
                       <div
                         key={item.name}
-                        className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-white/35 cursor-not-allowed select-none group"
+                        className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-white/45 cursor-not-allowed select-none group"
                       >
                         <div className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 text-white/25" />
+                          <Icon className="h-4 w-4 text-white/35" />
                           <span>{item.name}</span>
                         </div>
                         {item.badge && (
-                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-white/5 text-white/35 border border-white/5">
+                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-white/10 text-white/50 border border-white/10">
                             {item.badge}
                           </span>
                         )}
@@ -156,20 +156,20 @@ export default function AdminShell({ children }: AdminShellProps) {
                       href={item.href}
                       className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-all group ${
                         isActive
-                          ? "bg-white/10 text-white font-semibold shadow-sm shadow-black/20"
-                          : "text-white/70 hover:text-white hover:bg-white/5"
+                          ? "bg-white/15 text-white font-semibold shadow-sm ring-1 ring-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         <Icon 
                           className={`h-4 w-4 transition-colors ${
-                            isActive ? "text-ellevee-accent" : "text-white/50 group-hover:text-white/80"
+                            isActive ? "text-ellevee-accent" : "text-white/60 group-hover:text-white"
                           }`} 
                         />
                         <span>{item.name}</span>
                       </div>
                       {isActive && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent ring-2 ring-ellevee-accent/20" />
                       )}
                     </Link>
                   )
@@ -183,23 +183,23 @@ export default function AdminShell({ children }: AdminShellProps) {
         <div className="p-3.5 border-t border-white/10 bg-black/20 space-y-3">
           {/* Perfil SuperAdmin */}
           <div className="flex items-center gap-2.5 px-2 py-1">
-            <div className="h-8 w-8 rounded-full bg-white/10 border border-white/15 text-white flex items-center justify-center font-display font-bold text-xs shrink-0">
+            <div className="h-8 w-8 rounded-full bg-white/15 border border-white/20 text-white flex items-center justify-center font-display font-bold text-xs shrink-0">
               P
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-semibold text-white truncate">
                 Phelipi
               </span>
-              <span className="text-[10px] text-ellevee-sage truncate">
+              <span className="text-[10px] text-[#A6B5A6] truncate">
                 SuperAdmin Master
               </span>
             </div>
           </div>
 
           {/* Identificação Clara de Ambiente Demo / Simulação */}
-          <div className="px-2 py-1.5 rounded bg-white/5 border border-white/10 flex items-center justify-between text-[10px]">
-            <span className="text-ellevee-sage font-medium">Ambiente:</span>
-            <span className="font-semibold text-ellevee-accent flex items-center gap-1">
+          <div className="px-2.5 py-1.5 rounded bg-white/10 border border-white/15 flex items-center justify-between text-[11px]">
+            <span className="text-[#A6B5A6] font-medium">Ambiente:</span>
+            <span className="font-semibold text-ellevee-accent flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider">
               <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
               SIMULAÇÃO
             </span>
@@ -209,10 +209,10 @@ export default function AdminShell({ children }: AdminShellProps) {
           <div className="pt-1 px-1">
             <Link
               href="/dashboard"
-              className="flex items-center justify-between text-xs text-ellevee-sage hover:text-white transition-colors py-1 group"
+              className="flex items-center justify-between text-xs text-[#A6B5A6] hover:text-white transition-colors py-1 group"
             >
               <span className="text-[11px] font-medium">Voltar ao App</span>
-              <ArrowUpRight className="h-3.5 w-3.5 text-ellevee-sage group-hover:text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <ArrowUpRight className="h-3.5 w-3.5 text-[#A6B5A6] group-hover:text-white transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </Link>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function AdminShell({ children }: AdminShellProps) {
       {/* Área Principal */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar Discreta */}
-        <header className="h-16 bg-white border-b border-ellevee-stone px-8 flex items-center justify-between shrink-0 z-10">
+        <header className="h-16 bg-white border-b border-ellevee-stone px-6 lg:px-8 flex items-center justify-between shrink-0 z-10">
           {/* Breadcrumb da Página Atual */}
           <div className="flex items-center gap-2 text-xs font-medium text-ellevee-sage">
             <span className="hover:text-ellevee-ink transition-colors font-display">Ellevee IA</span>
@@ -269,7 +269,7 @@ export default function AdminShell({ children }: AdminShellProps) {
         </header>
 
         {/* Área de Conteúdo */}
-        <main className="flex-1 p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-6 lg:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
           {children}
         </main>
       </div>
