@@ -44,12 +44,12 @@ export default function CompanyStatusDialog({
   return (
     <Dialog open={open} onClose={onClose} className="max-w-md">
       <DialogHeader>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <div
-            className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+            className={`h-8 w-8 rounded-md flex items-center justify-center border ${
               isSuspending
-                ? "bg-rose-50 border border-rose-200 text-rose-600"
-                : "bg-emerald-50 border border-emerald-200 text-emerald-600"
+                ? "bg-rose-50 border-rose-200 text-rose-600"
+                : "bg-[#F4F8E8] border-[#D5E89B] text-[#3D5215]"
             }`}
           >
             {isSuspending ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -60,8 +60,8 @@ export default function CompanyStatusDialog({
             </DialogTitle>
             <DialogDescription>
               {isSuspending
-                ? `Você está prestes a bloquear o acesso de ${company.name}.`
-                : `Você está reativando as operações de ${company.name}.`}
+                ? `Bloqueio temporário das operações de ${company.name}.`
+                : `Reativação operacional imediata de ${company.name}.`}
             </DialogDescription>
           </div>
         </div>
@@ -69,29 +69,29 @@ export default function CompanyStatusDialog({
 
       <div className="py-4 space-y-3">
         {isSuspending ? (
-          <div className="rounded-lg bg-rose-50 border border-rose-200/80 p-3 text-xs text-rose-900 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="rounded-md bg-stone-50 border border-stone-200 p-3 text-xs text-ellevee-ink flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">Efeito Imediato no Motor Transacional:</p>
-              <p className="mt-1 text-rose-800">
-                O envio e recebimento de mensagens e o ciclo autônomo dos agentes desta empresa serão suspensos no banco via RLS e Server Actions.
+              <p className="font-semibold text-ellevee-ink">Impacto no Motor Transacional:</p>
+              <p className="mt-0.5 text-ellevee-sage">
+                O tráfego de mensagens na outbox e o agendamento de agentes serão suspensos via RLS e Server Actions de forma segura.
               </p>
             </div>
           </div>
         ) : (
-          <p className="text-xs text-slate-600">
-            A empresa terá suas credenciais e agentes reabilitados imediatamente para atendimento e disparos.
+          <p className="text-xs text-ellevee-sage">
+            A empresa terá suas permissões e agentes restabelecidos imediatamente para atendimento e fluxos autônomos.
           </p>
         )}
 
         {isSuspending && (
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Motivo da Suspensão (Registrado em Auditoria)
+            <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+              Justificativa Operacional (Auditoria)
             </label>
             <textarea
-              className="w-full h-20 rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 placeholder:text-slate-400"
-              placeholder="Ex: Inadimplência na fatura, solicitação do cliente ou violação de termos de uso."
+              className="w-full h-20 rounded-md border border-ellevee-stone bg-white p-2.5 text-xs text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink placeholder:text-ellevee-sage/70"
+              placeholder="Ex: Pendência de faturamento, solicitação contratual ou manutenção programada."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -104,14 +104,14 @@ export default function CompanyStatusDialog({
           Cancelar
         </Button>
         <Button
-          variant={isSuspending ? "destructive" : "primary"}
+          variant={isSuspending ? "destructive" : "default"}
           onClick={handleConfirm}
           disabled={isProcessing}
         >
           {isProcessing
             ? "Processando..."
             : isSuspending
-            ? "Confirmar Bloqueio"
+            ? "Confirmar Suspensão"
             : "Reativar Empresa"}
         </Button>
       </DialogFooter>

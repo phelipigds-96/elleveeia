@@ -1,36 +1,68 @@
 "use client"
 
 import React from "react"
-import { Building2, Plus, Users, Zap, ShieldCheck } from "lucide-react"
+import { Building2, Plus, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface CompaniesHeaderProps {
   onCreate: () => void
   totalCount?: number
+  activeCount?: number
+  trialCount?: number
+  suspendedCount?: number
 }
 
-export default function CompaniesHeader({ onCreate, totalCount = 6 }: CompaniesHeaderProps) {
+export default function CompaniesHeader({ 
+  onCreate, 
+  totalCount = 6,
+  activeCount = 5,
+  trialCount = 1,
+  suspendedCount = 1,
+}: CompaniesHeaderProps) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-slate-200/80">
-      <div>
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
-            <Building2 className="h-5 w-5 text-indigo-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Empresas & Tenants</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Gestão da infraestrutura multi-tenant, alocação de planos e limites do motor de IA.
-            </p>
-          </div>
+    <div className="space-y-4 pb-4 border-b border-ellevee-stone">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-ellevee-ink">
+            Empresas
+          </h1>
+          <p className="text-xs text-ellevee-sage mt-1 font-sans">
+            Gerencie organizações, planos, consumo e configurações da plataforma.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button onClick={onCreate} variant="default" size="sm" className="gap-1.5 font-display">
+            <Plus className="h-4 w-4 text-ellevee-accent" />
+            <span>Nova empresa</span>
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button onClick={onCreate} variant="primary" className="shadow-sm">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Nova Empresa
-        </Button>
+      {/* Indicadores Compactos de Status (Quiet Technology) */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white border border-ellevee-stone text-xs">
+          <span className="text-ellevee-sage font-medium">Total:</span>
+          <span className="font-mono font-bold text-ellevee-ink">{totalCount}</span>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white border border-ellevee-stone text-xs">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="text-ellevee-sage font-medium">Ativas:</span>
+          <span className="font-mono font-bold text-ellevee-ink">{activeCount}</span>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white border border-ellevee-stone text-xs">
+          <span className="h-2 w-2 rounded-full bg-ellevee-accent ring-1 ring-ellevee-ink/10" />
+          <span className="text-ellevee-sage font-medium">Trial:</span>
+          <span className="font-mono font-bold text-ellevee-ink">{trialCount}</span>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white border border-ellevee-stone text-xs">
+          <span className="h-2 w-2 rounded-full bg-rose-400" />
+          <span className="text-ellevee-sage font-medium">Suspensas:</span>
+          <span className="font-mono font-bold text-ellevee-ink">{suspendedCount}</span>
+        </div>
       </div>
     </div>
   )

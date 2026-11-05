@@ -18,6 +18,10 @@ const config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['var(--font-inter)', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['var(--font-manrope)', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -52,11 +56,24 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Paleta Oficial Ellevee IA (Quiet Technology / Premium Corporate)
+        ellevee: {
+          ivory: "#F3F2ED",
+          ink: "#202520",
+          white: "#FFFFFF",
+          sage: "#718071",
+          accent: "#B7D957",
+          stone: "#E7E6E0",
+          "stone-subtle": "#F8F8F5",
+          "ink-muted": "#3A403A",
+          "sage-light": "#EEF1EE",
+          "accent-muted": "#E5F2BF",
+        },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "8px",
+        md: "6px",
+        sm: "4px",
       },
       keyframes: {
         "accordion-down": {
