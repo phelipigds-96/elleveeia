@@ -1,12 +1,14 @@
 "use client"
 
 import React, { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
-import { Building2, CheckCircle2, Shield } from "lucide-react"
+import { Building2, CheckCircle2, Shield, AlertCircle } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
+import { createCompanyAction } from "@/app/(admin)/companies/actions"
 
 interface CompanyFormProps {
   open: boolean
@@ -15,6 +17,7 @@ interface CompanyFormProps {
 }
 
 export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps) {
+  const router = useRouter()
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [cnpj, setCnpj] = useState("")
@@ -22,6 +25,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
   const [plan, setPlan] = useState<"Trial" | "Starter" | "Pro" | "Enterprise">("Pro")
   const [aiProvider, setAiProvider] = useState<"openai" | "gemini" | "hybrid">("openai")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   // Auto-slug generation from name
@@ -34,36 +38,48 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "")
     setSlug(generated)
+    if (errorMessage) setErrorMessage(null)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
 
     setIsSubmitting(true)
+    setErrorMessage(null)
 
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setSuccess(true)
-
-      const created: Partial<CompanyMock> = {
+    try {
+      const res = await createCompanyAction({
         name,
-        slug: slug || "empresa-nova",
-        cnpj: cnpj || "00.000.000/0001-00",
-        adminEmail: adminEmail || "admin@tenant.local",
+        slug,
         plan,
         aiProvider,
-        status: "Ativo",
-        messagesUsed: 0,
-        messagesLimit: plan === "Trial" ? 1000 : plan === "Starter" ? 5000 : plan === "Pro" ? 25000 : 100000,
-        tokensUsed: 0,
-        tokensLimit: plan === "Trial" ? 100000 : plan === "Starter" ? 500000 : plan === "Pro" ? 2000000 : 10000000,
-        agentsCount: 1,
-        maxAgents: plan === "Trial" ? 1 : plan === "Starter" ? 2 : plan === "Pro" ? 5 : 15,
-        createdAt: new Date().toISOString().split("T")[0],
+        cnpj,
+        adminEmail,
+      })
+
+      if (!res.success) {
+        setErrorMessage(res.error || "Falha ao provisionar a empresa.")
+        setIsSubmitting(false)
+        return
       }
 
-      if (onSave) onSave(created)
+      setSuccess(true)
+      setIsSubmitting(false)
+
+      if (onSave) {
+        onSave({
+          id: res.data?.id,
+          name,
+          slug: res.data?.slug || slug,
+          plan,
+          status: "Ativo",
+          aiProvider,
+          createdAt: new Date().toISOString().split("T")[0],
+        })
+      }
+
+      router.refresh()
 
       setTimeout(() => {
         setSuccess(false)
@@ -71,9 +87,13 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         setSlug("")
         setCnpj("")
         setAdminEmail("")
+        setErrorMessage(null)
         onClose()
-      }, 900)
-    }, 600)
+      }, 1000)
+    } catch (err: any) {
+      setErrorMessage(err.message || "Erro inesperado ao conectar ao servidor.")
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -87,11 +107,18 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
             <div>
               <DialogTitle>Nova Empresa / Tenant</DialogTitle>
               <DialogDescription>
-                Provisione uma nova organização com isolamento de dados e limites.
+                Provisione uma nova organização com isolamento de dados e limites no banco.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
+
+        {errorMessage && (
+          <div className="mt-3 p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 animate-in fade-in">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {success ? (
           <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
@@ -99,7 +126,9 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <h4 className="font-display text-base font-bold text-ellevee-ink">Empresa Provisionada com Sucesso</h4>
-            <p className="text-xs text-ellevee-sage">As políticas RLS e quotas da nova organização foram estabelecidas.</p>
+            <p className="text-xs text-ellevee-sage">
+              O tenant e suas quotas em <code className="font-mono text-ellevee-ink">company_limits</code> foram gravados no Supabase.
+            </p>
           </div>
         ) : (
           <div className="space-y-4 py-4">
@@ -124,11 +153,14 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                 <Input
                   placeholder="alfa-logistica"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
+                  onChange={(e) => {
+                    setSlug(e.target.value)
+                    if (errorMessage) setErrorMessage(null)
+                  }}
                   required
                   className="font-mono text-xs"
                 />
-                <span className="text-[10px] text-ellevee-sage font-mono">Identificador no isolamento RLS.</span>
+                <span className="text-[10px] text-ellevee-sage font-mono">Identificador único no banco de dados.</span>
               </div>
 
               <div>
@@ -191,7 +223,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
             <div className="rounded-md bg-[#FBFBFA] border border-ellevee-stone p-3 flex items-start gap-2 text-xs text-ellevee-ink">
               <Shield className="h-4 w-4 text-ellevee-sage shrink-0 mt-0.5" />
               <p className="text-[11px] text-ellevee-sage">
-                A infraestrutura alocará automaticamente os registros na tabela de limites com isolamento criptográfico por tenant.
+                A criação é atômica no Supabase: vincula limites padrão em <code className="font-mono text-ellevee-ink">company_limits</code> e gera trilha de auditoria.
               </p>
             </div>
           </div>
