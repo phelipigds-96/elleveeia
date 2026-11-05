@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { validateWebhookPayload } from '@/lib/validations/webhook'
-import { processWebhookEvent, handleAutonomousCycle, type AutonomousCycleResult } from '@/lib/services/message-engine'
+import { validateWebhookPayload, validateWebhookStatusPayload } from '@/lib/validations/webhook'
+import { processWebhookEvent, handleAutonomousCycle, updateMessageDeliveryStatus, type AutonomousCycleResult } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 
@@ -84,6 +84,23 @@ export async function POST(request: Request) {
       body = await request.json()
     } catch {
       return NextResponse.json({ error: 'Formato de Payload invalido' }, { status: 400 })
+    }
+
+    // Suporte unificado a Callbacks de Status no endpoint principal de mensagens
+    if (body?.event_type === 'message.status') {
+      if (!validateWebhookStatusPayload(body)) {
+        return NextResponse.json({ error: 'Estrutura de status callback invalida' }, { status: 400 })
+      }
+      const statusRes = await updateMessageDeliveryStatus(companyId, {
+        messageId: body.message_id,
+        providerMessageId: body.provider_message_id,
+        status: body.status,
+        timestamp: body.timestamp,
+        error: body.error,
+        adminClient: supabase
+      })
+      console.log(`[Webhook Status req:${requestId}] company:${companyId} event:${body.event_id} status:${body.status} updated:${statusRes.updated} - ${Date.now() - startTime}ms`)
+      return NextResponse.json(statusRes, { status: 200 })
     }
 
     if (!validateWebhookPayload(body)) {

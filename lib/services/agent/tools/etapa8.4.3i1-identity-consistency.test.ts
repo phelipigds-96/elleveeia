@@ -446,8 +446,13 @@ describe('ETAPA 8.4.3I.1 — Verificação de Segurança da Identidade e Consist
     // O gateway disparou apenas uma vez
     assert.equal(fetchCallCount, initialFetchCount + 1)
 
-    // Nenhuma linha foi criada na outbox para retry automático desse envio manual
-    assert.equal(inMemoryDb.message_outbox.size, initialOutboxSize)
+    // Na arquitetura transacional, exatamente 1 linha é criada na outbox com chave manual
+    assert.equal(inMemoryDb.message_outbox.size, initialOutboxSize + 1)
+    const outboxEntries = Array.from(inMemoryDb.message_outbox.values()).filter(
+      (o: any) => o.conversation_id === CONV_ACTIVE_ID
+    )
+    assert.ok(outboxEntries.length > 0)
+    assert.ok(outboxEntries[outboxEntries.length - 1].idempotency_key.startsWith('manual-'))
   })
 
   test('9. A mensagem e o identificador ficam disponíveis para reconciliação', async () => {

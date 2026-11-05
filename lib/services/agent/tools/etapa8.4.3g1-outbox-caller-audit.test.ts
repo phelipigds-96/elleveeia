@@ -393,9 +393,11 @@ describe('ETAPA 8.4.3G.1 — Correção de Persistência da Outbox e Auditoria d
     assert.ok(res.error, 'O erro deve ser retornado explicitamente')
     assert.match(res.error, /Gateway Timeout|504/i)
 
+    // Na arquitetura de resiliência (Etapas E.4/E.5), falhas ambíguas de rede (HTTP 504)
+    // NÃO são marcadas precipitadamente como failed, permanecendo em processing com lease para o Worker
     const outboxRecord = inMemoryDb.message_outbox.get(OUTBOX_ACTIVE_ID)
-    assert.equal(outboxRecord.status, 'failed')
-    assert.match(outboxRecord.last_error, /Gateway Timeout|504/i)
+    assert.equal(outboxRecord.status, 'processing')
+    assert.ok(new Date(outboxRecord.locked_until).getTime() > Date.now(), 'Lease deve estar ativo para o worker reconciliar')
   })
 
   // =========================================================================

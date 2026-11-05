@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export interface WebhookPayload {
   event_id: string
   event_type: string
@@ -21,7 +23,7 @@ export interface WebhookPayload {
   metadata?: Record<string, any>
 }
 
-// Uma forma robusta de validação de payload sem precisar instalar pacotes complexos (como Zod) nesta fase
+// Validação robusta de payload de mensagem inbound
 export function validateWebhookPayload(payload: any): payload is WebhookPayload {
   if (!payload || typeof payload !== 'object') return false
 
@@ -47,10 +49,43 @@ export function validateWebhookPayload(payload: any): payload is WebhookPayload 
     if (typeof payload.message.created_at !== 'string') return false
     const parsedTime = Date.parse(payload.message.created_at)
     if (isNaN(parsedTime)) return false
-    // Tolerância temporal razoável para fusos horários internacionais (UTC+14) e jitter: máx. 48 horas no futuro
     const maxFutureMs = Date.now() + 48 * 60 * 60 * 1000
     if (parsedTime > maxFutureMs) return false
   }
 
   return true
+}
+
+// ==============================================================================
+// SCHEMA E VALIDAÇÃO DE CALLBACKS DE STATUS (FASE 1)
+// ==============================================================================
+
+export const DELIVERY_STATUSES = ['pending', 'sent', 'delivered', 'read', 'failed'] as const
+export type DeliveryStatus = typeof DELIVERY_STATUSES[number]
+
+export const webhookStatusSchema = z.object({
+  event_id: z.string().min(1, 'event_id é obrigatório'),
+  event_type: z.literal('message.status'),
+  channel: z.string().optional().default('whatsapp'),
+  message_id: z.string().optional(),
+  provider_message_id: z.string().optional(),
+  recipient_phone: z.string().optional(),
+  status: z.enum(DELIVERY_STATUSES, {
+    errorMap: () => ({ message: `Status inválido. Permitidos: ${DELIVERY_STATUSES.join(', ')}` })
+  }),
+  timestamp: z.string().optional(),
+  error: z.string().optional(),
+  metadata: z.record(z.any()).optional()
+}).refine(
+  data => Boolean((data.message_id && data.message_id.trim() !== '') || (data.provider_message_id && data.provider_message_id.trim() !== '')),
+  {
+    message: 'Pelo menos um identificador (message_id ou provider_message_id) deve ser informado.'
+  }
+)
+
+export type WebhookStatusPayload = z.infer<typeof webhookStatusSchema>
+
+export function validateWebhookStatusPayload(payload: any): payload is WebhookStatusPayload {
+  const result = webhookStatusSchema.safeParse(payload)
+  return result.success
 }

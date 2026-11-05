@@ -454,7 +454,7 @@ test.describe('ETAPA 8.4.3P.4 — Desvinculação Atômica Pré-Exclusão e Recu
   test('12. [ESTÁTICO] Migration 20261104_conversation_workflow_tenant_integrity não usa pg_trigger_depth e possui BEFORE DELETE', () => {
     const filePath = path.resolve(
       process.cwd(),
-      'supabase/migrations/20261104_conversation_workflow_tenant_integrity.sql'
+      'supabase/migrations/2026110401_conversation_workflow_tenant_integrity.sql'
     )
     assert.ok(fs.existsSync(filePath), 'Arquivo de migration deve existir')
     const sql = fs.readFileSync(filePath, 'utf8')

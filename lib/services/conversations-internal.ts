@@ -46,6 +46,7 @@ export type SendMessageResult =
 export interface SendMessageInternalContext {
   userId: string
   companyId: string
+  clientMessageId?: string
   supabaseClient?: any
   adminClient?: any
 }
@@ -71,7 +72,7 @@ export async function sendManualMessageInternal(
     }
   }
 
-  const { userId, companyId } = context
+  const { userId, companyId, clientMessageId } = context
   if (!userId) {
     return {
       success: false,
@@ -92,7 +93,7 @@ export async function sendManualMessageInternal(
     }
   }
 
-  const supabase = context.supabaseClient || createClient()
+  const supabase = context.supabaseClient || context.adminClient || createClient()
   const adminClient = context.adminClient || supabase
 
   // 1. Validar que a conversa existe e pertence a esta empresa (Prevenção Cross-Tenant)
@@ -114,7 +115,7 @@ export async function sendManualMessageInternal(
   }
 
   // 2. Validação central do ciclo de vida do tenant (Fail-closed)
-  // DEVE ocorrer ANTES de qualquer persistência em 'messages'
+  // DEVE ocorrer ANTES de qualquer persistência em 'messages' ou 'message_outbox'
   try {
     await requireActiveCompany(companyId, { adminClient })
   } catch (err: any) {
@@ -150,24 +151,40 @@ export async function sendManualMessageInternal(
     }
   }
 
-  // 3. Persistência local da mensagem com delivery_status: 'pending'
-  const { data: message, error: insertError } = await supabase
-    .from('messages')
-    .insert({
-      company_id: companyId,
-      conversation_id: conversationId,
-      sender_type: 'human',
-      sender_id: userId,
-      content: content.trim(),
-      message_type: 'text',
-      metadata: { delivery_status: 'pending' }
-    })
-    .select()
-    .single()
+  // 3. Montagem da chave de idempotência contra cliques duplos
+  const safeClientMsgId = clientMessageId?.trim()
+  const idempotencyKey = safeClientMsgId
+    ? `manual-${conversationId}-${safeClientMsgId}`
+    : `manual-${conversationId}-${crypto.randomUUID()}`
 
-  if (insertError || !message) {
-    console.error('[sendMessageInternal] Erro ao persistir mensagem antes do envio externo:', insertError)
-    // O gateway NUNCA deve ser chamado se a persistência falhar
+  // 4. Criação atômica simultânea de 'messages' e 'message_outbox' via RPC
+  let messageId: string
+  let outboxId: string
+  let isDuplicate = false
+
+  const rpcClient = typeof (context.supabaseClient as any)?.rpc === 'function'
+    ? context.supabaseClient
+    : (typeof (adminClient as any)?.rpc === 'function' ? adminClient : (typeof (supabase as any)?.rpc === 'function' ? supabase : null))
+
+  if (!rpcClient) {
+    throw new Error('RPC_CLIENT_UNAVAILABLE: Operações devem passar estritamente pela outbox transacional.')
+  }
+
+  const { data: createData, error: createError } = await (rpcClient as any).rpc('create_outbound_message_atomic', {
+    p_company_id: companyId,
+    p_conversation_id: conversationId,
+    p_sender_type: 'human',
+    p_content: content.trim(),
+    p_idempotency_key: idempotencyKey,
+    p_sender_id: userId,
+    p_message_type: 'text',
+    p_metadata: { delivery_status: 'pending' },
+    p_channel: conv.channel || 'whatsapp',
+    p_recipient: conv.customers?.phone || null
+  })
+
+  if (createError) {
+    console.error('[sendMessageInternal] Erro ao invocar create_outbound_message_atomic:', createError)
     return {
       success: false,
       error: 'Erro ao registrar a mensagem no banco de dados.',
@@ -177,11 +194,109 @@ export async function sendManualMessageInternal(
     }
   }
 
-  // 4. Disparo externo via gateway de saída
-  const { sendOutboundMessage } = await import('@/lib/services/n8n-internal')
+  const row = Array.isArray(createData) ? createData[0] : createData
+  if (!row || (!row.was_inserted && !row.duplicate)) {
+    const reason = row?.error_reason || 'Erro na criação atômica'
+    if (reason.startsWith('company_not_active')) {
+      const fallbackMsgId = row?.message_id
+      if (fallbackMsgId) {
+        try {
+          await (adminClient as any).from('messages').update({
+            metadata: { delivery_status: 'suppressed', suppressed_reason: 'tenant_blocked' }
+          }).eq('id', fallbackMsgId)
+        } catch {}
+      }
+      return {
+        success: false,
+        error: 'Envio bloqueado: a empresa não está autorizada a realizar disparos externos.',
+        code: 'TENANT_BLOCKED',
+        reason: 'tenant_blocked',
+        gatewayDispatched: false,
+        externalDeliveryConfirmed: false,
+        message: {
+          id: fallbackMsgId,
+          company_id: companyId,
+          conversation_id: conversationId,
+          sender_type: 'human',
+          sender_id: userId,
+          content: content.trim(),
+          metadata: {
+            delivery_status: 'suppressed',
+            suppressed_reason: 'tenant_blocked'
+          }
+        }
+      }
+    }
+    if (reason === 'conversation_not_found' || reason === 'conversation_tenant_mismatch') {
+      return {
+        success: false,
+        error: 'Conversa não encontrada ou não pertence a esta empresa.',
+        code: 'CONVERSATION_NOT_FOUND',
+        gatewayDispatched: false,
+        externalDeliveryConfirmed: false
+      }
+    }
+    return {
+      success: false,
+      error: 'Erro ao registrar a mensagem no banco de dados.',
+      reason,
+      code: 'DB_INSERT_FAILED',
+      gatewayDispatched: false,
+      externalDeliveryConfirmed: false
+    }
+  }
+
+  messageId = row.message_id
+  outboxId = row.outbox_id
+  isDuplicate = !!row.duplicate
+
+  // 5. Tratamento de Duplicação (Duplo-clique no frontend): retorna a mensagem sem chamar a rede
+  if (isDuplicate) {
+    const { data: existingMsg } = await (adminClient as any)
+      .from('messages')
+      .select('*')
+      .eq('id', messageId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    const deliveryStatus = existingMsg?.metadata?.delivery_status || 'sent'
+    return {
+      success: true,
+      gatewayDispatched: true,
+      externalDeliveryConfirmed: true,
+      persistedStatus: deliveryStatus === 'sent' ? 'sent' : 'pending',
+      message: existingMsg || {
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
+        metadata: { delivery_status: deliveryStatus }
+      }
+    }
+  }
+
+  // 6. Claim da mensagem na outbox via claim_outbox_message
+  const leaseSeconds = 120
+  let claim: any = null
+  if (rpcClient) {
+    const { data: claimData, error: claimErr } = await (rpcClient as any).rpc('claim_outbox_message', {
+      p_company_id: companyId,
+      p_outbox_id: outboxId,
+      p_lease_seconds: leaseSeconds
+    })
+    if (!claimErr && claimData) {
+      claim = Array.isArray(claimData) ? claimData[0] : claimData
+    }
+  }
+
+  // 7. Disparo externo via gateway de saída com Gateway Lock e Fencing
+  const { sendOutboundMessage, isAmbiguousNetworkError } = await import('@/lib/services/n8n-internal')
 
   const outboundPayload = {
-    event_id: `outbound-${message.id}`,
+    event_id: idempotencyKey,
     event_type: 'message.send',
     channel: conv.channel || 'whatsapp',
     conversation_id: conversationId,
@@ -193,44 +308,81 @@ export async function sendManualMessageInternal(
       message_type: 'text'
     },
     metadata: {
-      message_id: message.id
+      message_id: messageId,
+      sender_type: 'human'
     }
   }
 
   let outboundRes: any
   try {
     outboundRes = await sendOutboundMessage(companyId, outboundPayload, {
-      adminClient
+      adminClient,
+      outboxId,
+      messageId,
+      leaseSeconds
     })
   } catch (dispErr: any) {
     console.error('[sendMessageInternal] Exceção inesperada no gateway de saída:', dispErr)
     outboundRes = { success: false, error: dispErr.message || 'Exceção no gateway de saída' }
   }
 
-  // 5. Avaliação do retorno do gateway
+  // 8. Avaliação do resultado com tratamento de Ambíguo vs Determinístico
+
+  // 8.1. Falha de rede ambígua (Timeout, AbortError, ECONNRESET): abandona lock e preserva outbox em processing
+  const isAmbiguous = isAmbiguousNetworkError(outboundRes?.error || outboundRes?.reason)
+  if (isAmbiguous) {
+    console.warn(`[sendMessageInternal] Timeout ou falha de rede ambígua para outbox ${outboxId}. Mantendo outbox como processing para reconciliação pelo worker.`)
+    return {
+      success: false,
+      error: outboundRes?.error || 'Timeout no gateway de saída',
+      code: 'OUTBOUND_DISPATCH_FAILED',
+      reason: 'gateway_timeout',
+      gatewayDispatched: false,
+      externalDeliveryConfirmed: false,
+      message: {
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
+        metadata: { delivery_status: 'pending' }
+      }
+    }
+  }
+
+  // 8.2. Falha determinística (HTTP 4xx, 500 nítido, tenant_blocked)
   if (!outboundRes || !outboundRes.success) {
     const isTenantBlocked = outboundRes?.reason === 'tenant_blocked'
     const newStatus = isTenantBlocked ? 'suppressed' : 'failed'
+    const finalError = outboundRes?.error || outboundRes?.reason || 'Falha no envio outbound'
 
-    try {
-      const { error: updateMsgErr } = await supabase
-        .from('messages')
-        .update({
-          metadata: {
-            ...(message.metadata || {}),
-            delivery_status: newStatus,
-            suppressed_reason: outboundRes?.reason,
-            dispatch_error: outboundRes?.error
-          }
+    if (rpcClient) {
+      // Atualiza metadata de forma atômica e monotônica
+      await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
+        p_company_id: companyId,
+        p_message_id: messageId,
+        p_metadata_patch: {
+          delivery_status: newStatus,
+          suppressed_reason: outboundRes?.reason,
+          dispatch_error: finalError
+        },
+        p_provider_message_id: null
+      })
+
+      // Conclui outbox como failed/suppressed
+      if (claim?.claim_token && claim?.claim_version) {
+        await (rpcClient as any).rpc('complete_outbox_message', {
+          p_company_id: companyId,
+          p_outbox_id: outboxId,
+          p_claim_token: claim.claim_token,
+          p_claim_version: claim.claim_version,
+          p_status: newStatus,
+          p_last_error: finalError,
+          p_provider_message_id: null
         })
-        .eq('id', message.id)
-        .eq('company_id', companyId)
-
-      if (updateMsgErr) {
-        console.error('[sendMessageInternal] Falha ao atualizar metadata da mensagem após insucesso no gateway:', updateMsgErr)
       }
-    } catch (updateEx: any) {
-      console.error('[sendMessageInternal] Exceção ao atualizar metadata da mensagem após insucesso no gateway:', updateEx)
     }
 
     return {
@@ -243,59 +395,66 @@ export async function sendManualMessageInternal(
       gatewayDispatched: false,
       externalDeliveryConfirmed: false,
       message: {
-        ...message,
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
         metadata: {
-          ...(message.metadata || {}),
-          delivery_status: newStatus
+          delivery_status: newStatus,
+          suppressed_reason: outboundRes?.reason,
+          dispatch_error: finalError
         }
       }
     }
   }
 
-  // 6. Disparo aceito pelo gateway externo: atualizar delivery_status para 'sent' e last_message_at
+  // 8.3. Sucesso: Conclui outbox como sent e consolida metadata via merge_message_metadata_monotonic
+  const providerMessageId = (outboundRes as any).provider_message_id || null
+
   let msgStatusErr: any = null
-  let convUpdateErr: any = null
 
-  try {
-    const { error } = await supabase
-      .from('messages')
-      .update({
-        metadata: {
-          ...(message.metadata || {}),
-          delivery_status: 'sent'
-        }
+  if (rpcClient) {
+    try {
+      if (claim?.claim_token && claim?.claim_version) {
+        await (rpcClient as any).rpc('complete_outbox_message', {
+          p_company_id: companyId,
+          p_outbox_id: outboxId,
+          p_claim_token: claim.claim_token,
+          p_claim_version: claim.claim_version,
+          p_status: 'sent',
+          p_last_error: null,
+          p_provider_message_id: providerMessageId
+        })
+      }
+
+      const { error: mergeErr } = await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
+        p_company_id: companyId,
+        p_message_id: messageId,
+        p_metadata_patch: {
+          delivery_status: 'sent',
+          ...(providerMessageId ? { provider_message_id: providerMessageId } : {})
+        },
+        p_provider_message_id: providerMessageId
       })
-      .eq('id', message.id)
-      .eq('company_id', companyId)
-    msgStatusErr = error || null
-  } catch (err: any) {
-    msgStatusErr = err
+      if (mergeErr) msgStatusErr = mergeErr
+    } catch (err: any) {
+      msgStatusErr = err
+    }
   }
 
-  try {
-    const { error } = await supabase
-      .from('conversations')
-      .update({ last_message_at: new Date().toISOString() })
-      .eq('id', conversationId)
-      .eq('company_id', companyId)
-    convUpdateErr = error || null
-  } catch (err: any) {
-    convUpdateErr = err
-  }
-
-  try {
-    revalidatePath('/conversations')
-  } catch {
-    // Silencia em ambiente de testes ou contextos sem NextRequest ativo
-  }
-
-  // Se a atualização local falhou mas o envio foi aceito pelo gateway:
-  // - NÃO afirmamos que o envio externo falhou ou foi revertido
-  // - NÃO apresentamos a persistência local como 'sent' quando ela falhou
-  // - Retornamos gatewayDispatched: true e persistedStatus: 'pending'
-  // - Preservamos message.id para permitir reconciliação administrativa posterior
   if (msgStatusErr) {
     console.error('[sendMessageInternal] INCONSISTENCY: Mensagem externa aceita pelo gateway, mas falhou ao atualizar delivery_status para sent no banco:', msgStatusErr)
+    try {
+      const msgRecord = await (adminClient as any).from('messages').select('metadata').eq('id', messageId).single()
+      if (msgRecord?.data) {
+        await (adminClient as any).from('messages').update({
+          metadata: { ...(msgRecord.data.metadata || {}), delivery_status: 'pending' }
+        }).eq('id', messageId)
+      }
+    } catch {}
     return {
       success: true,
       gatewayDispatched: true,
@@ -304,17 +463,52 @@ export async function sendManualMessageInternal(
       inconsistency: true,
       warning: 'Mensagem transmitida ao gateway externo com sucesso, mas a confirmação local no banco de dados falhou. A mensagem foi preservada como pendente para reconciliação.',
       message: {
-        ...message,
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
         metadata: {
-          ...(message.metadata || {}),
-          delivery_status: 'pending' // Mantém o status real persistido no banco
+          delivery_status: 'pending'
         }
       }
     }
   }
 
-  if (convUpdateErr) {
-    console.error('[sendMessageInternal] INCONSISTENCY: Mensagem transmitida ao gateway, mas falhou ao atualizar last_message_at da conversa:', convUpdateErr)
+  try {
+    await adminClient
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conversationId)
+      .eq('company_id', companyId)
+  } catch {}
+
+  try {
+    revalidatePath('/conversations')
+  } catch {}
+
+  // Consulta registro final da mensagem
+  const { data: finalMsg } = await adminClient
+    .from('messages')
+    .select('*')
+    .eq('id', messageId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  const retMsg = finalMsg || {
+    id: messageId,
+    company_id: companyId,
+    conversation_id: conversationId,
+    sender_type: 'human',
+    sender_id: userId,
+    content: content.trim(),
+    message_type: 'text',
+    metadata: {
+      delivery_status: 'sent',
+      ...(providerMessageId ? { provider_message_id: providerMessageId } : {})
+    }
   }
 
   return {
@@ -323,12 +517,6 @@ export async function sendManualMessageInternal(
     externalDeliveryConfirmed: true,
     persistedStatus: 'sent',
     inconsistency: false,
-    message: {
-      ...message,
-      metadata: {
-        ...(message.metadata || {}),
-        delivery_status: 'sent'
-      }
-    }
+    message: retMsg
   }
 }

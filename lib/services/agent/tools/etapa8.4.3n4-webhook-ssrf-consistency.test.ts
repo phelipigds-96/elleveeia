@@ -57,8 +57,8 @@ test.describe('ETAPA 8.4.3N.4 — Correções Finais de Consistência do Webhook
   // =========================================================================
   test.describe('1. Unicidade Estrutural e Mecânica de Rotação', () => {
     test('1.1. Arquivo de migration local existe com DDL de deduplicação, índice parcial e RPC', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
-      assert.ok(fs.existsSync(migrationPath), 'Migration 20261103_api_keys_webhook_uniqueness.sql deve existir')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
+      assert.ok(fs.existsSync(migrationPath), 'Migration 2026110301_api_keys_webhook_uniqueness.sql deve existir')
 
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
 
