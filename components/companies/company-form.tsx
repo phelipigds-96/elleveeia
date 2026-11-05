@@ -5,7 +5,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
-import { Building2, Sparkles, CheckCircle2 } from "lucide-react"
+import { Building2, CheckCircle2, Shield } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
 
 interface CompanyFormProps {
@@ -80,14 +80,14 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
     <Dialog open={open} onClose={onClose} className="max-w-lg">
       <form onSubmit={handleSubmit}>
         <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center">
               <Building2 className="h-4 w-4" />
             </div>
             <div>
               <DialogTitle>Nova Empresa / Tenant</DialogTitle>
               <DialogDescription>
-                Cadastre um novo cliente com provisionamento automático de limites.
+                Provisione uma nova organização com isolamento de dados e limites.
               </DialogDescription>
             </div>
           </div>
@@ -95,69 +95,71 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
         {success ? (
           <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
-            <div className="h-12 w-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center animate-in zoom-in">
+            <div className="h-12 w-12 rounded-full bg-[#F4F8E8] border border-[#D5E89B] text-[#3D5215] flex items-center justify-center animate-in zoom-in">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h4 className="text-base font-bold text-slate-800">Empresa Cadastrada com Sucesso!</h4>
-            <p className="text-xs text-slate-500">O novo tenant foi provisionado na infraestrutura multi-tenant.</p>
+            <h4 className="font-display text-base font-bold text-ellevee-ink">Empresa Provisionada com Sucesso</h4>
+            <p className="text-xs text-ellevee-sage">As políticas RLS e quotas da nova organização foram estabelecidas.</p>
           </div>
         ) : (
           <div className="space-y-4 py-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ellevee-ink mb-1">
                 Nome da Empresa <span className="text-rose-500">*</span>
               </label>
               <Input
-                placeholder="Ex: Acme Tecnologia Ltda"
+                placeholder="Ex: Alfa Logística Corporativa Ltda"
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
                 required
+                className="text-xs"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
                   Slug do Tenant (Identificador Único)
                 </label>
-                <div className="relative">
-                  <Input
-                    placeholder="acme-tecnologia"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    required
-                  />
-                </div>
-                <span className="text-[10px] text-slate-400">Usado no subdomínio e isolamento RLS.</span>
+                <Input
+                  placeholder="alfa-logistica"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  required
+                  className="font-mono text-xs"
+                />
+                <span className="text-[10px] text-ellevee-sage font-mono">Identificador no isolamento RLS.</span>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  CNPJ / Documento
+                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                  CNPJ / Documento Fiscal
                 </label>
                 <Input
                   placeholder="00.000.000/0001-00"
                   value={cnpj}
                   onChange={(e) => setCnpj(e.target.value)}
+                  className="font-mono text-xs"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ellevee-ink mb-1">
                 Email do Administrador Responsável
               </label>
               <Input
                 type="email"
-                placeholder="admin@empresa.com.br"
+                placeholder="admin@organizacao.com.br"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
+                className="text-xs"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
                   Plano Contratado
                 </label>
                 <Select
@@ -167,12 +169,12 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                   <option value="Trial">Trial (1K msgs · 1 Agente)</option>
                   <option value="Starter">Starter (5K msgs · 2 Agentes)</option>
                   <option value="Pro">Pro (25K msgs · 5 Agentes)</option>
-                  <option value="Enterprise">Enterprise (100K msgs · 15 Agentes)</option>
+                  <option value="Enterprise">Enterprise (100K msgs · 15+ Agentes)</option>
                 </Select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
                   Provedor de IA Padrão
                 </label>
                 <Select
@@ -186,10 +188,10 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
               </div>
             </div>
 
-            <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 p-3 flex items-start gap-2 text-xs text-indigo-900">
-              <Sparkles className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-              <p>
-                Os limites de tokens e mensagens serão associados automaticamente à tabela <code className="font-mono text-indigo-700">company_limits</code> do tenant.
+            <div className="rounded-md bg-[#FBFBFA] border border-ellevee-stone p-3 flex items-start gap-2 text-xs text-ellevee-ink">
+              <Shield className="h-4 w-4 text-ellevee-sage shrink-0 mt-0.5" />
+              <p className="text-[11px] text-ellevee-sage">
+                A infraestrutura alocará automaticamente os registros na tabela de limites com isolamento criptográfico por tenant.
               </p>
             </div>
           </div>
@@ -200,7 +202,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" disabled={isSubmitting || !name.trim()}>
+            <Button type="submit" variant="default" disabled={isSubmitting || !name.trim()}>
               {isSubmitting ? "Provisionando..." : "Criar Empresa"}
             </Button>
           </DialogFooter>

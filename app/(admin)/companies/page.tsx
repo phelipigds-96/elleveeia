@@ -35,9 +35,19 @@ export default function CompaniesPage() {
     setCompanies((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
   }
 
+  const activeCount = companies.filter((c) => c.status === "Ativo").length
+  const trialCount = companies.filter((c) => c.plan === "Trial").length
+  const suspendedCount = companies.filter((c) => c.status === "Suspenso").length
+
   return (
     <div className="space-y-6">
-      <CompaniesHeader onCreate={() => setOpenCreate(true)} totalCount={companies.length} />
+      <CompaniesHeader 
+        onCreate={() => setOpenCreate(true)} 
+        totalCount={companies.length}
+        activeCount={activeCount}
+        trialCount={trialCount}
+        suspendedCount={suspendedCount}
+      />
       <CompaniesTable companies={companies} onUpdateCompany={handleUpdateCompany} />
       <CompanyForm
         open={openCreate}

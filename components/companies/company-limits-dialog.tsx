@@ -60,14 +60,14 @@ export default function CompanyLimitsDialog({
   return (
     <Dialog open={open} onClose={onClose} className="max-w-lg">
       <DialogHeader>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center">
             <Sliders className="h-4 w-4" />
           </div>
           <div>
             <DialogTitle>Ajustar Limites de Infraestrutura</DialogTitle>
             <DialogDescription>
-              Configuração fina de cotas para <span className="font-semibold text-slate-800">{company.name}</span>
+              Configuração fina de cotas para <span className="font-semibold text-ellevee-ink">{company.name}</span>
             </DialogDescription>
           </div>
         </div>
@@ -75,57 +75,57 @@ export default function CompanyLimitsDialog({
 
       <div className="space-y-4 py-4">
         {/* Limite de Mensagens */}
-        <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/50 space-y-2">
+        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-              <MessageSquare className="h-4 w-4 text-indigo-600" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
+              <MessageSquare className="h-3.5 w-3.5 text-ellevee-sage" />
               <span>Limite Mensal de Mensagens</span>
             </div>
-            <span className="text-xs font-mono text-slate-500">
-              Consumo atual: {company.messagesUsed.toLocaleString()} msgs
+            <span className="text-xs font-mono text-ellevee-sage">
+              Consumo: {company.messagesUsed.toLocaleString()} msgs
             </span>
           </div>
           <Input
             type="number"
             value={messagesLimit}
             onChange={(e) => setMessagesLimit(Number(e.target.value))}
-            className="bg-white font-mono"
+            className="bg-white font-mono text-xs"
           />
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-ellevee-sage">
             Total de mensagens que o motor de atendimento (humano e IA) pode transacionar por mês.
           </p>
         </div>
 
         {/* Limite de Tokens */}
-        <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/50 space-y-2">
+        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-              <Zap className="h-4 w-4 text-amber-600" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
+              <Zap className="h-3.5 w-3.5 text-ellevee-sage" />
               <span>Limite de Tokens de IA (Mensal)</span>
             </div>
-            <span className="text-xs font-mono text-slate-500">
-              Consumo atual: {company.tokensUsed.toLocaleString()} tokens
+            <span className="text-xs font-mono text-ellevee-sage">
+              Consumo: {company.tokensUsed.toLocaleString()} tokens
             </span>
           </div>
           <Input
             type="number"
             value={tokensLimit}
             onChange={(e) => setTokensLimit(Number(e.target.value))}
-            className="bg-white font-mono"
+            className="bg-white font-mono text-xs"
           />
-          <p className="text-[11px] text-slate-500">
-            Cota de tokens consumidos em chamadas ao Agent Engine e geração de respostas automáticas.
+          <p className="text-[11px] text-ellevee-sage">
+            Cota de tokens consumidos em chamadas ao Agent Engine e inferência de modelos.
           </p>
         </div>
 
         {/* Quantidade de Agentes */}
-        <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/50 space-y-2">
+        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-              <Bot className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
+              <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
               <span>Máximo de Agentes Ativos Simultâneos</span>
             </div>
-            <span className="text-xs font-mono text-slate-500">
+            <span className="text-xs font-mono text-ellevee-sage">
               Ativos: {company.agentsCount} / {company.maxAgents}
             </span>
           </div>
@@ -133,43 +133,43 @@ export default function CompanyLimitsDialog({
             type="number"
             value={maxAgents}
             onChange={(e) => setMaxAgents(Number(e.target.value))}
-            className="bg-white font-mono"
+            className="bg-white font-mono text-xs"
           />
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-ellevee-sage">
             Número de bots especializados ou instâncias simultâneas no catálogo do tenant.
           </p>
         </div>
 
         {/* Provedores Permitidos */}
         <div className="pt-1">
-          <label className="block text-xs font-semibold text-slate-700 mb-2">
+          <label className="block text-xs font-semibold text-ellevee-ink mb-2">
             Provedores de LLM Permitidos para esta Empresa:
           </label>
           <div className="grid grid-cols-3 gap-2">
-            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700">
+            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
               <input
                 type="checkbox"
                 checked={allowOpenAI}
                 onChange={(e) => setAllowOpenAI(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
               />
               OpenAI
             </label>
-            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700">
+            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
               <input
                 type="checkbox"
                 checked={allowGemini}
                 onChange={(e) => setAllowGemini(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
               />
               Google Gemini
             </label>
-            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700">
+            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
               <input
                 type="checkbox"
                 checked={allowAnthropic}
                 onChange={(e) => setAllowAnthropic(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
               />
               Anthropic
             </label>
@@ -181,7 +181,7 @@ export default function CompanyLimitsDialog({
         <Button variant="outline" onClick={onClose} disabled={isSaving}>
           Cancelar
         </Button>
-        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+        <Button variant="default" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Salvando..." : "Salvar Alterações de Limites"}
         </Button>
       </DialogFooter>
