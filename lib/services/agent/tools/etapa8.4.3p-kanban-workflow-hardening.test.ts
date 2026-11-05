@@ -814,7 +814,7 @@ test.describe('ETAPA 8.4.3P — Blindagem do Kanban e Integridade Referencial de
   test('22. Migration 20261104 e script de auditoria possuem proteções obrigatórias', () => {
     const migrationPath = path.resolve(
       process.cwd(),
-      'supabase/migrations/20261104_conversation_workflow_tenant_integrity.sql'
+      'supabase/migrations/2026110401_conversation_workflow_tenant_integrity.sql'
     )
     assert.ok(fs.existsSync(migrationPath), 'Migration 20261104 deve existir.')
     const migrationSql = fs.readFileSync(migrationPath, 'utf8')

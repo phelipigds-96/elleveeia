@@ -454,8 +454,8 @@ test.describe('ETAPA 8.4.3Q.2.1 — Hardening de Consultas e Atualizações com 
     assert.match(msgEngineCode, /\.from\('customers'\)\s*\.update\([\s\S]*?\)\s*\.eq\('id',\s*customerId\)\s*\.eq\('company_id',\s*companyId\)/)
     // Update de conversations com company_id
     assert.match(msgEngineCode, /\.from\('conversations'\)\s*\.update\([\s\S]*?\)\s*\.eq\('id',\s*conversationId\)\s*\.eq\('company_id',\s*companyId\)/)
-    // Update de messages (suprimida) com company_id
-    assert.match(msgEngineCode, /\.from\('messages'\)\s*\.update\([\s\S]*?\)\s*\.eq\('id',\s*agentResult\.messageId\)\s*\.eq\('company_id',\s*companyId\)/)
+    // Update de messages (suprimida) atômico e monotônico com company_id
+    assert.match(msgEngineCode, /merge_message_metadata_monotonic[\s\S]*?p_company_id/)
 
     // 2. agent/engine.ts
     const enginePath = path.resolve(process.cwd(), 'lib/services/agent/engine.ts')
@@ -477,8 +477,8 @@ test.describe('ETAPA 8.4.3Q.2.1 — Hardening de Consultas e Atualizações com 
     const convInternalPath = path.resolve(process.cwd(), 'lib/services/conversations-internal.ts')
     const convInternalCode = fs.readFileSync(convInternalPath, 'utf8')
 
-    // Updates pós-despacho com id e company_id
-    assert.match(convInternalCode, /\.from\('messages'\)\s*\.update\([\s\S]*?\)\s*\.eq\('id',\s*message\.id\)\s*\.eq\('company_id',\s*companyId\)/)
+    // Updates pós-despacho de messages atômico com p_company_id via merge_message_metadata_monotonic
+    assert.match(convInternalCode, /merge_message_metadata_monotonic[\s\S]*?p_company_id/)
     assert.match(convInternalCode, /\.from\('conversations'\)\s*\.update\([\s\S]*?\)\s*\.eq\('id',\s*conversationId\)\s*\.eq\('company_id',\s*companyId\)/)
   })
 })

@@ -16,7 +16,7 @@ import { applyWorkingMemoryUpdate } from './working-memory'
 
 const MAX_TOOL_ITERATIONS = 5
 
-interface AgentRunParams {
+export interface AgentRunParams {
   companyId: string
   agentId: string
   conversationId: string
@@ -24,6 +24,26 @@ interface AgentRunParams {
   skipCustomerMessageInsert?: boolean
   adminClient?: any
   llmProvider?: LLMProvider
+  persistMessage?: boolean
+}
+
+export interface AgentRunResult {
+  success: boolean
+  message?: string
+  messageId?: string
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
+  workingMemory?: any
+  agentId?: string
+  conversationId?: string
+  metadata?: Record<string, any> | null
+  code?: string
+  statusCode?: number
+  error?: string
+  details?: string | null
 }
 
 /**
@@ -80,8 +100,9 @@ export async function runAgentEngine({
   userMessage,
   skipCustomerMessageInsert = false,
   adminClient,
-  llmProvider
-}: AgentRunParams) {
+  llmProvider,
+  persistMessage = true
+}: AgentRunParams): Promise<AgentRunResult> {
   const supabase = adminClient || createAdminClient()
   const startTime = Date.now()
 
@@ -317,33 +338,41 @@ export async function runAgentEngine({
     // Não inventamos dados, apenas parseamos resultados determinísticos de forma segura
     const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
-    // 3. Salvar a resposta do agente contendo a nova memória no campo metadata
+    // 3. Preparar metadados da mensagem do agente contendo a nova memória de trabalho
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
       messageMetadata.working_memory = newWorkingMemory
     }
 
-    const { data: insertedAgentMsg, error: insertErr } = await supabase.from('messages').insert({
-      company_id: companyId,
-      conversation_id: conversationId,
-      sender_type: 'agent',
-      content: finalContent,
-      message_type: 'text',
-      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
-    }).select('id').single()
+    let insertedAgentMsg: { id: string } | null = null
 
-    if (insertErr) throw new Error(`Falha ao persistir resposta do agente: ${insertErr.message}`)
+    // Persistência controlada pelo parâmetro persistMessage (default: true).
+    // Quando false: desacopla a inteligência da persistência para que a camada
+    // chamadora possa realizar a criação atômica via outbox transacional (prepareOutboundMessage).
+    if (persistMessage) {
+      const { data: insertedMsg, error: insertErr } = await supabase.from('messages').insert({
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'agent',
+        content: finalContent,
+        message_type: 'text',
+        metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
+      }).select('id').single()
 
-    const { error: convUpdateErr } = await supabase.from('conversations').update({
-      last_message_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      agent_id: agentId
-    })
-      .eq('id', conversationId)
-      .eq('company_id', companyId)
+      if (insertErr) throw new Error(`Falha ao persistir resposta do agente: ${insertErr.message}`)
+      insertedAgentMsg = insertedMsg
 
-    if (convUpdateErr) {
-      throw new Error(`Falha ao atualizar conversa após resposta do agente: ${convUpdateErr.message}`)
+      const { error: convUpdateErr } = await supabase.from('conversations').update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        agent_id: agentId
+      })
+        .eq('id', conversationId)
+        .eq('company_id', companyId)
+
+      if (convUpdateErr) {
+        throw new Error(`Falha ao atualizar conversa após resposta do agente: ${convUpdateErr.message}`)
+      }
     }
 
     runStatus = 'success'
@@ -415,7 +444,11 @@ export async function runAgentEngine({
       success: true,
       message: finalContent,
       messageId: insertedAgentMsg?.id,
-      usage: usageMetrics
+      usage: usageMetrics,
+      workingMemory: newWorkingMemory,
+      agentId,
+      conversationId,
+      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
     }
 
   } catch (error: any) {

@@ -431,7 +431,7 @@ test.describe('ETAPA 8.4.3P.2 — Correção da Integridade de Exclusão e Workf
   test('15. [ESTÁTICO] Migration 20261104_conversation_workflow_tenant_integrity possui trigger BEFORE DELETE e bloqueio de anulação manual', () => {
     const filePath = path.resolve(
       process.cwd(),
-      'supabase/migrations/20261104_conversation_workflow_tenant_integrity.sql'
+      'supabase/migrations/2026110401_conversation_workflow_tenant_integrity.sql'
     )
     assert.ok(fs.existsSync(filePath))
     const sql = fs.readFileSync(filePath, 'utf8')
@@ -452,7 +452,7 @@ test.describe('ETAPA 8.4.3P.2 — Correção da Integridade de Exclusão e Workf
   test('16. [ESTÁTICO] Migration 20261104_workflows_default_uniqueness possui pré-auditoria e índice único parcial', () => {
     const filePath = path.resolve(
       process.cwd(),
-      'supabase/migrations/20261104_workflows_default_uniqueness.sql'
+      'supabase/migrations/2026110402_workflows_default_uniqueness.sql'
     )
     assert.ok(fs.existsSync(filePath))
     const sql = fs.readFileSync(filePath, 'utf8')

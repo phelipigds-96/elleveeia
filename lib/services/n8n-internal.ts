@@ -11,7 +11,12 @@ import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform
 /**
  * Handler mockável para interceptação de requisições em testes automatizados.
  */
-type MockHttpHandler = (url: string, options: any) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>
+type MockHttpHandler = (url: string, options: any) => Promise<{
+  ok: boolean
+  status: number
+  text: () => Promise<string>
+  json?: () => Promise<any>
+}>
 let mockHttpHandler: MockHttpHandler | null = null
 
 export function setMockHttpHandler(handler: MockHttpHandler | null) {
@@ -264,7 +269,7 @@ export async function safeHttpRequest(
     timeoutMs?: number
     lookup?: (hostname: string, options: any, callback: any) => void
   } = {}
-): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {
+): Promise<{ ok: boolean; status: number; text: () => Promise<string>; json?: () => Promise<any> }> {
   if (!isSafeUrl(urlStr)) {
     throw new Error('URL bloqueada por políticas de segurança (SSRF). Use uma URL externa pública válida.')
   }
@@ -312,7 +317,8 @@ export async function safeHttpRequest(
           resolve({
             ok: (res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300),
             status: res.statusCode || 500,
-            text: async () => responseData
+            text: async () => responseData,
+            json: async () => JSON.parse(responseData)
           })
         }
       })
@@ -499,6 +505,58 @@ export async function testN8nConnectionActionInternal(
 }
 
 /**
+ * Tipos estritos para o retorno do Gateway n8n/WhatsApp
+ */
+export interface OutboundGatewayResponse {
+  provider_message_id?: string | null
+  providerMessageId?: string | null
+  message_id?: string | null
+  [key: string]: any
+}
+
+export type SendOutboundSuccess = {
+  success: true
+  provider_message_id: string | null
+  cached?: boolean
+}
+
+export type SendOutboundFailure = {
+  success: false
+  reason: string
+  code?: string
+  statusCode?: number
+  error?: string
+}
+
+export type SendOutboundResult = SendOutboundSuccess | SendOutboundFailure
+
+export interface SendOutboundOptions {
+  adminClient?: any
+  outboxId?: string
+  messageId?: string
+  leaseSeconds?: number
+}
+
+/**
+ * Avalia se o erro de conexão/transporte é de natureza ambígua
+ * (onde não é possível determinar com certeza se o pacote atingiu ou não o destino).
+ */
+export function isAmbiguousNetworkError(err: any): boolean {
+  if (!err) return false
+  if (err.name === 'AbortError') return true
+  const msg = String(err.message || err).toLowerCase()
+  return (
+    msg.includes('timeout') ||
+    msg.includes('abort') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('socket hang up') ||
+    msg.includes('econnrefused') ||
+    msg.includes('network error')
+  )
+}
+
+/**
  * Módulo interno: despacha mensagens outbound pelo n8n / WhatsApp.
  * Movido estritamente para fora de qualquer módulo com 'use server' para
  * não ser exposto como Server Action pública no Next.js App Router.
@@ -506,8 +564,8 @@ export async function testN8nConnectionActionInternal(
 export async function sendOutboundMessage(
   companyId: string, 
   messagePayload: any,
-  options?: { adminClient?: any }
-) {
+  options?: SendOutboundOptions
+): Promise<SendOutboundResult> {
   const supabase = options?.adminClient || createAdminClient()
 
   // 0. Validação de ciclo de vida do tenant (Fail-closed incondicional)
@@ -545,10 +603,67 @@ export async function sendOutboundMessage(
 
   const url = integration.config.webhook_url
   const secret = integration.credentials?.webhook_secret
+  const eventId = messagePayload?.event_id || messagePayload?.idempotency_key
 
   if (!isSafeUrl(url)) {
-    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', messagePayload.event_id, 'failed', 'Unsafe URL detected (SSRF Protection)')
+    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', eventId, 'failed', 'Unsafe URL detected (SSRF Protection)')
     return { success: false, reason: 'unsafe_url' }
+  }
+
+  // 2. Aquisição de Lock de Idempotência no Gateway (Tabela gateway_outbound_locks)
+  let claimToken: string | null = null
+
+  if (typeof (supabase as any)?.rpc === 'function' && eventId) {
+    const { data: lockData, error: lockErr } = await (supabase as any).rpc('acquire_gateway_outbound_lock', {
+      p_company_id: companyId,
+      p_event_id: eventId,
+      p_outbox_id: options?.outboxId || null,
+      p_message_id: options?.messageId || null,
+      p_lease_seconds: options?.leaseSeconds || 60
+    })
+
+    if (lockErr) {
+      console.error(`[N8N Outbound Lock Error] Erro ao adquirir lock de gateway: ${lockErr.message}`)
+      return {
+        success: false,
+        reason: 'lock_rpc_error',
+        error: lockErr.message
+      }
+    }
+
+    const lock = Array.isArray(lockData) ? lockData[0] : lockData
+
+    if (lock) {
+      if (!lock.was_acquired) {
+        // Short-circuit: já enviado com sucesso anteriormente
+        if (lock.status === 'completed' || lock.error_reason === 'already_completed') {
+          console.log(`[N8N Outbound Idempotent] Lock de gateway já completado para event_id ${eventId}. Short-circuit ativado.`)
+          return {
+            success: true,
+            provider_message_id: lock.provider_message_id || null,
+            cached: true
+          }
+        }
+
+        // Concorrência ativa com lease: aborta para evitar duplicidade no WhatsApp
+        if (lock.error_reason === 'concurrency_active_lease') {
+          console.warn(`[N8N Outbound Concurrency] Envio concorrente em andamento com lease ativo para event_id ${eventId}`)
+          return {
+            success: false,
+            reason: 'concurrency_active_lease',
+            error: 'Envio concorrente em processamento no gateway'
+          }
+        }
+
+        return {
+          success: false,
+          reason: lock.error_reason || 'lock_denied',
+          error: lock.error_reason || 'Bloqueio de gateway negado'
+        }
+      }
+
+      claimToken = lock.claim_token
+    }
   }
 
   try {
@@ -568,22 +683,139 @@ export async function sendOutboundMessage(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error')
-      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`)
+      const status = response.status
+      const isAmbiguousStatus = status === 502 || status === 504
+
+      // Se for 502/504, tratamos como erro ambíguo de rede intermediária (abandona o lock)
+      if (isAmbiguousStatus) {
+        throw new Error(`HTTP ${status}: ${errorText.substring(0, 100)}`)
+      }
+
+      // Falha determinística confirmada pelo backend (4xx ou 500 nítido)
+      if (claimToken && typeof (supabase as any)?.rpc === 'function' && eventId) {
+        try {
+          await (supabase as any).rpc('complete_gateway_outbound_lock', {
+            p_company_id: companyId,
+            p_event_id: eventId,
+            p_claim_token: claimToken,
+            p_status: 'failed',
+            p_provider_message_id: null,
+            p_last_error: `HTTP ${status}: ${errorText.substring(0, 200)}`
+          })
+        } catch (lockErr: any) {
+          console.warn(`[N8N Outbound Lock Warning] Falha ao marcar lock como failed: ${lockErr?.message}`)
+        }
+      }
+
+      await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', eventId, 'failed', `HTTP ${status}: ${errorText.substring(0, 100)}`)
+
+      return {
+        success: false,
+        reason: 'fetch_error',
+        statusCode: status,
+        error: `HTTP ${status}: ${errorText.substring(0, 100)}`
+      }
     }
 
-    // Sucesso - Registra auditoria e heartbeats
-    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', messagePayload.event_id, 'success')
+    // 3. Extração segura e tolerante a falhas do provider_message_id do gateway
+    let providerMessageId: string | null = null
+
+    try {
+      let rawText: string | null = null
+      let parsedJson: any = null
+
+      if (typeof response.text === 'function') {
+        try {
+          rawText = await response.text()
+        } catch {
+          // Erro de leitura de stream
+        }
+      }
+
+      if (rawText && typeof rawText === 'string' && rawText.trim().length > 0) {
+        try {
+          parsedJson = JSON.parse(rawText)
+        } catch {
+          console.warn('[N8N Outbound Warning] Resposta HTTP 200 recebida, mas o corpo não é um JSON válido. Rastreabilidade degradada.')
+        }
+      } else if (!rawText && typeof (response as any).json === 'function') {
+        try {
+          parsedJson = await (response as any).json()
+        } catch {
+          console.warn('[N8N Outbound Warning] Resposta HTTP 200 recebida, mas falhou ao executar .json(). Rastreabilidade degradada.')
+        }
+      }
+
+      if (parsedJson && typeof parsedJson === 'object') {
+        // Suporta tanto objeto direto { provider_message_id } quanto array n8n [{ provider_message_id }]
+        const item = Array.isArray(parsedJson) ? parsedJson[0] : parsedJson
+        const candidateId = item?.provider_message_id ?? item?.providerMessageId ?? item?.message_id
+        if (typeof candidateId === 'string' && candidateId.trim().length > 0) {
+          providerMessageId = candidateId.trim()
+        } else {
+          console.warn('[N8N Outbound Warning] Resposta HTTP 200 recebida com JSON válido, mas sem provider_message_id.')
+        }
+      }
+    } catch (parseEx: any) {
+      // Prioridade máxima: se response.ok === true, a mensagem FOI enviada.
+      // Erro de parse NUNCA pode cancelar ou invalidar o sucesso do envio.
+      console.warn(`[N8N Outbound Warning] Exceção ignorada no parse do retorno do gateway: ${parseEx?.message || parseEx}`)
+    }
+
+    // Sucesso - Conclui o lock de gateway como completed
+    if (claimToken && typeof (supabase as any)?.rpc === 'function' && eventId) {
+      try {
+        await (supabase as any).rpc('complete_gateway_outbound_lock', {
+          p_company_id: companyId,
+          p_event_id: eventId,
+          p_claim_token: claimToken,
+          p_status: 'completed',
+          p_provider_message_id: providerMessageId || null,
+          p_last_error: null
+        })
+      } catch (lockErr: any) {
+        console.warn(`[N8N Outbound Lock Warning] Falha ao marcar lock como completed: ${lockErr?.message}`)
+      }
+    }
+
+    // Registra auditoria e heartbeats
+    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', eventId, 'success')
     
     await supabase.from('integrations').update({
       last_connected_at: new Date().toISOString(),
       last_event_at: new Date().toISOString()
     }).eq('id', integration.id)
 
-    return { success: true }
+    return {
+      success: true,
+      provider_message_id: providerMessageId
+    }
 
   } catch (error: any) {
     console.error(`[N8N Outbound Error] ${error.message}`)
-    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', messagePayload.event_id, 'failed', error.message)
+    await logIntegrationEvent(supabase, companyId, integration.id, 'outbound', 'message.send', eventId, 'failed', error.message)
+
+    const isAmbiguous = isAmbiguousNetworkError(error)
+
+    if (!isAmbiguous && claimToken && typeof (supabase as any)?.rpc === 'function' && eventId) {
+      // Falha determinística que gerou exceção
+      try {
+        await (supabase as any).rpc('complete_gateway_outbound_lock', {
+          p_company_id: companyId,
+          p_event_id: eventId,
+          p_claim_token: claimToken,
+          p_status: 'failed',
+          p_provider_message_id: null,
+          p_last_error: error.message
+        })
+      } catch (lockErr: any) {
+        console.warn(`[N8N Outbound Lock Warning] Falha ao marcar lock como failed no catch: ${lockErr?.message}`)
+      }
+    } else if (isAmbiguous) {
+      console.warn(`[N8N Outbound Ambiguous Network Failure] Lock mantido como in_flight com lease ativo para event_id ${eventId}: ${error.message}`)
+      // ABANDONA O LOCK: NÃO chama complete_gateway_outbound_lock!
+    }
+
     return { success: false, reason: 'fetch_error', error: error.message }
   }
 }

@@ -220,6 +220,14 @@ export async function getMessages(
   return data
 }
 
+export interface SendMessageOptions {
+  clientMessageId?: string
+  supabaseClient?: any
+  adminClient?: any
+  userId?: string
+  companyId?: string
+}
+
 /**
  * Server Action pública de envio manual invocada pela interface.
  * 
@@ -227,12 +235,13 @@ export async function getMessages(
  * - Trata todos os parâmetros recebidos como dados não confiáveis do navegador.
  * - userId e companyId são ESTRITAMENTE derivados da sessão autenticada e do perfil consultado no servidor.
  * - Valores de companyId, userId ou adminClient passados externamente são sumariamente descartados.
+ * - Aceita opcionalmente clientMessageId para proteção contra cliques duplos.
  * - A lógica interna privilegiada foi extraída para lib/services/conversations-internal.ts (módulo sem 'use server').
  */
 export async function sendMessage(
   conversationId: string, 
   content: string,
-  untrustedOptions?: any
+  untrustedOptions?: SendMessageOptions
 ): Promise<SendMessageResult> {
   if (!content || !content.trim()) {
     return {
@@ -300,10 +309,15 @@ export async function sendMessage(
   const { createAdminClient } = await import('@/lib/supabase/service')
   const serverAdminClient = createAdminClient()
 
+  const clientMessageId = typeof untrustedOptions?.clientMessageId === 'string' && untrustedOptions.clientMessageId.trim()
+    ? untrustedOptions.clientMessageId.trim()
+    : undefined
+
   // Delega para o serviço interno com identidade estritamente validada
   return sendManualMessageInternal(conversationId, content, {
     userId: authenticatedUserId,
     companyId: authenticatedCompanyId,
+    clientMessageId,
     supabaseClient: supabase,
     adminClient: serverAdminClient
   })

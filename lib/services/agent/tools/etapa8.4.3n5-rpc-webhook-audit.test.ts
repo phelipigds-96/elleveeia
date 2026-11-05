@@ -84,7 +84,7 @@ test.describe('ETAPA 8.4.3N.5 — Auditoria e Correção Final da RPC de Webhook
   // =========================================================================
   test.describe('1. Auditoria das Permissões da RPC (Least Privilege)', () => {
     test('1.1. DDL revoga explicitamente EXECUTE de PUBLIC, anon e authenticated', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
       assert.ok(fs.existsSync(migrationPath), 'Migration deve existir')
 
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
@@ -105,7 +105,7 @@ test.describe('ETAPA 8.4.3N.5 — Auditoria e Correção Final da RPC de Webhook
     })
 
     test('1.2. DDL concede EXECUTE exclusivamente a service_role', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
 
       assert.match(
@@ -147,7 +147,7 @@ test.describe('ETAPA 8.4.3N.5 — Auditoria e Correção Final da RPC de Webhook
   // =========================================================================
   test.describe('2. Hardening de SECURITY DEFINER e search_path', () => {
     test('2.1. Função declara SECURITY DEFINER e search_path restritivo', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
 
       assert.match(sqlContent, /SECURITY\s+DEFINER/i, 'Função deve ser SECURITY DEFINER')
@@ -155,14 +155,14 @@ test.describe('ETAPA 8.4.3N.5 — Auditoria e Correção Final da RPC de Webhook
     })
 
     test('2.2. DDL valida parâmetros obrigatórios (p_company_id e p_new_key não nulos/vazios)', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
 
       assert.match(sqlContent, /RAISE\s+EXCEPTION\s+.*Parâmetros inválidos/i, 'Deve validar parâmetros de entrada na RPC')
     })
 
     test('2.3. Operações de UPDATE e INSERT na RPC são totalmente qualificadas com public.api_keys', () => {
-      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
       const sqlContent = fs.readFileSync(migrationPath, 'utf8')
 
       // Todas as tabelas devem estar qualificadas como public.api_keys

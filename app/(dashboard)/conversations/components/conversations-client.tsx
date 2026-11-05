@@ -79,7 +79,8 @@ export function ConversationsClient({
     const content = messageInput
     setMessageInput('') // Optimistic clear
 
-    const result = await sendMessage(selectedConvId, content)
+    const clientMessageId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined
+    const result = await sendMessage(selectedConvId, content, { clientMessageId })
     if (result.success) {
       setMessages((prev) => [...prev, result.message])
       scrollToBottom()

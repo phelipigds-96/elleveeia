@@ -22,7 +22,7 @@ test.describe('ETAPA 8.4.3N.6 — Hardening Final da Migration e SECURITY DEFINE
   const TENANT_B = '22222222-2222-2222-2222-222222222222'
   const USER_ADMIN_A = 'user-admin-tenant-a-n6'
 
-  const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261103_api_keys_webhook_uniqueness.sql')
+  const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/2026110301_api_keys_webhook_uniqueness.sql')
 
   test.beforeEach(() => {
     resetInMemoryDb()
