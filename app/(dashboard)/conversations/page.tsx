@@ -1,22 +1,12 @@
-import { getConversations } from '@/lib/services/conversations'
-import { getCompanyWorkflows } from '@/lib/services/workflows/workflows'
-import { ConversationsClient } from './components/conversations-client'
-import { createClient } from '@/lib/supabase/server'
+import dynamic from 'next/dynamic'
+import PainelClient from './components/painel-client'
 
-export const dynamic = 'force-dynamic'
-
-export default async function ConversationsPage() {
-  const supabase = createClient()
-  const { data: userData } = await supabase.auth.getUser()
-  const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user?.id).single()
-  const companyId = profile?.company_id
-
-  const initialConversations = await getConversations('all', '')
-  const workflows = companyId ? await getCompanyWorkflows() : []
-
+export default function ConversationsPage() {
+  // Página de demonstração visual do Painel de Atendimento.
+  // Usa apenas mocks locais e não faz chamadas ao backend.
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col -m-6 sm:-m-8">
-      <ConversationsClient initialConversations={initialConversations} initialWorkflows={workflows} companyId={companyId} />
+    <div className="h-[100vh] w-full">
+      <PainelClient />
     </div>
   )
 }
