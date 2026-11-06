@@ -304,9 +304,11 @@ export function resolveToolScope(
         selectedTools.add(tool)
       } else if (hasRemovalIntent && hasCartOrQuote) {
         selectedTools.add(tool)
-      } else if (hasModificationIntent && hasActiveQuote) {
+      } else if (hasModificationIntent && (hasActiveQuote || hasActiveCart)) {
         selectedTools.add(tool)
-      } else if (hasInclusionIntent && hasActiveQuote) {
+      } else if (hasInclusionIntent && (hasActiveQuote || hasActiveCart)) {
+        selectedTools.add(tool)
+      } else if (hasActiveCart && (hasQuantityPriceIntent || hasProductPriceIntent)) {
         selectedTools.add(tool)
       }
     }

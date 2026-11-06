@@ -35,9 +35,15 @@ export function applyCommercialStrategy(
     }
   }
 
-  // 1. EXACT MATCH / SPECIFIC PRODUCT
-  if (searchResult.status === 'exact_match' || searchResult.matches.length === 1) {
-    const bestProduct = searchResult.matches[0]
+  // 1. EXACT MATCH / SPECIFIC PRODUCT OU MATCH EXATO DE NOME
+  const normalizedQuery = query.toLowerCase().trim()
+  const exactNameMatch = searchResult.matches.find(
+    m => m.name.toLowerCase().trim() === normalizedQuery
+  )
+  const isExactOrSingle = searchResult.status === 'exact_match' || searchResult.matches.length === 1 || Boolean(exactNameMatch)
+
+  if (isExactOrSingle) {
+    const bestProduct = exactNameMatch || searchResult.matches[0]
     const resolvedPrice = pricingResult || candidatePrices?.get(bestProduct.id)
     
     if (resolvedPrice) {
@@ -64,7 +70,6 @@ export function applyCommercialStrategy(
 
   // 2. DISCOVERY (Múltiplos candidatos)
   const uniqueBrands = extractUniqueBrands(searchResult.matches)
-  const normalizedQuery = query.toLowerCase()
   const mentionedBrand = uniqueBrands.find(b => normalizedQuery.includes(b.toLowerCase()))
 
   // 3. BRAND SPECIFIC DISCOVERY
