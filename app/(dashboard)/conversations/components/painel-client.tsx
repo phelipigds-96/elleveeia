@@ -14,13 +14,19 @@ import {
   Phone, 
   AlertCircle,
   Wifi,
-  UserCheck
+  UserCheck,
+  Send,
+  Loader2,
+  ShieldAlert
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "@/components/ui/toast"
 import { 
   ConversationData, 
   MessageData, 
-  getConversationMessages 
+  getConversationMessages,
+  sendMessageAction,
+  takeoverConversationAction
 } from "../actions"
 
 interface PainelClientProps {
@@ -62,12 +68,19 @@ export default function PainelClient({
   const [search, setSearch] = useState("")
   const [loadingMessages, setLoadingMessages] = useState(false)
   
-  // 3. Efeito visual para quando uma conversa receber atualização em tempo real
+  // 3. Estados de envio de mensagem e Handoff (Fase 3.2)
+  const [inputContent, setInputContent] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [isTakingOver, setIsTakingOver] = useState(false)
+
+  // 4. Efeito visual para quando uma conversa receber atualização em tempo real
   const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<string | null>(null)
   const [isRealtimeActive, setIsRealtimeActive] = useState(false)
 
-  // Referências para scroll automático
+  // Referências para scroll automático e foco no textarea
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) || null,
     [conversations, selectedId]
@@ -106,8 +119,12 @@ export default function PainelClient({
         (payload) => {
           const newMsg = payload.new as MessageData
           setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
+            // Substitui mensagem temporária otimista se já existir com o mesmo conteúdo ou id
+            const filtered = prev.filter(
+              (m) => !(m.id.startsWith("temp-") && m.content === newMsg.content)
+            )
+            if (filtered.some((m) => m.id === newMsg.id)) return filtered
+            return [...filtered, newMsg]
           })
 
           // Atualiza também o preview na barra lateral
@@ -240,6 +257,148 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // ENVIO MANUAL DE MENSAGENS (Fase 3.2 - Interatividade e Outbox)
+  // =========================================================================
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+
+    const contentToSend = inputContent.trim()
+    if (!contentToSend || !selectedId || isSending) return
+
+    // 1. Gera UUID seguro do clientMessageId para proteção de idempotência / duplo clique
+    const clientMessageId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+    setIsSending(true)
+    setInputContent("") // Limpeza otimista do campo
+
+    // 2. Inserção otimista visual na tela para feedback tátil instantâneo
+    const tempId = `temp-${clientMessageId}`
+    const optimisticMessage: MessageData = {
+      id: tempId,
+      conversation_id: selectedId,
+      sender_type: "agent",
+      sender_id: null,
+      content: contentToSend,
+      message_type: "text",
+      metadata: {
+        delivery_status: "pending",
+        client_message_id: clientMessageId,
+      },
+      created_at: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, optimisticMessage])
+    scrollToBottom(true)
+
+    try {
+      // 3. Execução da Server Action que alimenta a tabela messages e a message_outbox
+      const result = await sendMessageAction(selectedId, contentToSend, clientMessageId)
+
+      if (result.success) {
+        toast.success("Mensagem despachada", "Mensagem gravada na Outbox com sucesso.")
+
+        // Atualiza a mensagem otimista com o ID definitivo do banco
+        if (result.messageId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === tempId
+                ? {
+                    ...m,
+                    id: result.messageId!,
+                    metadata: { ...m.metadata, delivery_status: "sent" },
+                  }
+                : m
+            )
+          )
+        }
+
+        // Atualiza o preview na barra lateral
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedId
+              ? {
+                  ...c,
+                  last_message_at: new Date().toISOString(),
+                  last_message_preview: contentToSend,
+                }
+              : c
+          ).sort(
+            (a, b) =>
+              new Date(b.last_message_at || 0).getTime() -
+              new Date(a.last_message_at || 0).getTime()
+          )
+        )
+      } else {
+        // Em caso de falha, recupera o texto digitado e remove o balão otimista
+        setInputContent(contentToSend)
+        setMessages((prev) => prev.filter((m) => m.id !== tempId))
+        toast.error("Falha no envio da mensagem", result.error || "Ocorreu um erro no servidor.")
+      }
+    } catch (err: any) {
+      setInputContent(contentToSend)
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+      toast.error("Erro inesperado", err.message || "Falha na comunicação com o servidor.")
+    } finally {
+      setIsSending(false)
+      textareaRef.current?.focus()
+    }
+  }
+
+  // Tecla Enter para envio rápido (com Shift+Enter para quebra de linha)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
+
+  // =========================================================================
+  // HANDOFF: TRANSBORDO HUMANO / ASSUMIR CONVERSA (Fase 3.2)
+  // =========================================================================
+  const handleTakeover = async () => {
+    if (!selectedId || isTakingOver) return
+
+    setIsTakingOver(true)
+    try {
+      const result = await takeoverConversationAction(selectedId)
+
+      if (result.success) {
+        toast.success(
+          "Atendimento Assumido!",
+          "A IA foi pausada e a conversa foi transferida com sucesso para o operador humano."
+        )
+
+        // Atualização otimista de status na lista e no cabeçalho
+        setConversations((prev) =>
+          prev.map((c) => (c.id === selectedId ? { ...c, status: "human" } : c))
+        )
+
+        // Adiciona evento de sistema visual no histórico
+        const takeoverEventMsg: MessageData = {
+          id: `temp-takeover-${Date.now()}`,
+          conversation_id: selectedId,
+          sender_type: "system",
+          content: "Atendimento transferido para o operador humano. A IA foi pausada nesta conversa.",
+          message_type: "event",
+          metadata: { event: "conversation.takeover" },
+          created_at: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, takeoverEventMsg])
+        scrollToBottom(true)
+      } else {
+        toast.error("Erro ao assumir conversa", result.error || "Falha na transferência.")
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha ao assumir atendimento.")
+    } finally {
+      setIsTakingOver(false)
+    }
+  }
+
+  // =========================================================================
   // FILTRAGEM DA BARRA LATERAL
   // =========================================================================
   const filteredConversations = useMemo(() => {
@@ -274,7 +433,7 @@ export default function PainelClient({
     switch (status) {
       case "pending":
         return (
-          <span className="inline-flex items-center gap-0.5 text-white/70" title="Pendente de envio">
+          <span className="inline-flex items-center gap-0.5 text-white/70" title="Pendente de transmissão">
             <Clock className="h-3 w-3" />
           </span>
         )
@@ -293,7 +452,7 @@ export default function PainelClient({
       case "sent":
       default:
         return (
-          <span className="inline-flex items-center gap-0.5 text-white/80" title="Transmitida">
+          <span className="inline-flex items-center gap-0.5 text-white/80" title="Transmitida para a Outbox">
             <Check className="h-3 w-3" />
           </span>
         )
@@ -495,18 +654,44 @@ export default function PainelClient({
                       </span>
                     )}
                     <span>•</span>
-                    <span className="capitalize">
+                    <span className="capitalize font-medium">
                       Status: {activeConversation.status === "open" ? "IA Ativa" : activeConversation.status === "human" ? "Humano" : "Encerrado"}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Status do WebSocket Realtime */}
+              {/* Botão de Transbordo (Handoff) e Status Realtime */}
               <div className="flex items-center gap-3">
+                {activeConversation.status === "human" ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                    <UserCheck className="h-3.5 w-3.5" />
+                    <span>Atendimento Humano (IA Pausada)</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleTakeover}
+                    disabled={isTakingOver}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-60 cursor-pointer"
+                    title="Assumir conversa e pausar respostas automáticas da IA"
+                  >
+                    {isTakingOver ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Assumindo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="h-3.5 w-3.5" />
+                        <span>Assumir Conversa</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
                 <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground border border-border font-mono">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Subscrição Ativa</span>
+                  <span>Realtime Ativo</span>
                 </div>
               </div>
             </header>
@@ -532,6 +717,18 @@ export default function PainelClient({
                       msg.sender_type === "ia" ||
                       msg.sender_type === "bot"
                     const isAgent = msg.sender_type === "agent" || msg.sender_type === "human"
+
+                    // Balão de Evento do Sistema (Ex: Transbordo)
+                    if (msg.sender_type === "system" && (msg.message_type === "event" || msg.content.includes("transferido"))) {
+                      return (
+                        <div key={msg.id} className="flex justify-center my-3">
+                          <span className="text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                            <UserCheck className="h-3 w-3" />
+                            {msg.content}
+                          </span>
+                        </div>
+                      )
+                    }
 
                     // Balão do Cliente (Esquerda)
                     if (isCustomer) {
@@ -609,19 +806,41 @@ export default function PainelClient({
               </div>
             </section>
 
-            {/* Rodapé / Input: Conforme Diretriz da Fase 3.1, envio de mensagem desabilitado nesta etapa */}
-            <footer className="h-20 border-t border-border px-6 py-3 flex items-center bg-card shrink-0">
-              <div className="flex items-center gap-3 w-full max-w-3xl mx-auto">
-                <div className="flex-1 bg-muted/40 border border-border/80 rounded-lg p-2.5 text-xs text-muted-foreground flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Radio className="h-4 w-4 text-emerald-500 animate-pulse shrink-0" />
-                    <span>Conexão WebSocket ativa. Novas mensagens do WhatsApp/Webhook aparecerão automaticamente.</span>
-                  </div>
-                  <span className="text-[10px] font-mono bg-muted px-2 py-0.5 rounded border border-border text-foreground/80 shrink-0 hidden sm:inline">
-                    Fase 3.1 (Read-Only)
-                  </span>
+            {/* Rodapé Ativo: Textarea e Envio Blindado com Outbox (Fase 3.2) */}
+            <footer className="border-t border-border px-4 py-3 bg-card shrink-0">
+              <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex items-end gap-2.5">
+                <div className="flex-1 relative rounded-xl border border-border bg-background focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={inputContent}
+                    onChange={(e) => setInputContent(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={isSending}
+                    placeholder="Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
+                    className="w-full resize-none bg-transparent px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
+                  />
                 </div>
-              </div>
+
+                <button
+                  type="submit"
+                  disabled={isSending || !inputContent.trim()}
+                  className="h-11 px-4 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 font-semibold text-xs disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-xs cursor-pointer"
+                  title="Enviar mensagem para o cliente (Outbox idempotente)"
+                >
+                  {isSending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span className="hidden sm:inline">Enviar</span>
+                    </>
+                  )}
+                </button>
+              </form>
             </footer>
           </>
         ) : (
