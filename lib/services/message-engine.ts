@@ -385,7 +385,6 @@ export async function handleAutonomousCycle(
     .eq('company_id', companyId)
     .eq('idempotency_key', idempotencyKey)
     .maybeSingle()
-    .catch(() => ({ data: null }))
 
   if (existingOutbox) {
     console.log(`[AutonomousCycle Duplicate Pre-LLM] Idempotência prévia detectada para chave ${idempotencyKey} (outbox: ${existingOutbox.id}, status: ${existingOutbox.status})`)
@@ -491,7 +490,7 @@ export async function handleAutonomousCycle(
           delivery_status: 'suppressed',
           delivery_error: prepResult.error
         }
-      }).select('id').maybeSingle().catch(() => ({ data: null }))
+      }).select('id').maybeSingle()
 
       const suppOutbox = await recordOutboxEntry(supabase, {
         company_id: companyId,
@@ -913,7 +912,7 @@ export async function retryOutboxMessage(
         typeof msgQuery?.eq === 'function'
           ? msgQuery.eq('company_id', companyId).maybeSingle()
           : (typeof msgQuery?.maybeSingle === 'function' ? msgQuery.maybeSingle() : msgQuery.single())
-      ).catch(() => ({ data: null }))
+      )
 
       if (!linkedMsg) {
         const { data: crossMsg } = await (supabase as any)
@@ -921,7 +920,6 @@ export async function retryOutboxMessage(
           .select('id, company_id')
           .eq('id', record.message_id)
           .maybeSingle()
-          .catch(() => ({ data: null }))
 
         if (crossMsg && crossMsg.company_id !== companyId) {
           return {
@@ -1025,7 +1023,6 @@ export async function retryOutboxMessage(
     .eq('id', outboxId)
     .eq('company_id', companyId)
     .maybeSingle()
-    .catch(() => ({ data: null }))
 
   if (preCheckOutbox?.status === 'suppressed') {
     return { success: false, error: 'Mensagem suprimida não pode ser reprocessada', suppressed: true }
@@ -1165,7 +1162,7 @@ export async function retryOutboxMessage(
       typeof msgQuery?.eq === 'function'
         ? msgQuery.eq('company_id', companyId).maybeSingle()
         : (typeof msgQuery?.maybeSingle === 'function' ? msgQuery.maybeSingle() : msgQuery.single())
-    ).catch(() => ({ data: null }))
+    )
 
     if (!linkedMsg) {
       // Verifica se a mensagem pertence a outro tenant para diagnosticar adulteração cross-tenant
@@ -1174,7 +1171,6 @@ export async function retryOutboxMessage(
         .select('id, company_id')
         .eq('id', claim.message_id)
         .maybeSingle()
-        .catch(() => ({ data: null }))
 
       if (crossMsg && crossMsg.company_id !== companyId) {
         // Marca como falha fenced para não travar a outbox
@@ -1451,7 +1447,6 @@ export async function updateMessageDeliveryStatus(
       .eq('id', messageId)
       .eq('company_id', companyId)
       .maybeSingle()
-      .catch(() => ({ data: null }))
     targetMessage = msg
   }
 
@@ -1462,7 +1457,6 @@ export async function updateMessageDeliveryStatus(
       .eq('company_id', companyId)
       .eq('external_id', providerMessageId)
       .maybeSingle()
-      .catch(() => ({ data: null }))
     
     if (msgByProvider) {
       targetMessage = msgByProvider
@@ -1476,7 +1470,6 @@ export async function updateMessageDeliveryStatus(
       .eq('company_id', companyId)
       .eq('external_id', messageId)
       .maybeSingle()
-      .catch(() => ({ data: null }))
     
     if (msgByExt) {
       targetMessage = msgByExt
