@@ -7,6 +7,7 @@ export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith('/api/webhooks') ||
     request.nextUrl.pathname.startsWith('/api/cron') ||
+    request.nextUrl.pathname.startsWith('/api/outbox') ||
     request.nextUrl.pathname.startsWith('/paineladmin') ||
     request.nextUrl.pathname.startsWith('/companies') ||
     request.nextUrl.pathname.startsWith('/audit') ||
