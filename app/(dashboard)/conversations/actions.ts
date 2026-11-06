@@ -141,49 +141,53 @@ export async function getConversationsList(): Promise<ConversationData[]> {
     }
 
     // 2. Query de conversas do tenant com join em customers e agents
-    let query = client
-      .from("conversations")
-      .select(`
-        id,
-        company_id,
-        customer_id,
-        channel,
-        status,
-        assigned_to,
-        started_at,
-        last_message_at,
-        closed_at,
-        created_at,
-        updated_at,
-        unread_count,
-        external_id,
-        agent_id,
-        agents (
+    const buildQuery = (includeAvatar = true) => {
+      let q = client
+        .from("conversations")
+        .select(`
           id,
-          name
-        ),
-        customers (
-          id,
-          name,
-          phone,
-          email
-        )
-      `)
-      .eq("company_id", companyId)
+          company_id,
+          customer_id,
+          channel,
+          status,
+          assigned_to,
+          started_at,
+          last_message_at,
+          closed_at,
+          created_at,
+          updated_at,
+          unread_count,
+          external_id,
+          agent_id,
+          agents (
+            id,
+            name
+          ),
+          customers (
+            id,
+            name,
+            phone,
+            email${includeAvatar ? ", avatar_url" : ""}
+          )
+        `)
+        .eq("company_id", companyId)
 
-    // 3. Regra de Governança RBAC:
-    // Se não for master/admin, o atendente comum só vê:
-    // a) Fila de Aguardando (assigned_to IS NULL)
-    // b) IA Ativa (assigned_to IS NULL)
-    // c) Conversas atribuídas a ele mesmo (assigned_to = userId)
-    // Conversas de outros atendentes são blindadas no servidor.
-    if (role !== "admin" && role !== "master") {
-      query = query.or(`assigned_to.is.null,assigned_to.eq.${userId}`)
+      // 3. Regra de Governança RBAC:
+      if (role !== "admin" && role !== "master") {
+        q = q.or(`assigned_to.is.null,assigned_to.eq.${userId}`)
+      }
+
+      return q.order("last_message_at", { ascending: false, nullsFirst: false }).limit(100)
     }
 
-    const { data: rawConvs, error: convError } = await query
-      .order("last_message_at", { ascending: false, nullsFirst: false })
-      .limit(100)
+    let { data: rawConvs, error: convError } = await buildQuery(true)
+
+    // Fallback gracioso se a coluna avatar_url ainda não existir no banco (42703)
+    if (convError && convError.code === "42703") {
+      const fallback = await buildQuery(false)
+      rawConvs = fallback.data
+      convError = fallback.error
+    }
 
     if (convError || !rawConvs) {
       console.error("[Conversations] Erro ao buscar conversas:", convError)
