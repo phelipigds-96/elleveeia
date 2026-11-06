@@ -44,26 +44,60 @@ export async function processWebhookEvent(
     const { data: existingCustomer } = await supabase.from('customers')
       .select('id').eq('company_id', companyId).eq('phone', payload.customer.phone).single()
     
+    const avatarUrl = payload.customer.avatar_url || payload.customer.profile_picture_url || null
+
     if (existingCustomer) {
       customerId = existingCustomer.id
-      // Atualiza o nome do cliente se necessário com escopo estrito de tenant
+      // Atualiza o nome e foto do cliente se necessário com escopo estrito de tenant
+      const updateData: any = { name: payload.customer.name }
+      if (avatarUrl) {
+        updateData.avatar_url = avatarUrl
+      }
       const { error: custErr } = await supabase
         .from('customers')
-        .update({ name: payload.customer.name })
+        .update(updateData)
         .eq('id', customerId)
         .eq('company_id', companyId)
 
-      if (custErr) {
+      // Fallback gracioso se a coluna avatar_url ainda não existir no banco (42703)
+      if (custErr && custErr.code === '42703') {
+        await supabase
+          .from('customers')
+          .update({ name: payload.customer.name })
+          .eq('id', customerId)
+          .eq('company_id', companyId)
+      } else if (custErr) {
         console.error('[processWebhookEvent] Erro ao atualizar nome do cliente:', custErr)
       }
     } else {
-      const { data: newCustomer, error: cErr } = await supabase.from('customers').insert({
+      const insertData: any = {
         company_id: companyId,
         name: payload.customer.name,
         phone: payload.customer.phone,
         email: payload.customer.email || null
-      }).select().single()
+      }
+      if (avatarUrl) {
+        insertData.avatar_url = avatarUrl
+      }
+
+      let { data: newCustomer, error: cErr } = await supabase
+        .from('customers')
+        .insert(insertData)
+        .select()
+        .single()
       
+      // Fallback gracioso se a coluna avatar_url ainda não existir no banco (42703)
+      if (cErr && cErr.code === '42703') {
+        const fallbackRes = await supabase.from('customers').insert({
+          company_id: companyId,
+          name: payload.customer.name,
+          phone: payload.customer.phone,
+          email: payload.customer.email || null
+        }).select().single()
+        newCustomer = fallbackRes.data
+        cErr = fallbackRes.error
+      }
+
       if (cErr) throw new Error('Falha ao criar cliente: ' + cErr.message)
       customerId = newCustomer.id
     }

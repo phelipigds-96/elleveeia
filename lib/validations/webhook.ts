@@ -9,6 +9,8 @@ export interface WebhookPayload {
     name: string
     phone: string
     email?: string
+    avatar_url?: string
+    profile_picture_url?: string
   }
   conversation?: {
     external_id?: string
