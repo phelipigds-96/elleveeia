@@ -17,7 +17,14 @@ import {
   RotateCcw,
   CheckCircle2,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  X,
+  MapPin,
+  Mail,
+  StickyNote,
+  Lock,
+  FileText,
+  Save
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -30,7 +37,10 @@ import {
   takeoverConversationAction,
   returnToAIAction,
   closeConversationAction,
-  reopenConversationAction
+  reopenConversationAction,
+  getCustomerDetailsAction,
+  updateCustomerProfileAction,
+  createInternalNoteAction
 } from "../actions"
 
 interface PainelClientProps {
@@ -91,13 +101,37 @@ export default function PainelClient({
   
   // 3. Estados de envio de mensagem e Ações de Ciclo de Vida (Fase 1)
   const [inputContent, setInputContent] = useState("")
+  const [sendMode, setSendMode] = useState<"whatsapp" | "note">("whatsapp")
   const [isSending, setIsSending] = useState(false)
+  const [isSendingInternalNote, setIsSendingInternalNote] = useState(false)
   const [isTakingOver, setIsTakingOver] = useState(false)
   const [isReturningToAI, setIsReturningToAI] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [isReopening, setIsReopening] = useState(false)
 
-  // 4. Efeito visual para quando uma conversa receber atualização em tempo real
+  // 4. Estados do Perfil do Cliente e Painel Retrátil (Fase 2)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [customerForm, setCustomerForm] = useState<{
+    id: string
+    name: string
+    phone: string
+    email: string
+    address: string
+    notes: string
+  }>({
+    id: "",
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    notes: "",
+  })
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false)
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(false)
+  const [quickNoteContent, setQuickNoteContent] = useState("")
+  const [isSavingQuickNote, setIsSavingQuickNote] = useState(false)
+
+  // 5. Efeito visual para quando uma conversa receber atualização em tempo real
   const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<string | null>(null)
   const [isRealtimeActive, setIsRealtimeActive] = useState(false)
 
@@ -109,6 +143,13 @@ export default function PainelClient({
     () => conversations.find((c) => c.id === selectedId) || null,
     [conversations, selectedId]
   )
+
+  // Notas internas filtradas desta conversa
+  const internalNotes = useMemo(() => {
+    return messages.filter(
+      (m) => m.message_type === "internal_note" || m.metadata?.is_internal
+    )
+  }, [messages])
 
   // Cliente público do navegador para subscrição WebSocket (sem chave service_role)
   const supabase = useMemo(() => createClient(), [])
@@ -123,6 +164,43 @@ export default function PainelClient({
   useEffect(() => {
     scrollToBottom(false)
   }, [])
+
+  // Sincroniza formulário de cliente ao selecionar conversa com fallback resiliente
+  useEffect(() => {
+    if (!activeConversation) return
+    const cust = activeConversation.customers
+    const targetCustId = activeConversation.customer_id || cust?.id || ""
+
+    setCustomerForm({
+      id: targetCustId,
+      name: cust?.name || "",
+      phone: cust?.phone || activeConversation.external_id || "",
+      email: cust?.email || "",
+      address: (cust as any)?.address || "",
+      notes: (cust as any)?.notes || "",
+    })
+
+    if (targetCustId) {
+      setIsLoadingCustomer(true)
+      getCustomerDetailsAction(targetCustId)
+        .then((res) => {
+          if (res.success && res.customer) {
+            setCustomerForm((prev) => ({
+              ...prev,
+              name: res.customer?.name || prev.name,
+              phone: res.customer?.phone || prev.phone,
+              email: res.customer?.email || prev.email,
+              address: res.customer?.address || prev.address || "",
+              notes: res.customer?.notes || prev.notes || "",
+            }))
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setIsLoadingCustomer(false)
+        })
+    }
+  }, [activeConversation?.id, activeConversation?.customer_id])
 
   // =========================================================================
   // SUB-SCRIÇÃO REALTIME: Mensagens da Conversa Ativa
@@ -345,10 +423,117 @@ export default function PainelClient({
     }
   }
 
+  // =========================================================================
+  // FASE 2: CRIAÇÃO DE NOTA INTERNA (Não enviada ao WhatsApp)
+  // =========================================================================
+  const handleCreateInternalNote = async (customContent?: string) => {
+    const text = (customContent !== undefined ? customContent : inputContent).trim()
+    if (!selectedId || !text || isSendingInternalNote) return
+
+    setIsSendingInternalNote(true)
+
+    try {
+      const res = await createInternalNoteAction({
+        conversationId: selectedId,
+        content: text,
+      })
+
+      if (res.success && res.message) {
+        setMessages((prev) => [...prev, res.message!])
+        if (customContent !== undefined) {
+          setQuickNoteContent("")
+        } else {
+          setInputContent("")
+        }
+        scrollToBottom(true)
+        toast.success("Nota Salva", "A anotação interna foi registrada na conversa.")
+      } else {
+        toast.error("Erro ao salvar nota", res.error || "Falha ao registrar nota.")
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha ao registrar nota.")
+    } finally {
+      setIsSendingInternalNote(false)
+    }
+  }
+
+  // =========================================================================
+  // FASE 2: SALVAR PERFIL DO CLIENTE
+  // =========================================================================
+  const handleSaveCustomer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const targetCustId = customerForm.id || activeConversation?.customer_id || activeConversation?.customers?.id
+    if (!targetCustId) {
+      toast.error("Erro", "Cliente não identificado nesta conversa.")
+      return
+    }
+
+    setIsSavingCustomer(true)
+
+    try {
+      const res = await updateCustomerProfileAction({
+        customerId: targetCustId,
+        name: customerForm.name,
+        phone: customerForm.phone,
+        email: customerForm.email,
+        address: customerForm.address,
+        notes: customerForm.notes,
+      })
+
+      if (res.success) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedId
+              ? {
+                  ...c,
+                  customers: {
+                    ...c.customers,
+                    name: customerForm.name,
+                    phone: customerForm.phone,
+                    email: customerForm.email,
+                    address: customerForm.address,
+                    notes: customerForm.notes,
+                  },
+                }
+              : c
+          )
+        )
+
+        if (res.pendingMigration) {
+          toast.success(
+            "Dados salvos!",
+            "Nome, telefone e email atualizados. (Para salvar endereço e notas, aplique o script SQL no Supabase)."
+          )
+        } else {
+          toast.success("Perfil atualizado!", "As informações do cliente foram salvas com sucesso.")
+        }
+      } else {
+        toast.error("Erro ao salvar", res.error || "Não foi possível atualizar o perfil.")
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado", err.message || "Falha ao salvar dados do cliente.")
+    } finally {
+      setIsSavingCustomer(false)
+    }
+  }
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (sendMode === "note") {
+      handleCreateInternalNote()
+    } else {
+      handleSendMessage(e)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSendMessage()
+      if (sendMode === "note") {
+        handleCreateInternalNote()
+      } else {
+        handleSendMessage()
+      }
     }
   }
 
@@ -849,11 +1034,13 @@ export default function PainelClient({
       </aside>
 
       {/* =====================================================================
-          MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink)
+          MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink) COM DRAWER RETRÁTIL
       ====================================================================== */}
-      <main className="flex-1 flex flex-col h-full bg-[#F3F2ED] overflow-hidden">
+      <main className="flex-1 flex flex-row h-full bg-[#F3F2ED] overflow-hidden">
         {activeConversation ? (
           <>
+            {/* Coluna Central do Chat */}
+            <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
             {/* Header do Chat */}
             <header className="h-16 border-b border-ellevee-stone px-6 flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-3 min-w-0">
@@ -1019,6 +1206,20 @@ export default function PainelClient({
                   </>
                 )}
 
+                {/* Botão Alternar Painel Lateral do Cliente (Fase 2) */}
+                <button
+                  onClick={() => setIsProfileOpen((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                    isProfileOpen
+                      ? "bg-ellevee-ink text-white border-ellevee-ink shadow-2xs"
+                      : "bg-white hover:bg-[#F8F8F5] text-ellevee-ink border-ellevee-stone shadow-2xs"
+                  }`}
+                  title={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
+                >
+                  <User className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{isProfileOpen ? "Ocultar Perfil" : "Perfil"}</span>
+                </button>
+
                 <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-medium bg-[#F8F8F5] text-ellevee-ink border border-ellevee-stone">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span>Realtime</span>
@@ -1041,6 +1242,7 @@ export default function PainelClient({
                   messages.map((msg) => {
                     const isCustomer = msg.sender_type === "customer"
                     const isSystem = msg.sender_type === "system" || msg.message_type === "event"
+                    const isInternalNote = msg.message_type === "internal_note" || msg.metadata?.is_internal
                     const isAgent = msg.sender_type === "agent" || msg.sender_type === "human"
                     const isIA = msg.sender_type === "ia" || msg.sender_type === "bot"
 
@@ -1051,6 +1253,34 @@ export default function PainelClient({
                           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-white text-ellevee-ink border border-ellevee-stone shadow-2xs max-w-md text-center">
                             <Sparkles className="h-3.5 w-3.5 text-ellevee-accent shrink-0" />
                             <span>{msg.content}</span>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Mensagem de Nota Interna da Equipe (Fase 2)
+                    if (isInternalNote) {
+                      return (
+                        <div key={msg.id} className="flex justify-center my-3">
+                          <div className="w-full max-w-xl bg-[#FEFCE8] border border-[#FEF08A] rounded-xl p-3.5 shadow-2xs">
+                            <div className="flex items-center justify-between border-b border-[#FEF08A]/70 pb-1.5 mb-2">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-[#854D0E]">
+                                <Lock className="h-3.5 w-3.5 text-[#CA8A04]" />
+                                <span>Nota Interna</span>
+                                <span className="text-[11px] font-normal text-[#A16207]">
+                                  • {msg.metadata?.operator_name || "Equipe"}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-[#A16207]">
+                                {formatTime(msg.created_at)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[#713F12] whitespace-pre-wrap leading-relaxed">
+                              {msg.content}
+                            </p>
+                            <div className="mt-1.5 text-[10px] text-[#A16207]/70 italic flex items-center gap-1">
+                              <span>Privado • Visível apenas para atendentes internos (não enviado ao WhatsApp)</span>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1141,42 +1371,329 @@ export default function PainelClient({
               </footer>
             ) : (
               <footer className="border-t border-ellevee-stone px-4 py-3 bg-white shrink-0">
-                <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex items-end gap-2.5">
-                  <div className="flex-1 relative rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus-within:bg-white focus-within:border-ellevee-ink focus-within:ring-1 focus-within:ring-ellevee-ink transition-all">
-                    <textarea
-                      ref={textareaRef}
-                      rows={1}
-                      value={inputContent}
-                      onChange={(e) => setInputContent(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={isSending}
-                      placeholder="Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
-                      className="w-full resize-none bg-transparent px-3.5 py-2.5 text-xs text-ellevee-ink placeholder:text-ellevee-sage/70 focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
+                <div className="max-w-3xl mx-auto space-y-2">
+                  {/* Abas de Modo: Mensagem WhatsApp vs Nota Interna */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSendMode("whatsapp")}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        sendMode === "whatsapp"
+                          ? "bg-ellevee-ink text-white shadow-2xs"
+                          : "text-ellevee-sage hover:text-ellevee-ink bg-transparent"
+                      }`}
+                    >
+                      <Send className="h-3 w-3" />
+                      <span>Mensagem WhatsApp</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSendMode("note")}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        sendMode === "note"
+                          ? "bg-[#FEF08A] text-[#854D0E] shadow-2xs border border-[#FDE047]"
+                          : "text-ellevee-sage hover:text-[#854D0E] bg-transparent"
+                      }`}
+                    >
+                      <Lock className="h-3 w-3" />
+                      <span>Nota Interna (Equipe)</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleFormSubmit} className="flex items-end gap-2.5">
+                    <div
+                      className={`flex-1 relative rounded-lg border transition-all ${
+                        sendMode === "note"
+                          ? "border-[#FDE047] bg-[#FEFCE8] focus-within:bg-[#FEFCE8] focus-within:border-[#EAB308] focus-within:ring-1 focus-within:ring-[#EAB308]"
+                          : "border-ellevee-stone bg-[#FBFBFA] focus-within:bg-white focus-within:border-ellevee-ink focus-within:ring-1 focus-within:ring-ellevee-ink"
+                      }`}
+                    >
+                      <textarea
+                        ref={textareaRef}
+                        rows={sendMode === "note" ? 2 : 1}
+                        value={inputContent}
+                        onChange={(e) => setInputContent(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        disabled={isSending || isSendingInternalNote}
+                        placeholder={
+                          sendMode === "note"
+                            ? "Adicione uma nota interna sobre este atendimento (visível apenas para sua equipe)..."
+                            : "Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
+                        }
+                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-xs text-ellevee-ink placeholder:text-ellevee-sage/70 focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {sendMode === "note" ? (
+                      <button
+                        type="submit"
+                        disabled={isSendingInternalNote || !inputContent.trim()}
+                        className="h-11 px-4 rounded-lg bg-[#CA8A04] hover:bg-[#A16207] text-white transition-colors flex items-center justify-center gap-1.5 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-2xs cursor-pointer font-sans"
+                        title="Salvar nota interna nesta conversa"
+                      >
+                        {isSendingInternalNote ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-white" />
+                            <span className="hidden sm:inline">Salvando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-4 w-4" />
+                            <span className="hidden sm:inline">Salvar Nota</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={isSending || !inputContent.trim()}
+                        className="h-11 px-4 rounded-lg bg-ellevee-ink hover:bg-black text-white transition-colors flex items-center justify-center gap-1.5 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-2xs cursor-pointer font-sans"
+                        title="Enviar mensagem para o cliente (Outbox idempotente)"
+                      >
+                        {isSending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-ellevee-accent" />
+                            <span className="hidden sm:inline">Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            <span className="hidden sm:inline">Enviar</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </form>
+                </div>
+              </footer>
+            )}
+          </div>
+
+          {/* PAINEL LATERAL RETRÁTIL: PERFIL DO CLIENTE (Fase 2) */}
+          {isProfileOpen && (
+            <aside className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto z-10">
+              {/* Header do Drawer */}
+              <div className="p-4 border-b border-ellevee-stone flex items-center justify-between bg-[#FBFBFA]">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-ellevee-ink" />
+                  <h3 className="font-semibold text-xs uppercase tracking-wider text-ellevee-ink">
+                    Perfil do Cliente
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsProfileOpen(false)}
+                  className="p-1 rounded-md text-ellevee-sage hover:text-ellevee-ink hover:bg-stone-100 transition-colors cursor-pointer"
+                  title="Fechar painel"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Conteúdo do Drawer com Scroll */}
+              <div className="p-4 space-y-5 flex-1">
+                {/* Card de Identificação */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-[#F8F8F5] border border-ellevee-stone">
+                  <div className="h-11 w-11 rounded-full bg-ellevee-ink text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {(customerForm.name || "C").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-xs text-ellevee-ink truncate">
+                      {customerForm.name || "Cliente Sem Nome"}
+                    </h4>
+                    <p className="text-[11px] text-ellevee-sage font-mono truncate">
+                      {customerForm.phone || activeConversation.external_id || "Sem telefone"}
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium mt-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+
+                {/* Formulário de Edição de Dados */}
+                <form onSubmit={handleSaveCustomer} className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-ellevee-sage">
+                      Dados Cadastrais
+                    </span>
+                    {isLoadingCustomer && (
+                      <Loader2 className="h-3 w-3 animate-spin text-ellevee-sage" />
+                    )}
+                  </div>
+
+                  {/* Nome */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ellevee-ink flex items-center gap-1">
+                      <User className="h-3 w-3 text-ellevee-sage" />
+                      Nome Completo
+                    </label>
+                    <input
+                      type="text"
+                      value={customerForm.name}
+                      onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })}
+                      placeholder="Nome do cliente"
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus:bg-white focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink text-ellevee-ink"
                     />
                   </div>
 
+                  {/* Telefone / WhatsApp */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-medium text-ellevee-ink flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-ellevee-sage" />
+                        WhatsApp / Telefone
+                      </label>
+                      {customerForm.phone && (
+                        <a
+                          href={`https://wa.me/${customerForm.phone.replace(/\D/g, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-emerald-700 hover:underline"
+                        >
+                          Abrir no WhatsApp
+                        </a>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={customerForm.phone}
+                      onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                      placeholder="Ex: 5511999999999"
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus:bg-white focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink text-ellevee-ink font-mono"
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ellevee-ink flex items-center gap-1">
+                      <Mail className="h-3 w-3 text-ellevee-sage" />
+                      E-mail
+                    </label>
+                    <input
+                      type="email"
+                      value={customerForm.email}
+                      onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+                      placeholder="cliente@email.com"
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus:bg-white focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink text-ellevee-ink"
+                    />
+                  </div>
+
+                  {/* Endereço */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ellevee-ink flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-ellevee-sage" />
+                      Endereço Completo
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customerForm.address}
+                      onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })}
+                      placeholder="Rua, Número, Complemento, Bairro, Cidade - UF"
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus:bg-white focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink text-ellevee-ink resize-none"
+                    />
+                  </div>
+
+                  {/* Observações Gerais */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ellevee-ink flex items-center gap-1">
+                      <FileText className="h-3 w-3 text-ellevee-sage" />
+                      Observações do Cliente
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={customerForm.notes}
+                      onChange={(e) => setCustomerForm({ ...customerForm, notes: e.target.value })}
+                      placeholder="Preferências, histórico de compras, observações cadastrais..."
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-ellevee-stone bg-[#FBFBFA] focus:bg-white focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink text-ellevee-ink resize-none"
+                    />
+                  </div>
+
+                  {/* Botão Salvar Perfil */}
                   <button
                     type="submit"
-                    disabled={isSending || !inputContent.trim()}
-                    className="h-11 px-4 rounded-lg bg-ellevee-ink hover:bg-black text-white transition-colors flex items-center justify-center gap-1.5 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-2xs cursor-pointer font-sans"
-                    title="Enviar mensagem para o cliente (Outbox idempotente)"
+                    disabled={isSavingCustomer}
+                    className="w-full h-9 rounded-lg bg-ellevee-ink hover:bg-black text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
                   >
-                    {isSending ? (
+                    {isSavingCustomer ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin text-ellevee-accent" />
-                        <span className="hidden sm:inline">Enviando...</span>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-ellevee-accent" />
+                        <span>Salvando Perfil...</span>
                       </>
                     ) : (
                       <>
-                        <Send className="h-4 w-4" />
-                        <span className="hidden sm:inline">Enviar</span>
+                        <Save className="h-3.5 w-3.5" />
+                        <span>Salvar Alterações</span>
                       </>
                     )}
                   </button>
                 </form>
-              </footer>
-            )}
-          </>
+
+                {/* Divisor */}
+                <hr className="border-ellevee-stone" />
+
+                {/* Seção de Notas Internas no Drawer */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ellevee-sage">
+                    <Lock className="h-3.5 w-3.5 text-[#CA8A04]" />
+                    <span>Notas Internas da Equipe</span>
+                  </div>
+
+                  {/* Inserção rápida de nota no drawer */}
+                  <div className="space-y-1.5">
+                    <textarea
+                      rows={2}
+                      value={quickNoteContent}
+                      onChange={(e) => setQuickNoteContent(e.target.value)}
+                      placeholder="Adicionar nota rápida sobre este atendimento..."
+                      className="w-full text-xs px-3 py-2 rounded-lg border border-[#FDE047] bg-[#FEFCE8] text-[#713F12] placeholder:text-[#A16207]/60 focus:outline-none focus:border-[#EAB308] focus:ring-1 focus:ring-[#EAB308] resize-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCreateInternalNote(quickNoteContent)}
+                      disabled={isSavingQuickNote || !quickNoteContent.trim()}
+                      className="w-full h-8 rounded-lg bg-[#CA8A04] hover:bg-[#A16207] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-40"
+                    >
+                      {isSavingQuickNote ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Registrando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <StickyNote className="h-3.5 w-3.5" />
+                          <span>Adicionar Nota</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Lista de Notas Recentes na Conversa */}
+                  <div className="space-y-2 pt-1 max-h-56 overflow-y-auto">
+                    {internalNotes.length === 0 ? (
+                      <p className="text-[11px] text-ellevee-sage italic text-center py-2">
+                        Nenhuma nota interna registrada nesta conversa.
+                      </p>
+                    ) : (
+                      internalNotes.map((n) => (
+                        <div
+                          key={n.id}
+                          className="p-2.5 rounded-lg bg-[#FEFCE8] border border-[#FEF08A] text-xs text-[#713F12] space-y-1"
+                        >
+                          <div className="flex items-center justify-between text-[10px] text-[#A16207]">
+                            <span className="font-semibold">{n.metadata?.operator_name || "Atendente"}</span>
+                            <span className="font-mono">{formatTime(n.created_at)}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap">{n.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </aside>
+          )}
+        </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-ellevee-sage space-y-3">
             <MessageSquare className="h-10 w-10 stroke-1 text-ellevee-sage/50" />
