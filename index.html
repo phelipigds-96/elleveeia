@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ellevee IA — Plataforma Omnichannel de Atendimento</title>
+    <meta name="description" content="Inteligência que conecta. Resultados que evoluem." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 6h16M4 12h10M4 18h16' stroke='%23202520' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --ivory: #f3f2ed;
+        --ink: #202520;
+        --sage: #718071;
+        --accent: #b7d957;
+        --stone: #e7e6e0;
+        --stone-subtle: #f8f8f5;
+        --ink-muted: #3a403a;
+        --sage-light: #eef1ee;
+        --accent-muted: #e5f2bf;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--ivory);
+        color: var(--ink);
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+      header.topbar {
+        background: var(--ink);
+        color: #fff;
+        border-bottom: 1px solid rgba(255,255,255,.1);
+      }
+      .topbar .wrap {
+        display: flex; align-items: center; gap: 12px;
+        height: 64px;
+      }
+      .logo {
+        width: 32px; height: 32px; border-radius: 8px;
+        background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15);
+        display: grid; place-items: center; flex: none;
+      }
+      .logo svg { width: 16px; height: 16px; stroke: var(--accent); }
+      .brand { display: flex; align-items: center; gap: 8px; }
+      .brand strong { font-size: 16px; letter-spacing: -.01em; }
+      .tag {
+        font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+        color: var(--accent); background: rgba(255,255,255,.1);
+        border: 1px solid rgba(255,255,255,.15); border-radius: 4px; padding: 2px 6px;
+      }
+      .brand small { display: block; font-size: 10px; color: #a6b5a6; margin-top: 2px; }
+      nav.links { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+      nav.links a {
+        font-size: 13px; color: #d8ded8; text-decoration: none;
+        padding: 8px 12px; border-radius: 6px; border: 1px solid transparent;
+      }
+      nav.links a:hover { color: #fff; background: rgba(255,255,255,.06); }
+      nav.links a.cta {
+        color: var(--ink); background: var(--accent); font-weight: 600;
+        border-color: var(--accent);
+      }
+      nav.links a.cta:hover { background: #c4e366; }
+      main { padding: 64px 0 72px; }
+      .hero { max-width: 720px; }
+      .eyebrow {
+        display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .14em;
+        text-transform: uppercase; color: var(--sage);
+        background: var(--accent-muted); border-radius: 999px; padding: 5px 12px;
+      }
+      h1 {
+        font-size: clamp(32px, 5vw, 52px); line-height: 1.08; letter-spacing: -.02em;
+        margin: 18px 0 14px; font-weight: 800;
+      }
+      .lead { font-size: 17px; line-height: 1.6; color: var(--ink-muted); margin: 0 0 26px; }
+      .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 14px; font-weight: 600; text-decoration: none;
+        padding: 11px 18px; border-radius: 8px; border: 1px solid var(--stone);
+        background: #fff; color: var(--ink);
+      }
+      .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+      .btn.primary:hover { background: #2c322c; }
+      .btn:hover { border-color: var(--sage); }
+      .grid {
+        margin-top: 56px; display: grid; gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      }
+      .card {
+        background: #fff; border: 1px solid rgba(214,211,204,.9);
+        border-radius: 12px; padding: 20px;
+        box-shadow: 0 1px 2px rgba(26,29,26,.05);
+      }
+      .card h2 { font-size: 15px; margin: 0 0 8px; letter-spacing: -.01em; }
+      .card p { font-size: 13px; line-height: 1.55; color: var(--ink-muted); margin: 0; }
+      .card .num {
+        width: 30px; height: 30px; border-radius: 8px; background: var(--sage-light);
+        color: var(--sage); display: grid; place-items: center;
+        font-size: 12px; font-weight: 700; margin-bottom: 12px;
+      }
+      footer {
+        border-top: 1px solid var(--stone); background: #fff; padding: 22px 0;
+      }
+      footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      footer span { font-size: 12px; color: var(--sage); }
+      .note {
+        margin-top: 40px; background: var(--stone-subtle); border: 1px dashed var(--stone);
+        border-radius: 12px; padding: 16px 18px; font-size: 13px; line-height: 1.6; color: var(--ink-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <div class="brand">
+          <div class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round">
+              <path d="M4 6h16" /><path d="M4 12h10" /><path d="M4 18h16" />
+            </svg>
+          </div>
+          <div>
+            <div><strong>Ellevee IA</strong> <span class="tag">Portal</span></div>
+            <small>Plataforma Omnichannel</small>
+          </div>
+        </div>
+        <nav class="links">
+          <a href="/login">Entrar</a>
+          <a href="/signup">Criar conta</a>
+          <a class="cta" href="/dashboard">Painel</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <section class="hero">
+          <span class="eyebrow">Agentes de IA para atendimento</span>
+          <h1>Inteligência que conecta.<br />Resultados que evoluem.</h1>
+          <p class="lead">
+            Plataforma SaaS multi-tenant para operar agentes de inteligência artificial no WhatsApp:
+            catálogo, precificação, orçamentos, conversas em tempo real e integrações.
+          </p>
+          <div class="actions">
+            <a class="btn primary" href="/login">Acessar o painel</a>
+            <a class="btn" href="/signup">Criar conta</a>
+          </div>
+        </section>
+
+        <section class="grid">
+          <article class="card">
+            <div class="num">01</div>
+            <h2>Conversas</h2>
+            <p>Hub de conversas com kanban de etapas, histórico completo e leitura em tempo real.</p>
+          </article>
+          <article class="card">
+            <div class="num">02</div>
+            <h2>Agentes</h2>
+            <p>Agentes configuráveis com ferramentas comerciais, memória de trabalho e escopo por etapa.</p>
+          </article>
+          <article class="card">
+            <div class="num">03</div>
+            <h2>Catálogo</h2>
+            <p>Produtos, aliases e preços por tabela e vigência, com importação assistida.</p>
+          </article>
+          <article class="card">
+            <div class="num">04</div>
+            <h2>Integrações</h2>
+            <p>Outbox assíncrono, webhooks de status e conexão com n8n e gateways de WhatsApp.</p>
+          </article>
+        </section>
+
+        <p class="note">
+          Esta é a página pública estática do projeto. O painel completo (login, conversas, agentes,
+          catálogo e integrações) roda com servidor, banco de dados e autenticação — START para acionar
+          o <strong>preview ao vivo</strong>. Este endereço estático não executa recursos de servidor.
+        </p>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>Ellevee IA — Plataforma Omnichannel de Agentes de IA</span>
+        <span>Next.js · Supabase · n8n</span>
+      </div>
+    </footer>
+  </body>
+</html>
