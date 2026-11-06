@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
+import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
 
 export interface CustomerData {
   id?: string
@@ -240,7 +241,7 @@ export async function sendMessageAction(
     // 1. Obter conversa e canal
     const { data: conv, error: convErr } = await adminClient
       .from("conversations")
-      .select("id, company_id, channel, customers(phone)")
+      .select("id, company_id, channel, customers(name, phone)")
       .eq("id", conversationId)
       .eq("company_id", companyId)
       .single()
@@ -270,6 +271,7 @@ export async function sendMessageAction(
     }
 
     const customerPhone = (conv.customers as any)?.phone || null
+    const customerName = (conv.customers as any)?.name || "Cliente"
 
     // 3. Persistência na tabela messages com sender_type: 'agent'
     const { data: createdMsg, error: msgInsertErr } = await adminClient
@@ -282,7 +284,7 @@ export async function sendMessageAction(
         content: trimmed,
         message_type: "text",
         metadata: {
-          delivery_status: "sent",
+          delivery_status: "pending",
           client_message_id: clientMessageId || null,
         },
       })
@@ -298,7 +300,30 @@ export async function sendMessageAction(
     }
 
     // 4. Registro na message_outbox para acionamento seguro do gateway
-    const { error: outboxInsertErr } = await adminClient
+    const outboxPayload = {
+      event_id: safeIdempotencyKey,
+      event_type: "message.send",
+      conversation_id: conversationId,
+      channel: conv.channel || "whatsapp",
+      recipient: customerPhone,
+      number: customerPhone,
+      text: trimmed,
+      customer: {
+        name: customerName,
+        phone: customerPhone,
+      },
+      message: {
+        id: createdMsg.id,
+        content: trimmed,
+        text: trimmed,
+        sender_type: "agent",
+        sender_id: userId,
+        message_type: "text",
+        created_at: createdMsg.created_at,
+      },
+    }
+
+    const { data: createdOutbox, error: outboxInsertErr } = await adminClient
       .from("message_outbox")
       .insert({
         company_id: companyId,
@@ -307,28 +332,27 @@ export async function sendMessageAction(
         idempotency_key: safeIdempotencyKey,
         channel: conv.channel || "whatsapp",
         recipient: customerPhone,
-        payload: {
-          event_id: safeIdempotencyKey,
-          conversation_id: conversationId,
-          channel: conv.channel || "whatsapp",
-          recipient: customerPhone,
-          message: {
-            id: createdMsg.id,
-            content: trimmed,
-            sender_type: "agent",
-            sender_id: userId,
-            created_at: createdMsg.created_at,
-          },
-        },
+        payload: outboxPayload,
         status: "pending",
         attempts: 0,
       })
+      .select("id")
+      .single()
 
     if (outboxInsertErr) {
       console.warn("[Chat] Aviso ao registrar na message_outbox:", outboxInsertErr.message)
     }
 
-    // 5. Atualização do timestamp de última mensagem da conversa
+    // 5. Despacho Imediato em Tempo Real (Painel -> Gateway -> WhatsApp)
+    if (createdOutbox?.id) {
+      try {
+        await dispatchOutboxMessage(createdOutbox.id, { adminClient })
+      } catch (dispErr: any) {
+        console.error("[Chat] Falha no despacho imediato da outbox (será reprocessado por worker):", dispErr?.message || dispErr)
+      }
+    }
+
+    // 6. Atualização do timestamp de última mensagem da conversa
     await adminClient
       .from("conversations")
       .update({
