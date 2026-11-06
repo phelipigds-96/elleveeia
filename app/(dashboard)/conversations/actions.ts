@@ -27,6 +27,7 @@ export interface ConversationData {
   unread_count: number
   external_id?: string | null
   agent_id?: string | null
+  agent_name?: string | null
   customers?: CustomerData | null
   last_message_preview?: string
 }
@@ -40,8 +41,9 @@ export interface MessageData {
   content: string
   message_type?: string
   metadata?: {
-    delivery_status?: "pending" | "sent" | "delivered" | "read" | string
+    delivery_status?: "pending" | "sent" | "delivered" | "read" | "failed" | string
     source?: string
+    event?: string
     [key: string]: any
   } | null
   created_at: string
@@ -56,16 +58,24 @@ export interface SendMessageResult {
   error?: string
 }
 
+export interface UserProfileContext {
+  userId: string
+  companyId: string
+  role: string
+  userName: string
+}
+
 const DEFAULT_PREVIEW_COMPANY_ID = "90e69b50-1b4e-4f4a-94f2-78be1cf82833" // Ellevee Admin
 const DEFAULT_PREVIEW_USER_ID = "71ee00c9-e22b-479d-bc34-9d596448c3f9"    // admin@ellevee.com
 
 /**
- * Extrai o company_id e o sender_id diretamente da sessão segura do servidor via SSR auth.
- * Em modo de demonstração/preview, provê o contexto padrão do tenant administrador.
+ * Extrai o company_id, sender_id, role e full_name da sessão segura do servidor via SSR auth.
  */
-async function getAuthenticatedAgentContext(): Promise<{ userId: string; companyId: string }> {
+async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
   let userId: string | null = null
   let companyId: string | null = null
+  let role = "admin"
+  let userName = "Atendente"
 
   try {
     const supabase = createClient()
@@ -75,12 +85,14 @@ async function getAuthenticatedAgentContext(): Promise<{ userId: string; company
       userId = authData.user.id
       const { data: profile } = await supabase
         .from("profiles")
-        .select("company_id")
+        .select("company_id, role, full_name")
         .eq("id", userId)
         .maybeSingle()
 
-      if (profile?.company_id) {
-        companyId = profile.company_id
+      if (profile) {
+        if (profile.company_id) companyId = profile.company_id
+        if (profile.role) role = profile.role
+        if (profile.full_name) userName = profile.full_name
       }
     }
   } catch {
@@ -90,19 +102,41 @@ async function getAuthenticatedAgentContext(): Promise<{ userId: string; company
   return {
     userId: userId || DEFAULT_PREVIEW_USER_ID,
     companyId: companyId || DEFAULT_PREVIEW_COMPANY_ID,
+    role,
+    userName,
   }
 }
 
 /**
- * Obtém a lista real de conversas ordenadas por last_message_at desc
+ * Provê o perfil do usuário atual para Client Components.
+ */
+export async function getAgentProfileContext(): Promise<UserProfileContext> {
+  return await getAuthenticatedAgentContext()
+}
+
+/**
+ * Obtém a lista real de conversas com filtro RBAC (Master vs Atendente)
  */
 export async function getConversationsList(): Promise<ConversationData[]> {
   try {
-    const { companyId } = await getAuthenticatedAgentContext()
+    const { userId, companyId, role } = await getAuthenticatedAgentContext()
     const client = createAdminClient()
 
-    // 1. Busca conversas do tenant
-    const { data: rawConvs, error: convError } = await client
+    // 1. Descobrir o agente ativo padrão da empresa (ex: 'Ana', 'Coalito')
+    let defaultAgentName = "IA"
+    const { data: activeAgent } = await client
+      .from("agents")
+      .select("name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (activeAgent?.name) {
+      defaultAgentName = activeAgent.name
+    }
+
+    // 2. Query de conversas do tenant com join em customers e agents
+    let query = client
       .from("conversations")
       .select(`
         id,
@@ -119,6 +153,10 @@ export async function getConversationsList(): Promise<ConversationData[]> {
         unread_count,
         external_id,
         agent_id,
+        agents (
+          id,
+          name
+        ),
         customers (
           id,
           name,
@@ -127,8 +165,20 @@ export async function getConversationsList(): Promise<ConversationData[]> {
         )
       `)
       .eq("company_id", companyId)
+
+    // 3. Regra de Governança RBAC:
+    // Se não for master/admin, o atendente comum só vê:
+    // a) Fila de Aguardando (assigned_to IS NULL)
+    // b) IA Ativa (assigned_to IS NULL)
+    // c) Conversas atribuídas a ele mesmo (assigned_to = userId)
+    // Conversas de outros atendentes são blindadas no servidor.
+    if (role !== "admin" && role !== "master") {
+      query = query.or(`assigned_to.is.null,assigned_to.eq.${userId}`)
+    }
+
+    const { data: rawConvs, error: convError } = await query
       .order("last_message_at", { ascending: false, nullsFirst: false })
-      .limit(50)
+      .limit(100)
 
     if (convError || !rawConvs) {
       console.error("[Conversations] Erro ao buscar conversas:", convError)
@@ -137,7 +187,7 @@ export async function getConversationsList(): Promise<ConversationData[]> {
 
     const convIds = rawConvs.map((c: any) => c.id)
 
-    // 2. Busca a última mensagem de cada conversa para preencher o preview
+    // 4. Busca a última mensagem de cada conversa para preencher o preview
     const previewMap = new Map<string, string>()
 
     if (convIds.length > 0) {
@@ -156,10 +206,12 @@ export async function getConversationsList(): Promise<ConversationData[]> {
       }
     }
 
-    // 3. Monta o contrato tipado
+    // 5. Monta o contrato tipado com o nome dinâmico do agente
     const formatted: ConversationData[] = rawConvs.map((c: any) => {
       const customer = Array.isArray(c.customers) ? c.customers[0] : c.customers
       const preview = previewMap.get(c.id) || (c.channel ? `Atendimento via ${c.channel}` : "Nova conversa iniciada")
+      const agentObj = Array.isArray(c.agents) ? c.agents[0] : c.agents
+      const agentName = agentObj?.name || defaultAgentName
 
       return {
         id: c.id,
@@ -176,14 +228,15 @@ export async function getConversationsList(): Promise<ConversationData[]> {
         unread_count: c.unread_count || 0,
         external_id: c.external_id,
         agent_id: c.agent_id,
+        agent_name: agentName,
         customers: customer || { name: "Cliente Desconhecido", phone: c.external_id },
         last_message_preview: preview,
       }
     })
 
     return formatted
-  } catch (error) {
-    console.error("[Conversations] Exceção em getConversationsList:", error)
+  } catch (err: any) {
+    console.error("[Conversations] Exceção em getConversationsList:", err)
     return []
   }
 }
@@ -389,7 +442,7 @@ export async function takeoverConversationAction(
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
     const adminClient = createAdminClient()
 
     // 1. Atualizar status da conversa para 'human' e designar atendente (assigned_to)
@@ -420,11 +473,12 @@ export async function takeoverConversationAction(
       company_id: companyId,
       conversation_id: conversationId,
       sender_type: "system",
-      content: "Atendimento transferido para o operador humano. A IA foi pausada nesta conversa.",
+      content: `Atendimento assumido por ${userName || "operador humano"}. A IA foi pausada nesta conversa.`,
       message_type: "event",
       metadata: {
         event: "conversation.takeover",
         operator_id: userId,
+        operator_name: userName,
       },
     })
 
@@ -436,6 +490,211 @@ export async function takeoverConversationAction(
     }
   } catch (error: any) {
     console.error("[Chat] Exceção em takeoverConversationAction:", error)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${error.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+/**
+ * Server Action para devolver o atendimento para o Agente de IA com nome dinâmico
+ */
+export async function returnToAIAction(
+  conversationId: string
+): Promise<{ success: boolean; status?: string; agentName?: string; error?: string }> {
+  try {
+    if (!conversationId) {
+      return { success: false, error: "Identificador da conversa inválido." }
+    }
+
+    const { companyId } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+
+    // 1. Obter nome do agente da conversa ou ativo da empresa
+    const { data: conv } = await adminClient
+      .from("conversations")
+      .select("id, agent_id, agents(name)")
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    let agentName = (conv?.agents as any)?.name
+
+    if (!agentName) {
+      const { data: activeAgent } = await adminClient
+        .from("agents")
+        .select("name")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .maybeSingle()
+      agentName = activeAgent?.name || "IA"
+    }
+
+    const now = new Date().toISOString()
+
+    // 2. Atualizar status para 'open' e limpar atribuição de operador humano
+    const { error: updErr } = await adminClient
+      .from("conversations")
+      .update({
+        status: "open",
+        assigned_to: null,
+        updated_at: now,
+        last_message_at: now,
+      })
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+
+    if (updErr) {
+      console.error("[Chat] Erro ao devolver conversa para IA:", updErr)
+      return { success: false, error: `Falha ao devolver conversa: ${updErr.message}` }
+    }
+
+    // 3. Gravar evento de sistema na timeline
+    await adminClient.from("messages").insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      sender_type: "system",
+      content: `Atendimento devolvido para ${agentName}. O agente autônomo está ativo novamente.`,
+      message_type: "event",
+      metadata: {
+        event: "conversation.ai_resume",
+        agent_name: agentName,
+      },
+    })
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      status: "open",
+      agentName,
+    }
+  } catch (error: any) {
+    console.error("[Chat] Exceção em returnToAIAction:", error)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${error.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+/**
+ * Server Action para encerrar o atendimento (concluir ticket)
+ */
+export async function closeConversationAction(
+  conversationId: string
+): Promise<{ success: boolean; status?: string; error?: string }> {
+  try {
+    if (!conversationId) {
+      return { success: false, error: "Identificador da conversa inválido." }
+    }
+
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+    const now = new Date().toISOString()
+
+    // 1. Atualizar status para 'closed' e preencher closed_at
+    const { error: updErr } = await adminClient
+      .from("conversations")
+      .update({
+        status: "closed",
+        closed_at: now,
+        updated_at: now,
+        last_message_at: now,
+      })
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+
+    if (updErr) {
+      console.error("[Chat] Erro ao encerrar conversa:", updErr)
+      return { success: false, error: `Falha ao encerrar conversa: ${updErr.message}` }
+    }
+
+    // 2. Gravar evento de sistema na timeline
+    await adminClient.from("messages").insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      sender_type: "system",
+      content: `Atendimento encerrado por ${userName || "operador"}.`,
+      message_type: "event",
+      metadata: {
+        event: "conversation.closed",
+        operator_id: userId,
+        operator_name: userName,
+      },
+    })
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      status: "closed",
+    }
+  } catch (error: any) {
+    console.error("[Chat] Exceção em closeConversationAction:", error)
+    return {
+      success: false,
+      error: `Erro interno no servidor: ${error.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+/**
+ * Server Action para reabrir atendimento encerrado
+ */
+export async function reopenConversationAction(
+  conversationId: string
+): Promise<{ success: boolean; status?: string; error?: string }> {
+  try {
+    if (!conversationId) {
+      return { success: false, error: "Identificador da conversa inválido." }
+    }
+
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+    const now = new Date().toISOString()
+
+    // 1. Reativar status para 'human', associar ao atendente e limpar closed_at
+    const { error: updErr } = await adminClient
+      .from("conversations")
+      .update({
+        status: "human",
+        assigned_to: userId,
+        closed_at: null,
+        updated_at: now,
+        last_message_at: now,
+      })
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+
+    if (updErr) {
+      console.error("[Chat] Erro ao reabrir conversa:", updErr)
+      return { success: false, error: `Falha ao reabrir conversa: ${updErr.message}` }
+    }
+
+    // 2. Gravar evento de sistema na timeline
+    await adminClient.from("messages").insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      sender_type: "system",
+      content: `Atendimento reaberto por ${userName || "operador"}.`,
+      message_type: "event",
+      metadata: {
+        event: "conversation.reopened",
+        operator_id: userId,
+        operator_name: userName,
+      },
+    })
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      status: "human",
+    }
+  } catch (error: any) {
+    console.error("[Chat] Exceção em reopenConversationAction:", error)
     return {
       success: false,
       error: `Erro interno no servidor: ${error.message || "Falha desconhecida"}`,
