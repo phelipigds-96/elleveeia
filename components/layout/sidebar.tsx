@@ -1,100 +1,167 @@
-import Link from 'next/link'
-import { LayoutDashboard, MessageSquare, Users, Bot, BookOpen, Wrench, Plug, Settings } from 'lucide-react'
+"use client"
 
-const mainLinks = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/conversations', label: 'Conversas', icon: MessageSquare },
-  { href: '/customers', label: 'Clientes', icon: Users },
-  { href: '/catalog', label: 'Catálogo', icon: BookOpen },
-]
+import React from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { 
+  LayoutDashboard, 
+  MessageSquare, 
+  Users, 
+  Bot, 
+  BookOpen, 
+  Wrench, 
+  Plug, 
+  Settings,
+  ShieldCheck,
+  ChevronRight,
+  Sparkles
+} from "lucide-react"
 
-const agentLinks = [
-  { href: '/agent', label: 'Agentes', icon: Bot },
-  { href: '#', label: 'Conhecimento (Em breve)', icon: BookOpen, disabled: true },
-  { href: '#', label: 'Ferramentas (Em breve)', icon: Wrench, disabled: true },
-]
+interface NavLinkItem {
+  href: string
+  label: string
+  icon: React.ElementType
+  disabled?: boolean
+  badge?: string
+}
 
-const systemLinks = [
-  { href: '/integrations', label: 'Integrações', icon: Plug },
-  { href: '/settings', label: 'Configurações', icon: Settings },
+interface NavSection {
+  title: string
+  items: NavLinkItem[]
+}
+
+const NAVIGATION_SECTIONS: NavSection[] = [
+  {
+    title: "PRINCIPAL",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/conversations", label: "Conversas", icon: MessageSquare },
+      { href: "/customers", label: "Clientes", icon: Users },
+      { href: "/catalog", label: "Catálogo", icon: BookOpen },
+    ],
+  },
+  {
+    title: "AGENTE IA",
+    items: [
+      { href: "/agent", label: "Agentes", icon: Bot },
+      { href: "#", label: "Conhecimento", icon: BookOpen, disabled: true, badge: "Em breve" },
+      { href: "#", label: "Ferramentas", icon: Wrench, disabled: true, badge: "Em breve" },
+    ],
+  },
+  {
+    title: "SISTEMA",
+    items: [
+      { href: "/integrations", label: "Integrações", icon: Plug },
+      { href: "/settings", label: "Configurações", icon: Settings },
+    ],
+  },
 ]
 
 export function Sidebar() {
-  return (
-    <aside className="w-64 border-r bg-muted/20 hidden md:block flex-shrink-0">
-      <div className="flex h-full flex-col">
-        <div className="flex h-14 items-center border-b px-6">
-          <Link href="/dashboard" className="font-semibold text-lg tracking-tight">
-            Ellevee IA
-          </Link>
-        </div>
-        
-        <div className="flex-1 overflow-auto py-4">
-          <nav className="grid items-start px-4 text-sm font-medium space-y-6">
-            
-            {/* Principal */}
-            <div>
-              <h3 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Principal
-              </h3>
-              <div className="space-y-1">
-                {mainLinks.map((link) => (
-                  <Link
-                    key={link.label}
-                    href={link.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-muted"
-                  >
-                    <link.icon className="h-4 w-4" />
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
+  const pathname = usePathname()
 
-            {/* Agente */}
-            <div>
-              <h3 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Agente
-              </h3>
-              <div className="space-y-1">
-                {agentLinks.map((link) => (
+  return (
+    <aside className="w-64 bg-ellevee-ink text-white flex flex-col justify-between shrink-0 border-r border-white/10 hidden md:flex z-20 selection:bg-ellevee-accent selection:text-ellevee-ink">
+      <div>
+        {/* Header da Marca: Símbolo minimalista + Ellevee IA + ATENDIMENTO */}
+        <div className="h-16 flex items-center px-6 border-b border-white/10 gap-3">
+          <div className="h-8 w-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
+            <svg 
+              className="w-4 h-4 text-ellevee-accent" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <path d="M4 6h16" />
+              <path d="M4 12h10" />
+              <path d="M4 18h16" />
+            </svg>
+          </div>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display font-bold text-base tracking-tight text-white leading-none">
+                Ellevee IA
+              </span>
+              <span className="text-[9px] font-semibold tracking-wider uppercase text-ellevee-accent bg-white/10 border border-white/15 px-1.5 py-0.5 rounded">
+                PORTAL
+              </span>
+            </div>
+            <span className="text-[10px] text-[#A6B5A6] font-medium tracking-tight mt-0.5">
+              Plataforma Omnichannel
+            </span>
+          </div>
+        </div>
+
+        {/* Menus Estruturados */}
+        <nav className="p-3.5 space-y-5">
+          {NAVIGATION_SECTIONS.map((section) => (
+            <div key={section.title} className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#A6B5A6] font-sans">
+                {section.title}
+              </div>
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+
+                if (item.disabled) {
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-white/40 cursor-not-allowed select-none"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Icon className="h-4 w-4 text-white/30" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-white/10 text-white/50 border border-white/10 font-mono">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
                   <Link
-                    key={link.label}
-                    href={link.href}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
-                      link.disabled 
-                        ? 'text-muted-foreground/50 cursor-not-allowed' 
-                        : 'text-muted-foreground hover:text-primary hover:bg-muted'
+                    key={item.label}
+                    href={item.href}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-white/10 text-white font-semibold shadow-2xs"
+                        : "text-[#A6B5A6] hover:text-white hover:bg-white/5"
                     }`}
                   >
-                    <link.icon className="h-4 w-4" />
-                    {link.label}
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={`h-4 w-4 ${isActive ? "text-ellevee-accent" : "text-[#A6B5A6]"}`} />
+                      <span>{item.label}</span>
+                    </div>
+                    {isActive && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
+                    )}
                   </Link>
-                ))}
-              </div>
+                )
+              })}
             </div>
+          ))}
+        </nav>
+      </div>
 
-            {/* Sistema */}
-            <div>
-              <h3 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Sistema
-              </h3>
-              <div className="space-y-1">
-                {systemLinks.map((link) => (
-                  <Link
-                    key={link.label}
-                    href={link.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-muted"
-                  >
-                    <link.icon className="h-4 w-4" />
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-            
-          </nav>
-        </div>
+      {/* Footer da Sidebar: Atalho SuperAdmin e Identidade */}
+      <div className="p-3.5 border-t border-white/10 space-y-2">
+        <Link
+          href="/paineladmin"
+          className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-[#A6B5A6] hover:text-white hover:bg-white/5 transition-colors border border-white/5"
+        >
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="h-4 w-4 text-ellevee-accent" />
+            <span>Painel SuperAdmin</span>
+          </div>
+          <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+        </Link>
       </div>
     </aside>
   )

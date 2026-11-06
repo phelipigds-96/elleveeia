@@ -43,8 +43,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Olá, {greetingName}!</h1>
-          <p className="text-muted-foreground">Visão geral do atendimento da sua empresa <strong>{company?.name}</strong>.</p>
+          <h1 className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-ellevee-ink">
+            Olá, {greetingName}!
+          </h1>
+          <p className="text-xs sm:text-sm text-ellevee-sage mt-0.5">
+            Visão geral do atendimento da sua empresa <strong className="font-semibold text-ellevee-ink">{company?.name || 'Ellevee IA'}</strong>.
+          </p>
         </div>
         <PeriodSelector />
       </div>
