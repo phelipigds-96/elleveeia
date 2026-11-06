@@ -292,7 +292,7 @@ export async function sendMessageAction(
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
     const adminClient = createAdminClient()
 
     // 1. Obter conversa e canal
@@ -330,6 +330,11 @@ export async function sendMessageAction(
     const customerPhone = (conv.customers as any)?.phone || null
     const customerName = (conv.customers as any)?.name || "Cliente"
 
+    // Formatação corporativa Opção 4: *Atendente Nome:*\nMensagem
+    const attendantName = (userName?.trim() || "Atendente").split(/\s+/)[0] || "Atendente"
+    const prefix = `*Atendente ${attendantName}:*\n`
+    const outboundContent = trimmed.startsWith("*Atendente") ? trimmed : `${prefix}${trimmed}`
+
     // 3. Persistência na tabela messages com sender_type: 'agent'
     const { data: createdMsg, error: msgInsertErr } = await adminClient
       .from("messages")
@@ -338,11 +343,12 @@ export async function sendMessageAction(
         conversation_id: conversationId,
         sender_type: "agent",
         sender_id: userId,
-        content: trimmed,
+        content: outboundContent,
         message_type: "text",
         metadata: {
           delivery_status: "pending",
           client_message_id: clientMessageId || null,
+          operator_name: attendantName,
         },
       })
       .select()
@@ -364,15 +370,15 @@ export async function sendMessageAction(
       channel: conv.channel || "whatsapp",
       recipient: customerPhone,
       number: customerPhone,
-      text: trimmed,
+      text: outboundContent,
       customer: {
         name: customerName,
         phone: customerPhone,
       },
       message: {
         id: createdMsg.id,
-        content: trimmed,
-        text: trimmed,
+        content: outboundContent,
+        text: outboundContent,
         sender_type: "agent",
         sender_id: userId,
         message_type: "text",
