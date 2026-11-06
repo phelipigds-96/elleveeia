@@ -14,18 +14,26 @@ export const ALIASES: Record<string, string[]> = {
   'cobertura': ['cob', 'cobe', 'cober'],
   'chocolate': ['choc'],
   
+  // Segmentos / Finalidades de Compra
+  'confeitaria': ['barra', 'confeiteiro', 'confeiteira', 'culinario', 'culinaria', 'cobertura', 'gotas', 'recheio', 'pasta'],
+  'consumo': ['tablete', 'bombom', 'snack', 'unitario', 'avulso'],
+  'docinho': ['tablete', 'bombom', 'snack', 'chocolate'],
+
   // Tipos
-  'branco': ['bco', 'br', 'branca'],
+  'branco': ['bco', 'br', 'branca', 'marfim', 'galak'],
   'blend': ['bl'],
   'amargo': ['amarga'],
   'preto': ['preta'],
   
-  // Unidades
+  // Unidades e Embalagens
   'kg': ['quilo', 'kilo', 'quilograma'],
   'unidade': ['un', 'und', 'unid'],
   'pacote': ['pct', 'pcte'],
-  'caixa': ['cx'],
+  'caixa': ['cx', 'caixas'],
   'display': ['disp', 'dp'],
+  'fardo': ['fd', 'fardos'],
+  'revenda': ['cx', 'caixa', 'fardo', 'display', 'atacado'],
+  'atacado': ['cx', 'caixa', 'fardo', 'display', 'revenda'],
   
   // Outros
   'recheio': ['rech'],

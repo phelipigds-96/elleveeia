@@ -143,6 +143,10 @@ export function applyCommercialStrategy(
       }
     }
 
+    const isWholesaleQuery = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
+    const nonWholesaleMatches = targetMatches.filter(m => !/\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(m.name || ''))
+    const displayMatches = (!isWholesaleQuery && nonWholesaleMatches.length > 0) ? nonWholesaleMatches : targetMatches
+
     const segments = detectProductSegments(targetMatches)
     const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
 
@@ -150,7 +154,7 @@ export function applyCommercialStrategy(
       strategy: 'brand_specific_discovery',
       brand: mentionedBrand,
       is_broad_query: isBroadSegmented,
-      products: targetMatches.slice(0, 5).map(m => {
+      products: displayMatches.slice(0, 10).map(m => {
         const item: any = {
           id: m.id,
           name: m.name,
@@ -178,6 +182,10 @@ export function applyCommercialStrategy(
   }
 
   // 4. GENERIC DISCOVERY
+  const isWholesaleQuery = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
+  const nonWholesaleMatches = searchResult.matches.filter(m => !/\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(m.name || ''))
+  const displayMatches = (!isWholesaleQuery && nonWholesaleMatches.length > 0) ? nonWholesaleMatches : searchResult.matches
+
   const segments = detectProductSegments(searchResult.matches)
   const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
 
@@ -186,7 +194,7 @@ export function applyCommercialStrategy(
     brands: uniqueBrands.slice(0, 4),
     product_count: searchResult.matches.length,
     is_broad_query: isBroadSegmented,
-    products: searchResult.matches.slice(0, 5).map(m => {
+    products: displayMatches.slice(0, 10).map(m => {
       const item: any = {
         id: m.id,
         name: m.name,

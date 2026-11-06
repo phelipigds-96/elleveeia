@@ -1,4 +1,4 @@
-﻿import { createAdminClient } from '@/lib/supabase/service'
+import { createAdminClient } from '@/lib/supabase/service'
 import { parseQuery, calculateMatchScore } from './search-logic'
 
 export interface ProductSearchResult {
@@ -19,7 +19,7 @@ export interface StructuredSearchResponse {
   matches: ProductSearchResult[]
 }
 
-export async function searchProducts(companyId: string, query: string, limit: number = 5): Promise<StructuredSearchResponse> {
+export async function searchProducts(companyId: string, query: string, limit: number = 10): Promise<StructuredSearchResponse> {
   const supabase = createAdminClient()
   const parsed = parseQuery(query)
 
@@ -27,7 +27,7 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     return { status: 'not_found', confidence: 0, matches: [] }
   }
 
-  const maxLimit = Math.min(limit, 10)
+  const maxLimit = Math.min(limit, 20)
 
   // 1. Identificadores exatos
   if (parsed.identifiers.length > 0) {

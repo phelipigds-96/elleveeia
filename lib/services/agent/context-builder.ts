@@ -74,7 +74,7 @@ export function formatWorkingMemoryPrompt(workingMemory: WorkingMemory | null | 
   // Exposição do Buffer de Produtos Apresentados Recentemente
   if (workingMemory.discoveredProducts && workingMemory.discoveredProducts.length > 0) {
     prompt += `\n[PRODUTOS APRESENTADOS RECENTEMENTE]\n`
-    for (const p of workingMemory.discoveredProducts.slice(0, 8)) {
+    for (const p of workingMemory.discoveredProducts.slice(0, 12)) {
       const priceStr = p.unitPrice ? ` | Preço: R$ ${p.unitPrice.toFixed(2)}` : ''
       prompt += `- ${p.name} | ID: ${p.id}${priceStr}\n`
     }
@@ -218,13 +218,20 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- Após qualquer inclusão, remoção ou alteração de quantidade, atualize os valores e totais formais.\n`
   systemPrompt += `- Só informe número (ID) e total de orçamento após o retorno confirmado da ferramenta gerar_orcamento.\n`
   systemPrompt += `- Se uma operação de ferramenta falhar, explique com clareza o motivo e não simule sucesso.\n\n`
-  systemPrompt += `5. ABORDAGEM CONSULTIVA DE VENDAS (QUALIFICAÇÃO DE NECESSIDADE):\n`
+  systemPrompt += `5. ABORDAGEM CONSULTIVA DE VENDAS (QUALIFICAÇÃO DE NECESSIDADE E EMBALAGENS):\n`
   systemPrompt += `- NUNCA despeje uma lista aleatória com preços díspares (misturando caixas de atacado de centenas de reais, barras culinárias de 1kg e pequenos docinhos) quando a pergunta do cliente for ampla ou genérica sobre marcas ou categorias (ex: "tem chocolate nestlé?", "tem chocolate?", "tem granulado?", "tem forma?").\n`
   systemPrompt += `- Quando a ferramenta retornar múltiplos produtos ou indicar consulta ampla:\n`
   systemPrompt += `  1. Confirme com simpatia e acolhimento que a loja possui a linha/marca solicitada.\n`
   systemPrompt += `  2. Faça uma pergunta consultiva amigável para entender a finalidade: pergunte se procura para CONFEITARIA/RECEITAS (ex: barras culinárias de 1kg, coberturas, gotas) ou para CONSUMO INDIVIDUAL/DOCINHO (ex: tabletes de 80g/90g, bombons, snacks) ou caixas fechadas de atacado para revenda.\n`
   systemPrompt += `  3. Mencione brevemente exemplos das opções disponíveis sem poluir a mensagem com listas numéricas de preços.\n`
-  systemPrompt += `- Só apresente opções específicas numeradas com preços quando o cliente indicar a finalidade/tamanho desejado (ou se ele já tiver perguntado um produto específico desde o início, como "tem barra de galak de 1kg?").\n`
+  systemPrompt += `- RESPOSTA À QUALIFICAÇÃO DO CLIENTE (BUSCA REFINADA E VARIETAL):\n`
+  systemPrompt += `  Quando o cliente responder indicando a finalidade (ex: "para confeitaria", "para receitas", "para consumo", "docinho", "revenda", "atacado") ou pedir opções/sabores:\n`
+  systemPrompt += `  1. VOCÊ DEVE OBRIGATORIAMENTE chamar a ferramenta consultar_produto_comercial com o termo refinado (ex: "chocolate nestle barra 1kg", "chocolate nestle confeitaria", "chocolate nestle tablete"). NÃO responda apenas com a memória antiga!\n`
+  systemPrompt += `  2. REGRA DE EMBALAGEM / UNIDADE AVULSA vs CAIXA FECHADA:\n`
+  systemPrompt += `     - NUNCA liste produtos de caixa fechada, display ou fardo (ex: 12X1KG, 14X90G, 54X126G, CX, DISPLAY) para clientes que pediram confeitaria ou consumo individual.\n`
+  systemPrompt += `     - Apresente SEMPRE as unidades avulsas (ex: barras individuais de 1kg com todos os sabores disponíveis: Ao Leite, Meio Amargo, Galak/Branco, Blend, Marfim; ou tabletes individuais de 80g/90g).\n`
+  systemPrompt += `     - Só apresente caixa fechada, display ou fardo se o cliente solicitar explicitamente por "caixa", "fardo", "display", "atacado" ou "revenda".\n`
+  systemPrompt += `  3. Apresente as opções e sabores de unidades avulsas retornadas pela ferramenta com seus respectivos preços unitários, facilitando a escolha do cliente.\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }

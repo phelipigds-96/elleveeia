@@ -167,6 +167,16 @@ export function calculateMatchScore(
     }
   }
 
+  // Verificação de embalagem de atacado (caixa fechada, fardo, display, multiplicador numérico como 12X, 14X, 54X)
+  const isWholesalePack = /\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(productName)
+  const queryAskedWholesale = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(parsed.originalQuery)
+
+  if (isWholesalePack && !queryAskedWholesale) {
+    penalty += 35 // Penaliza caixas fechadas quando o cliente busca produto avulso ou em geral
+  } else if (!isWholesalePack && queryAskedWholesale) {
+    penalty += 25 // Penaliza unidades avulsas quando o cliente pediu especificamente caixa fechada/atacado
+  }
+
   // Calcula confiana (1.0 = sem penalidades, reduz conforme a penalidade cresce)
   // Penalidade de 20 jǭ derruba a confiana para 0.60
   const confidence = Math.max(0, 1.0 - (penalty / 50))
