@@ -33,6 +33,7 @@ import {
   MessageData, 
   UserProfileContext,
   getConversationMessages,
+  getConversationsList,
   sendMessageAction,
   takeoverConversationAction,
   returnToAIAction,
@@ -331,6 +332,85 @@ export default function PainelClient({
       supabase.removeChannel(convChannel)
     }
   }, [supabase])
+
+  // =========================================================================
+  // RECONCILIAÇÃO REALTIME CONTÍNUA: Polling em Segundo Plano (Zero F5)
+  // =========================================================================
+  // 1. Sincroniza novas mensagens da conversa ativa a cada 3.5 segundos
+  useEffect(() => {
+    if (!selectedId) return
+
+    let isMounted = true
+
+    const pollMessagesInterval = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return
+
+      try {
+        const latestMsgs = await getConversationMessages(selectedId)
+        if (!isMounted || !latestMsgs) return
+
+        setMessages((prev) => {
+          // Se lista vazia ou idêntica, evita recriar estado
+          if (
+            latestMsgs.length === prev.length &&
+            latestMsgs[latestMsgs.length - 1]?.id === prev[prev.length - 1]?.id
+          ) {
+            return prev
+          }
+
+          // Se chegou mensagem nova vinda do cliente WhatsApp
+          const hasNew = latestMsgs.some((m) => !prev.some((p) => p.id === m.id))
+          if (hasNew) {
+            scrollToBottom(true)
+          }
+
+          return latestMsgs
+        })
+      } catch {
+        // Silencioso em caso de oscilação momentânea
+      }
+    }, 3500)
+
+    return () => {
+      isMounted = false
+      clearInterval(pollMessagesInterval)
+    }
+  }, [selectedId])
+
+  // 2. Sincroniza a lista de conversas e contadores das abas a cada 8 segundos
+  useEffect(() => {
+    let isMounted = true
+
+    const pollListInterval = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return
+
+      try {
+        const updatedList = await getConversationsList()
+        if (!isMounted || !updatedList || updatedList.length === 0) return
+
+        setConversations((prev) => {
+          const hasDiff =
+            updatedList.length !== prev.length ||
+            updatedList[0]?.id !== prev[0]?.id ||
+            updatedList[0]?.last_message_at !== prev[0]?.last_message_at ||
+            updatedList.some((u) => {
+              const p = prev.find((x) => x.id === u.id)
+              return !p || p.status !== u.status || p.unread_count !== u.unread_count
+            })
+
+          if (!hasDiff) return prev
+          return updatedList
+        })
+      } catch {
+        // Silencioso
+      }
+    }, 8000)
+
+    return () => {
+      isMounted = false
+      clearInterval(pollListInterval)
+    }
+  }, [])
 
   // =========================================================================
   // TROCA DE CONVERSA
@@ -1041,175 +1121,153 @@ export default function PainelClient({
           <>
             {/* Coluna Central do Chat */}
             <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-            {/* Header do Chat */}
-            <header className="h-16 border-b border-ellevee-stone px-6 flex items-center justify-between bg-white shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink font-display font-bold text-sm flex items-center justify-center shrink-0">
-                  <User className="h-4 w-4" />
+            {/* Header do Chat (Design Limpo, Arejado e Sem Poluição) */}
+            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-4">
+              {/* Lado Esquerdo: Identificação Clara do Cliente */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="h-10 w-10 rounded-full bg-ellevee-ink text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                  {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h2 className="font-display font-bold text-sm text-ellevee-ink truncate">
+                    <h2
+                      className="font-semibold text-sm text-ellevee-ink truncate"
+                      title={activeConversation.customers?.name || "Cliente Desconhecido"}
+                    >
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F8F8F5] text-ellevee-ink border border-ellevee-stone uppercase">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase font-medium shrink-0">
                       {activeConversation.channel || "WhatsApp"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-ellevee-sage mt-0.5">
+                  <div className="flex items-center gap-2 text-xs text-ellevee-sage mt-0.5 truncate">
                     {activeConversation.customers?.phone && (
-                      <span className="flex items-center gap-1 font-mono">
+                      <span className="flex items-center gap-1 font-mono text-ellevee-ink/80">
                         <Phone className="h-3 w-3 text-ellevee-sage" />
                         {activeConversation.customers.phone}
                       </span>
                     )}
                     <span>•</span>
-                    <span className="font-medium text-ellevee-ink">
+                    <span className="truncate">
                       {activeConversation.status === "closed"
-                        ? "Atendimento Finalizado"
+                        ? "Finalizado"
                         : activeConversation.status === "human"
                         ? !activeConversation.assigned_to
-                          ? "Aguardando Atendente"
+                          ? "Aguardando Operador"
                           : activeConversation.assigned_to === currentUser?.userId
-                          ? "Atendimento com Você"
-                          : "Atendimento com Operador"
-                        : `Atendimento por IA (${activeConversation.agent_name || "Ativa"})`}
+                          ? "Com Você"
+                          : "Com Operador"
+                        : `IA: ${activeConversation.agent_name || "Ativa"}`}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Ações de Ciclo de Vida da Conversa */}
-              <div className="flex items-center gap-2">
+              {/* Lado Direito: Ações Compactas com WhiteSpace Nowrap */}
+              <div className="flex items-center gap-2 shrink-0">
                 {/* 1. Conversa Finalizada -> Reabrir */}
                 {activeConversation.status === "closed" ? (
                   <>
-                    <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
-                      <span>Finalizado</span>
-                    </div>
+                    <span className="hidden sm:inline-flex text-xs font-medium text-stone-500 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 whitespace-nowrap">
+                      Finalizado
+                    </span>
 
                     <button
                       onClick={handleReopenConversation}
                       disabled={isReopening}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
                       title="Reativar esta conversa"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      <span>{isReopening ? "Reabrindo..." : "Reabrir Atendimento"}</span>
+                      <span>{isReopening ? "Reabrindo..." : "Reabrir"}</span>
                     </button>
                   </>
                 ) : activeConversation.status === "human" ? (
                   /* 2. Conversa em Atendimento Humano */
                   <>
-                    {!activeConversation.assigned_to ? (
+                    {!activeConversation.assigned_to && (
                       <button
                         onClick={handleTakeover}
                         disabled={isTakingOver}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
-                        title="Pegar esta conversa que está aguardando na fila"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        title="Pegar esta conversa que está na fila"
                       >
                         {isTakingOver ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            <span>Pegando...</span>
-                          </>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <>
-                            <UserCheck className="h-3.5 w-3.5" />
-                            <span>Pegar para Mim</span>
-                          </>
+                          <UserCheck className="h-3.5 w-3.5" />
                         )}
+                        <span>Pegar para Mim</span>
                       </button>
-                    ) : (
-                      <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent ring-1 ring-ellevee-ink/10" />
-                        <UserCheck className="h-3.5 w-3.5" />
-                        <span>{activeConversation.assigned_to === currentUser?.userId ? "Com Você" : "Em Atendimento"}</span>
-                      </div>
                     )}
 
-                    {/* Botão Dinâmico: Devolver para o Agente IA */}
+                    {/* Botão Devolver para IA */}
                     <button
                       onClick={handleReturnToAI}
                       disabled={isReturningToAI}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-white hover:bg-[#F8F8F5] text-ellevee-ink border border-ellevee-stone transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50/80 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
                     >
                       {isReturningToAI ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Devolvendo...</span>
-                        </>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <>
-                          <Bot className="h-3.5 w-3.5 text-blue-600" />
-                          <span>Devolver para {activeConversation.agent_name || "a IA"}</span>
-                        </>
+                        <Bot className="h-3.5 w-3.5 text-blue-600" />
                       )}
+                      <span>Devolver p/ {activeConversation.agent_name || "IA"}</span>
                     </button>
 
-                    {/* Botão: Encerrar Atendimento */}
+                    {/* Botão Encerrar */}
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       title="Finalizar e arquivar este atendimento"
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="hidden sm:inline">Encerrar</span>
-                        </>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-stone-500" />
                       )}
+                      <span>Encerrar</span>
                     </button>
                   </>
                 ) : (
-                  /* 3. Conversa com IA Ativa (status === 'open') */
+                  /* 3. Conversa com IA Ativa */
                   <>
                     <button
                       onClick={handleTakeover}
                       disabled={isTakingOver}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors shadow-2xs disabled:opacity-60 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors shadow-2xs disabled:opacity-60 cursor-pointer whitespace-nowrap"
                       title="Pausar a IA e assumir o atendimento humano"
                     >
                       {isTakingOver ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Assumindo...</span>
-                        </>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <>
-                          <UserCheck className="h-3.5 w-3.5" />
-                          <span>Assumir Conversa</span>
-                        </>
+                        <UserCheck className="h-3.5 w-3.5" />
                       )}
+                      <span>Assumir Conversa</span>
                     </button>
 
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       title="Finalizar atendimento"
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="hidden sm:inline">Encerrar</span>
-                        </>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-stone-500" />
                       )}
+                      <span>Encerrar</span>
                     </button>
                   </>
                 )}
 
-                {/* Botão Alternar Painel Lateral do Cliente (Fase 2) */}
+                {/* Botão Perfil Retrátil */}
                 <button
                   onClick={() => setIsProfileOpen((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer whitespace-nowrap ${
                     isProfileOpen
                       ? "bg-ellevee-ink text-white border-ellevee-ink shadow-2xs"
                       : "bg-white hover:bg-[#F8F8F5] text-ellevee-ink border-ellevee-stone shadow-2xs"
@@ -1219,11 +1277,6 @@ export default function PainelClient({
                   <User className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">{isProfileOpen ? "Ocultar Perfil" : "Perfil"}</span>
                 </button>
-
-                <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-medium bg-[#F8F8F5] text-ellevee-ink border border-ellevee-stone">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Realtime</span>
-                </div>
               </div>
             </header>
 
