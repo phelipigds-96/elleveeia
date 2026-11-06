@@ -136,9 +136,12 @@ export async function POST(request: Request) {
     
     // 6. Logging Seguro de Servidor (Sem vazar segredos)
     const statusLabel = cycleResult.dispatched ? 'dispatched' : (cycleResult.reason || 'skipped')
-    console.log(`[Webhook success req:${requestId}] company:${companyId} event:${result.event_id} autonomous:${statusLabel} - ${Date.now() - startTime}ms`)
+    console.log(`[Webhook success req:${requestId}] company:${companyId} event:${result.event_id} autonomous:${statusLabel} details:${JSON.stringify(cycleResult)} - ${Date.now() - startTime}ms`)
 
-    return NextResponse.json(result, { status: 200 })
+    return NextResponse.json({
+      ...result,
+      autonomous: cycleResult
+    }, { status: 200 })
 
   } catch (error: any) {
     console.error(`[Webhook error req:${requestId}]`, error.message)
