@@ -68,6 +68,18 @@ const config = {
           "ink-muted": "#3A403A",
           "sage-light": "#EEF1EE",
           "accent-muted": "#E5F2BF",
+          // Variante escura do sage para texto pequeno (contraste AA em fundo claro)
+          "sage-strong": "#5A6659",
+        },
+        // Paleta semântica de notas internas (âmbar quente, contida)
+        note: {
+          bg: "#FEFCE8",
+          border: "#FEF08A",
+          "border-strong": "#FDE047",
+          focus: "#EAB308",
+          text: "#713F12",
+          strong: "#854D0E",
+          accent: "#CA8A04",
         },
       },
       borderRadius: {

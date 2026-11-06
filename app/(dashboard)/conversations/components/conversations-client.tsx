@@ -205,15 +205,15 @@ export function ConversationsClient({
                     className={`flex flex-col items-start px-3 py-2.5 w-full rounded-lg text-left transition-colors ${selectedConvId === conv.id ? 'bg-secondary/60' : 'hover:bg-muted/40'}`}
                   >
                     <div className="flex w-full justify-between items-center mb-0.5">
-                      <span className="font-medium text-[13px] text-foreground truncate pr-2">
+                      <span className="font-medium text-sm text-foreground truncate pr-2">
                         {conv.customers?.name || 'Cliente Desconhecido'}
                       </span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <div className="flex w-full justify-between items-center">
-                      <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">
+                      <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                         {conv.last_message_preview || (conv.customers?.phone || 'Sem número')}
                       </span>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -294,7 +294,7 @@ export function ConversationsClient({
                   if (isSystem) {
                     return (
                       <div key={msg.id} className="flex justify-center my-6">
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                           — {msg.content} —
                         </span>
                       </div>
@@ -304,10 +304,10 @@ export function ConversationsClient({
                   return (
                     <div key={msg.id} className={`flex flex-col ${isCustomer ? 'items-start' : 'items-end'} group`}>
                       <div className="flex items-center gap-2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] font-medium text-muted-foreground">
+                        <span className="text-xs font-medium text-muted-foreground">
                           {isCustomer ? (selectedConv.customers?.name || 'Cliente') : (isAgent ? 'Agente IA' : 'Humano')}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground/70 flex items-center gap-1">
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           {!isCustomer && msg.metadata?.delivery_status === 'pending' && (
                             <span className="inline-flex items-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 font-medium ml-1">
@@ -332,7 +332,7 @@ export function ConversationsClient({
                         </span>
                       </div>
                       <div 
-                        className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 text-[14px] shadow-sm ${
+                        className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 text-sm shadow-sm ${
                           isCustomer 
                             ? 'bg-muted/30 border border-border/50 text-foreground rounded-2xl rounded-tl-sm' 
                             : 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm'
