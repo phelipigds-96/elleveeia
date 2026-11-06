@@ -33,6 +33,12 @@ Este repositório contém a versão MVP e estrutural do projeto, preparado para 
    ```
    Acesse [http://localhost:3000](http://localhost:3000)
 
+## Prévia estática
+
+O `index.html` na raiz do projeto é a página pública estática usada pela prévia.
+O comando `npm run build` gera o app Next.js (runtime com servidor) e publica
+uma cópia dessa entrada estática em `out/` para publicação sem servidor.
+
 ## Deploy na Vercel
 
 O projeto foi construído nativamente para a Vercel. 
