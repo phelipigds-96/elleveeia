@@ -6,7 +6,7 @@ import { applyCommercialStrategy } from '../commercial-strategy'
 
 export const consultarProdutoComercialTool: ToolDefinition = {
   name: 'consultar_produto_comercial',
-  description: 'Busca produto e calcula preco numa unica etapa. Se "not_found", diga que nao achou (nao presuma estoque). Se "ambiguous", peca para esclarecer.',
+  description: 'Busca produto e calcula preco numa unica etapa. Se a consulta for ampla (apenas marca ou termo geral), utilize as orientações consultivas retornadas para qualificar a necessidade do cliente antes de listar produtos desnecessários. Se "not_found", diga que nao achou (nao presuma estoque). Se "ambiguous", peca para esclarecer.',
   metadata: { category: 'commercial', capabilities: ['product.search', 'price.calculate'] },
   schema: z.object({
     product_query: z.string().describe('Termo buscado.'),

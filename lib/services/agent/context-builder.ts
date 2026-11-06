@@ -217,7 +217,14 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- Ao editar um orçamento existente, atualize o registro draft existente, evitando duplicação.\n`
   systemPrompt += `- Após qualquer inclusão, remoção ou alteração de quantidade, atualize os valores e totais formais.\n`
   systemPrompt += `- Só informe número (ID) e total de orçamento após o retorno confirmado da ferramenta gerar_orcamento.\n`
-  systemPrompt += `- Se uma operação de ferramenta falhar, explique com clareza o motivo e não simule sucesso.\n`
+  systemPrompt += `- Se uma operação de ferramenta falhar, explique com clareza o motivo e não simule sucesso.\n\n`
+  systemPrompt += `5. ABORDAGEM CONSULTIVA DE VENDAS (QUALIFICAÇÃO DE NECESSIDADE):\n`
+  systemPrompt += `- NUNCA despeje uma lista aleatória com preços díspares (misturando caixas de atacado de centenas de reais, barras culinárias de 1kg e pequenos docinhos) quando a pergunta do cliente for ampla ou genérica sobre marcas ou categorias (ex: "tem chocolate nestlé?", "tem chocolate?", "tem granulado?", "tem forma?").\n`
+  systemPrompt += `- Quando a ferramenta retornar múltiplos produtos ou indicar consulta ampla:\n`
+  systemPrompt += `  1. Confirme com simpatia e acolhimento que a loja possui a linha/marca solicitada.\n`
+  systemPrompt += `  2. Faça uma pergunta consultiva amigável para entender a finalidade: pergunte se procura para CONFEITARIA/RECEITAS (ex: barras culinárias de 1kg, coberturas, gotas) ou para CONSUMO INDIVIDUAL/DOCINHO (ex: tabletes de 80g/90g, bombons, snacks) ou caixas fechadas de atacado para revenda.\n`
+  systemPrompt += `  3. Mencione brevemente exemplos das opções disponíveis sem poluir a mensagem com listas numéricas de preços.\n`
+  systemPrompt += `- Só apresente opções específicas numeradas com preços quando o cliente indicar a finalidade/tamanho desejado (ou se ele já tiver perguntado um produto específico desde o início, como "tem barra de galak de 1kg?").\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
