@@ -1,204 +1,639 @@
-'use client'
+"use client"
 
-import React, { useState, useRef, useEffect } from 'react'
-import { Search, Sparkles, Send, Check, User, Clock } from 'lucide-react'
+import React, { useState, useRef, useEffect, useMemo } from "react"
+import { 
+  Search, 
+  Sparkles, 
+  Bot, 
+  User, 
+  Clock, 
+  Check, 
+  CheckCheck, 
+  MessageSquare, 
+  Radio, 
+  Phone, 
+  AlertCircle,
+  Wifi,
+  UserCheck
+} from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { 
+  ConversationData, 
+  MessageData, 
+  getConversationMessages 
+} from "../actions"
 
-type Conversation = {
-  id: string
-  customers: { name: string; phone?: string }
-  last_message_preview: string
-  last_message_at: string
-  unread_count: number
-  status: string
-  channel?: string
+interface PainelClientProps {
+  initialConversations: ConversationData[]
+  initialMessages: MessageData[]
+  initialSelectedId?: string | null
 }
 
-type Message = {
-  id: string
-  sender_type: 'customer' | 'bot' | 'human' | 'system'
-  content: string
-  created_at: string
-  metadata?: { delivery_status?: string }
-}
-
-const mockConversations: Conversation[] = [
-  {
-    id: 'c1',
-    customers: { name: 'Mariana Silva', phone: '+55 11 99999-0001' },
-    last_message_preview: 'Olá, tenho uma dúvida sobre o pedido #1234',
-    last_message_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    unread_count: 2,
-    status: 'open',
-    channel: 'WhatsApp'
-  },
-  {
-    id: 'c2',
-    customers: { name: 'Carlos Pereira', phone: '+55 21 98888-1111' },
-    last_message_preview: 'Obrigado, problema resolvido.',
-    last_message_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    unread_count: 0,
-    status: 'closed',
-    channel: 'SMS'
-  },
-  {
-    id: 'c3',
-    customers: { name: 'Loja ACME', phone: '+55 31 97777-2222' },
-    last_message_preview: 'Estou aguardando um humano para confirmar o preço.',
-    last_message_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    unread_count: 5,
-    status: 'human',
-    channel: 'Web'
-  }
-]
-
-const mockMessages: Record<string, Message[]> = {
-  c1: [
-    { id: 'm1', sender_type: 'customer', content: 'Oi, comprei ontem e ainda não chegou.', created_at: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-    { id: 'm2', sender_type: 'bot', content: 'Verificando seu pedido #1234...', created_at: new Date(Date.now() - 18 * 60 * 1000).toISOString(), metadata: { delivery_status: 'sent' } },
-    { id: 'm3', sender_type: 'human', content: 'Olá Mariana, sou Carol e vou te ajudar.', created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(), metadata: { delivery_status: 'sent' } }
-  ],
-  c2: [
-    { id: 'm4', sender_type: 'customer', content: 'Problema resolvido, obrigado!', created_at: new Date(Date.now() - 90 * 60 * 1000).toISOString() }
-  ],
-  c3: [
-    { id: 'm5', sender_type: 'customer', content: 'Preciso que um humano confirme o orçamento.', created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString() },
-    { id: 'm6', sender_type: 'bot', content: 'Solicitando atendimento humano...', created_at: new Date(Date.now() - 11 * 60 * 1000).toISOString(), metadata: { delivery_status: 'pending' } }
-  ]
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
+function timeAgo(isoString: string): string {
+  if (!isoString) return ""
+  const diff = Date.now() - new Date(isoString).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'agora'
+  if (mins < 1) return "agora"
   if (mins < 60) return `há ${mins}m`
   const hours = Math.floor(mins / 60)
-  return `há ${hours}h`
+  if (hours < 24) return `há ${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `há ${days}d`
+  return new Date(isoString).toLocaleDateString([], { day: "2-digit", month: "2-digit" })
 }
 
-export function PainelClient() {
-  const [conversations] = useState<Conversation[]>(mockConversations)
-  const [activeTab, setActiveTab] = useState<'all'|'bot'|'human'|'closed'>('all')
-  const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(mockConversations[0].id)
-  const [messages, setMessages] = useState<Message[]>(mockMessages[selectedId as string] || [])
-  const [input, setInput] = useState('')
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+function formatTime(isoString: string): string {
+  if (!isoString) return ""
+  return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
 
+export default function PainelClient({
+  initialConversations,
+  initialMessages,
+  initialSelectedId = null,
+}: PainelClientProps) {
+  // 1. Estados locais de conversas e mensagens
+  const [conversations, setConversations] = useState<ConversationData[]>(initialConversations)
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId)
+  const [messages, setMessages] = useState<MessageData[]>(initialMessages)
+  
+  // 2. Estados de navegação, busca e filtros
+  const [activeTab, setActiveTab] = useState<"all" | "open" | "human" | "closed">("all")
+  const [search, setSearch] = useState("")
+  const [loadingMessages, setLoadingMessages] = useState(false)
+  
+  // 3. Efeito visual para quando uma conversa receber atualização em tempo real
+  const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<string | null>(null)
+  const [isRealtimeActive, setIsRealtimeActive] = useState(false)
+
+  // Referências para scroll automático
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.id === selectedId) || null,
+    [conversations, selectedId]
+  )
+
+  // Cliente público do navegador para subscrição WebSocket (sem chave service_role)
+  const supabase = useMemo(() => createClient(), [])
+
+  const scrollToBottom = (smooth = true) => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" })
+    }, 50)
+  }
+
+  // Efeito inicial para rolar até o final da conversa
   useEffect(() => {
-    setMessages(mockMessages[selectedId as string] || [])
-    // scroll to bottom when messages change
-    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-  }, [selectedId])
+    scrollToBottom(false)
+  }, [])
 
-  const filtered = conversations.filter(c => {
-    if (activeTab === 'bot' && c.status !== 'open') return false
-    if (activeTab === 'human' && c.status !== 'human') return false
-    if (activeTab === 'closed' && c.status !== 'closed') return false
-    if (!search) return true
-    return c.customers.name.toLowerCase().includes(search.toLowerCase()) || (c.last_message_preview || '').toLowerCase().includes(search.toLowerCase())
-  })
+  // =========================================================================
+  // SUB-SCRIÇÃO REALTIME: Mensagens da Conversa Ativa
+  // =========================================================================
+  useEffect(() => {
+    if (!selectedId) return
 
-  const handleSend = (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (!input.trim() || !selectedId) return
-    const newMsg: Message = { id: String(Date.now()), sender_type: 'human', content: input.trim(), created_at: new Date().toISOString(), metadata: { delivery_status: 'sent' } }
-    setMessages((m) => [...m, newMsg])
-    // update mock store
-    mockMessages[selectedId] = [...(mockMessages[selectedId] || []), newMsg]
-    setInput('')
-    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    const messagesChannel = supabase
+      .channel(`realtime:messages:${selectedId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as MessageData
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev
+            return [...prev, newMsg]
+          })
+
+          // Atualiza também o preview na barra lateral
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === selectedId
+                ? {
+                    ...c,
+                    last_message_at: newMsg.created_at || new Date().toISOString(),
+                    last_message_preview: newMsg.content || c.last_message_preview,
+                  }
+                : c
+            ).sort(
+              (a, b) =>
+                new Date(b.last_message_at || 0).getTime() -
+                new Date(a.last_message_at || 0).getTime()
+            )
+          )
+
+          scrollToBottom(true)
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        (payload) => {
+          const updatedMsg = payload.new as MessageData
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m))
+          )
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setIsRealtimeActive(true)
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(messagesChannel)
+    }
+  }, [selectedId, supabase])
+
+  // =========================================================================
+  // SUB-SCRIÇÃO REALTIME: Lista de Conversas (Atualizações de status / nova msg)
+  // =========================================================================
+  useEffect(() => {
+    const convChannel = supabase
+      .channel("realtime:conversations-list")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+        },
+        (payload) => {
+          const updated = payload.new as Partial<ConversationData> & { id: string }
+          
+          // Dispara efeito visual de piscar na barra lateral
+          setRecentlyUpdatedId(updated.id)
+          setTimeout(() => setRecentlyUpdatedId(null), 3000)
+
+          setConversations((prev) => {
+            const exists = prev.some((c) => c.id === updated.id)
+            if (!exists) return prev
+
+            return prev
+              .map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+              .sort(
+                (a, b) =>
+                  new Date(b.last_message_at || 0).getTime() -
+                  new Date(a.last_message_at || 0).getTime()
+              )
+          })
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversations",
+        },
+        (payload) => {
+          const newConv = payload.new as ConversationData
+
+          setRecentlyUpdatedId(newConv.id)
+          setTimeout(() => setRecentlyUpdatedId(null), 3000)
+
+          setConversations((prev) => {
+            if (prev.some((c) => c.id === newConv.id)) return prev
+            return [newConv, ...prev].sort(
+              (a, b) =>
+                new Date(b.last_message_at || 0).getTime() -
+                new Date(a.last_message_at || 0).getTime()
+            )
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(convChannel)
+    }
+  }, [supabase])
+
+  // =========================================================================
+  // SELEÇÃO DE CONVERSA
+  // =========================================================================
+  const handleSelectConversation = async (convId: string) => {
+    if (convId === selectedId) return
+    setSelectedId(convId)
+    setLoadingMessages(true)
+
+    try {
+      const history = await getConversationMessages(convId)
+      setMessages(history)
+      scrollToBottom(false)
+    } catch (err) {
+      console.error("[Chat] Erro ao carregar histórico da conversa:", err)
+    } finally {
+      setLoadingMessages(false)
+    }
+  }
+
+  // =========================================================================
+  // FILTRAGEM DA BARRA LATERAL
+  // =========================================================================
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((c) => {
+      // Filtro por tab
+      if (activeTab === "open" && c.status !== "open") return false
+      if (activeTab === "human" && c.status !== "human") return false
+      if (activeTab === "closed" && c.status !== "closed") return false
+
+      // Filtro por texto de busca
+      if (!search.trim()) return true
+      const term = search.toLowerCase()
+      const customerName = c.customers?.name?.toLowerCase() || ""
+      const phone = c.customers?.phone?.toLowerCase() || ""
+      const preview = c.last_message_preview?.toLowerCase() || ""
+
+      return customerName.includes(term) || phone.includes(term) || preview.includes(term)
+    })
+  }, [conversations, activeTab, search])
+
+  // =========================================================================
+  // RENDERIZAÇÃO DE STATUS DE ENTREGA (DELIVERY_STATUS)
+  // =========================================================================
+  const renderDeliveryStatus = (msg: MessageData) => {
+    if (msg.sender_type === "customer") return null
+
+    const status =
+      msg.metadata?.delivery_status ||
+      (msg as any).delivery_status ||
+      "sent"
+
+    switch (status) {
+      case "pending":
+        return (
+          <span className="inline-flex items-center gap-0.5 text-white/70" title="Pendente de envio">
+            <Clock className="h-3 w-3" />
+          </span>
+        )
+      case "delivered":
+        return (
+          <span className="inline-flex items-center gap-0.5 text-white/80" title="Entregue ao cliente">
+            <CheckCheck className="h-3 w-3" />
+          </span>
+        )
+      case "read":
+        return (
+          <span className="inline-flex items-center gap-0.5 text-sky-200" title="Lida pelo cliente">
+            <CheckCheck className="h-3 w-3 stroke-[2.5]" />
+          </span>
+        )
+      case "sent":
+      default:
+        return (
+          <span className="inline-flex items-center gap-0.5 text-white/80" title="Transmitida">
+            <Check className="h-3 w-3" />
+          </span>
+        )
+    }
   }
 
   return (
-    <div className="h-[100vh] w-full grid grid-cols-12 gap-4 bg-white">
-      {/* SIDEBAR - 30% */}
-      <aside className="col-span-12 md:col-span-4 lg:col-span-3 border-r h-full flex flex-col">
-        <div className="p-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." className="w-full pl-10 pr-3 py-2 border rounded-md text-sm" />
+    <div className="h-full w-full flex border border-border/80 rounded-xl overflow-hidden bg-card shadow-sm text-foreground">
+      {/* =====================================================================
+          SIDEBAR: LISTA DE CONVERSAS (30% / 340px)
+      ====================================================================== */}
+      <aside className="w-full sm:w-80 md:w-88 lg:w-96 border-r border-border h-full flex flex-col bg-background shrink-0">
+        {/* Header da Sidebar */}
+        <div className="p-3.5 border-b border-border space-y-3 bg-card/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold text-sm tracking-tight font-display">Conversas</h2>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Realtime</span>
+            </div>
           </div>
-          <div className="mt-3 flex gap-2 text-xs">
-            <button onClick={() => setActiveTab('all')} className={`px-2 py-1 rounded ${activeTab==='all'?'bg-slate-100':'hover:bg-slate-50'}`}>Todos</button>
-            <button onClick={() => setActiveTab('bot')} className={`px-2 py-1 rounded ${activeTab==='bot'?'bg-slate-100':'hover:bg-slate-50'}`}>IA Atendendo</button>
-            <button onClick={() => setActiveTab('human')} className={`px-2 py-1 rounded ${activeTab==='human'?'bg-slate-100':'hover:bg-slate-50'}`}>Aguardando Humano</button>
-            <button onClick={() => setActiveTab('closed')} className={`px-2 py-1 rounded ${activeTab==='closed'?'bg-slate-100':'hover:bg-slate-50'}`}>Resolvidos</button>
+
+          {/* Campo de Busca */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por cliente, telefone ou texto..."
+              className="w-full pl-9 pr-3 py-1.5 border border-border rounded-lg text-xs bg-muted/30 focus:outline-none focus:ring-1 focus:ring-primary focus:bg-background transition-colors"
+            />
+          </div>
+
+          {/* Tabs de Filtro */}
+          <div className="flex gap-1 text-[11px] font-medium overflow-x-auto scrollbar-none pb-0.5">
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                activeTab === "all"
+                  ? "bg-secondary text-secondary-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              Todas ({conversations.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("open")}
+              className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                activeTab === "open"
+                  ? "bg-secondary text-secondary-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              Abertas
+            </button>
+            <button
+              onClick={() => setActiveTab("human")}
+              className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                activeTab === "human"
+                  ? "bg-secondary text-secondary-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              Humano
+            </button>
+            <button
+              onClick={() => setActiveTab("closed")}
+              className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                activeTab === "closed"
+                  ? "bg-secondary text-secondary-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              Resolvidos
+            </button>
           </div>
         </div>
 
-        <div className="overflow-y-auto p-2 space-y-2 flex-1">
-          {filtered.map(conv => (
-            <button key={conv.id} onClick={() => setSelectedId(conv.id)} className={`w-full text-left flex items-center gap-3 p-3 rounded-md ${selectedId===conv.id?'bg-slate-50':''}`}>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-sm font-semibold text-green-700">{conv.customers.name.split(' ').map(s=>s[0]).slice(0,2).join('')}</div>
-              <div className="flex-1">
-                <div className="flex justify-between items-center">
-                  <div className="font-medium text-sm truncate pr-2">{conv.customers.name}</div>
-                  <div className="text-xs text-gray-400">{timeAgo(conv.last_message_at)}</div>
-                </div>
-                <div className="flex justify-between items-center mt-1">
-                  <div className="text-xs text-gray-500 truncate max-w-[140px]">{conv.last_message_preview}</div>
-                  <div className="flex items-center gap-2">
-                    {conv.unread_count>0 && <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{conv.unread_count}</span>}
+        {/* Lista de Itens */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground p-6 text-center space-y-2">
+              <MessageSquare className="h-6 w-6 stroke-1 text-muted-foreground/60" />
+              <p className="text-xs">Nenhuma conversa encontrada para os filtros aplicados.</p>
+            </div>
+          ) : (
+            filteredConversations.map((conv) => {
+              const isSelected = selectedId === conv.id
+              const isPulsing = recentlyUpdatedId === conv.id
+              const customerName = conv.customers?.name || "Cliente Desconhecido"
+              const initials = customerName
+                .split(" ")
+                .filter(Boolean)
+                .map((w) => w[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase() || "CL"
+
+              return (
+                <button
+                  key={conv.id}
+                  onClick={() => handleSelectConversation(conv.id)}
+                  className={`w-full text-left flex items-start gap-3 p-3 rounded-xl transition-all relative ${
+                    isSelected
+                      ? "bg-secondary/70 border border-border/80 shadow-xs"
+                      : "hover:bg-muted/40 border border-transparent"
+                  } ${isPulsing ? "ring-2 ring-emerald-500/60 bg-emerald-50/30 dark:bg-emerald-950/20 animate-pulse" : ""}`}
+                >
+                  {/* Avatar com Iniciais */}
+                  <div
+                    className={`h-10 w-10 rounded-full flex items-center justify-center text-xs font-bold font-display shrink-0 ${
+                      conv.status === "human"
+                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    }`}
+                  >
+                    {initials}
                   </div>
-                </div>
-              </div>
-            </button>
-          ))}
+
+                  {/* Informações da Conversa */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-xs text-foreground truncate pr-2">
+                        {customerName}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                        {timeAgo(conv.last_message_at)}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                      {conv.last_message_preview || "Sem mensagens registradas"}
+                    </p>
+
+                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40 text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            conv.status === "open"
+                              ? "bg-emerald-500"
+                              : conv.status === "human"
+                              ? "bg-amber-500"
+                              : "bg-stone-400"
+                          }`}
+                        />
+                        <span className="text-muted-foreground capitalize font-medium">
+                          {conv.status === "open"
+                            ? "IA Atendendo"
+                            : conv.status === "human"
+                            ? "Aguardando Humano"
+                            : "Resolvido"}
+                        </span>
+                      </div>
+
+                      {conv.unread_count > 0 && (
+                        <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono">
+                          {conv.unread_count}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            })
+          )}
         </div>
       </aside>
 
-      {/* CENTER - 70% */}
-      <main className="col-span-12 md:col-span-8 lg:col-span-9 flex flex-col h-full">
-        <header className="h-16 border-b px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center"><User className="h-5 w-5 text-slate-600" /></div>
-            <div>
-              <div className="font-semibold">{conversations.find(c=>c.id===selectedId)?.customers.name}</div>
-              <div className="text-xs text-gray-500">{conversations.find(c=>c.id===selectedId)?.customers.phone}</div>
-            </div>
-          </div>
-          <div>
-            <button className="bg-emerald-600 text-white px-3 py-2 rounded-md text-sm">Assumir Conversa</button>
-          </div>
-        </header>
-
-        <section className="flex-1 overflow-y-auto p-6 bg-slate-50">
-          <div className="space-y-4 max-w-3xl mx-auto">
-            {messages.length===0 && (
-              <div className="text-center text-gray-400 mt-20">Selecione uma conversa para ver o histórico.</div>
-            )}
-
-            {messages.map(msg => (
-              msg.sender_type==='system' ? (
-                <div key={msg.id} className="flex justify-center"><span className="text-[11px] text-gray-500 uppercase">— {msg.content} —</span></div>
-              ) : (
-                <div key={msg.id} className={`flex ${msg.sender_type==='customer'?'justify-start':'justify-end'}`}>
-                  <div className={`${msg.sender_type==='customer'?'bg-white text-gray-800':'bg-emerald-600 text-white'} p-3 rounded-lg shadow max-w-[70%]`}> 
-                    <div className="flex items-end gap-2">
-                      {msg.sender_type==='bot' && <Sparkles className={`${msg.sender_type==='bot'?'text-white':'text-emerald-600'}`} />}
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                    </div>
-                    <div className="text-[11px] text-gray-300 mt-2 text-right flex items-center justify-end gap-2">
-                      <span className={`${msg.sender_type==='customer'?'text-gray-400':'text-gray-200'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                      {msg.sender_type!=='customer' && <Check className="h-4 w-4 text-white/80" />}
-                    </div>
+      {/* =====================================================================
+          MAIN: ÁREA DE CHAT OMNICHANNEL (70%)
+      ====================================================================== */}
+      <main className="flex-1 flex flex-col h-full bg-background overflow-hidden">
+        {activeConversation ? (
+          <>
+            {/* Header do Chat */}
+            <header className="h-16 border-b border-border px-6 flex items-center justify-between bg-card/50 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                  <User className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-semibold text-sm text-foreground truncate">
+                      {activeConversation.customers?.name || "Cliente Desconhecido"}
+                    </h2>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border uppercase">
+                      {activeConversation.channel || "WhatsApp"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    {activeConversation.customers?.phone && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <Phone className="h-3 w-3" />
+                        {activeConversation.customers.phone}
+                      </span>
+                    )}
+                    <span>•</span>
+                    <span className="capitalize">
+                      Status: {activeConversation.status === "open" ? "IA Ativa" : activeConversation.status === "human" ? "Humano" : "Encerrado"}
+                    </span>
                   </div>
                 </div>
-              )
-            ))}
-            <div ref={scrollRef}></div>
-          </div>
-        </section>
+              </div>
 
-        <footer className="h-20 border-t px-4 py-3 flex items-center bg-white">
-          <form onSubmit={handleSend} className="flex items-center gap-3 w-full max-w-4xl mx-auto">
-            <textarea value={input} onChange={(e)=>setInput(e.target.value)} placeholder="Digite uma mensagem..." className="flex-1 resize-none h-12 p-3 border rounded-md text-sm" />
-            <button type="submit" className="h-12 w-12 rounded-md bg-emerald-600 text-white flex items-center justify-center"><Send className="h-5 w-5" /></button>
-          </form>
-        </footer>
+              {/* Status do WebSocket Realtime */}
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground border border-border font-mono">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Subscrição Ativa</span>
+                </div>
+              </div>
+            </header>
+
+            {/* Histórico de Mensagens com Renderização Estilizada dos Balões */}
+            <section className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/15 space-y-4">
+              <div className="max-w-3xl mx-auto space-y-4">
+                {loadingMessages ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-2">
+                    <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs font-medium">Sincronizando histórico do banco...</p>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
+                    <MessageSquare className="h-8 w-8 stroke-1 text-muted-foreground/60" />
+                    <p className="text-xs font-medium">Nenhuma mensagem registrada nesta conversa.</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => {
+                    const isCustomer = msg.sender_type === "customer"
+                    const isSystemOrIa =
+                      msg.sender_type === "system" ||
+                      msg.sender_type === "ia" ||
+                      msg.sender_type === "bot"
+                    const isAgent = msg.sender_type === "agent" || msg.sender_type === "human"
+
+                    // Balão do Cliente (Esquerda)
+                    if (isCustomer) {
+                      return (
+                        <div key={msg.id} className="flex justify-start items-end gap-2 group">
+                          <div className="h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0 mb-1">
+                            {activeConversation.customers?.name?.slice(0, 1).toUpperCase() || "C"}
+                          </div>
+                          <div className="max-w-[85%] sm:max-w-[75%] bg-card text-card-foreground border border-border/80 shadow-xs rounded-2xl rounded-bl-xs p-3.5 space-y-1">
+                            <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words">
+                              {msg.content || <span className="italic text-muted-foreground text-xs">[Mensagem de mídia/áudio]</span>}
+                            </p>
+                            <div className="text-[10px] text-muted-foreground font-mono text-right pt-0.5">
+                              {formatTime(msg.created_at)}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Balão do Sistema / IA (Direita - Fundo Azul com Ícone Robô)
+                    if (isSystemOrIa) {
+                      return (
+                        <div key={msg.id} className="flex justify-end items-end gap-2 group">
+                          <div className="max-w-[85%] sm:max-w-[75%] bg-blue-600 text-white shadow-xs rounded-2xl rounded-br-xs p-3.5 space-y-1.5">
+                            {/* Identificação do Bot */}
+                            <div className="flex items-center gap-1.5 text-blue-100 text-[10px] font-semibold tracking-wider uppercase border-b border-white/15 pb-1">
+                              <Bot className="h-3.5 w-3.5 text-blue-200" />
+                              <span>Agente IA (Ellevée Engine)</span>
+                            </div>
+
+                            <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words text-white">
+                              {msg.content}
+                            </p>
+
+                            <div className="flex items-center justify-end gap-1.5 text-[10px] text-blue-100/90 font-mono pt-1">
+                              <span>{formatTime(msg.created_at)}</span>
+                              {renderDeliveryStatus(msg)}
+                            </div>
+                          </div>
+                          <div className="h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shrink-0 mb-1 shadow-xs">
+                            <Bot className="h-4 w-4" />
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Balão do Atendente Humano (Direita - Cor Primária / Emerald)
+                    return (
+                      <div key={msg.id} className="flex justify-end items-end gap-2 group">
+                        <div className="max-w-[85%] sm:max-w-[75%] bg-emerald-600 text-white shadow-xs rounded-2xl rounded-br-xs p-3.5 space-y-1.5">
+                          {/* Identificação do Atendente */}
+                          <div className="flex items-center gap-1.5 text-emerald-100 text-[10px] font-semibold tracking-wider uppercase border-b border-white/15 pb-1">
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-200" />
+                            <span>Atendente Humano</span>
+                          </div>
+
+                          <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words text-white">
+                            {msg.content}
+                          </p>
+
+                          <div className="flex items-center justify-end gap-1.5 text-[10px] text-emerald-100/90 font-mono pt-1">
+                            <span>{formatTime(msg.created_at)}</span>
+                            {renderDeliveryStatus(msg)}
+                          </div>
+                        </div>
+                        <div className="h-7 w-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0 mb-1 shadow-xs">
+                          <User className="h-4 w-4" />
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            </section>
+
+            {/* Rodapé / Input: Conforme Diretriz da Fase 3.1, envio de mensagem desabilitado nesta etapa */}
+            <footer className="h-20 border-t border-border px-6 py-3 flex items-center bg-card shrink-0">
+              <div className="flex items-center gap-3 w-full max-w-3xl mx-auto">
+                <div className="flex-1 bg-muted/40 border border-border/80 rounded-lg p-2.5 text-xs text-muted-foreground flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio className="h-4 w-4 text-emerald-500 animate-pulse shrink-0" />
+                    <span>Conexão WebSocket ativa. Novas mensagens do WhatsApp/Webhook aparecerão automaticamente.</span>
+                  </div>
+                  <span className="text-[10px] font-mono bg-muted px-2 py-0.5 rounded border border-border text-foreground/80 shrink-0 hidden sm:inline">
+                    Fase 3.1 (Read-Only)
+                  </span>
+                </div>
+              </div>
+            </footer>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground space-y-3">
+            <MessageSquare className="h-10 w-10 stroke-1 text-muted-foreground/50" />
+            <h3 className="font-semibold text-sm text-foreground">Nenhuma conversa selecionada</h3>
+            <p className="text-xs max-w-xs">
+              Selecione uma conversa na barra lateral para visualizar o histórico de mensagens e monitorar eventos em tempo real.
+            </p>
+          </div>
+        )}
       </main>
     </div>
   )
 }
-
-export default PainelClient
