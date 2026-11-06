@@ -86,7 +86,7 @@ export function ConversationsKanban({
   }
 
   return (
-    <div className={`flex-1 h-full overflow-x-auto overflow-y-hidden bg-[#fafafa] dark:bg-background ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
+    <div className={`flex-1 h-full overflow-x-auto overflow-y-hidden bg-ellevee-stone-subtle dark:bg-background ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
       <div className="flex h-full p-6 gap-6 min-w-max">
         {stages.map((stage: any) => {
           const stageConvs = groupedConversations[stage.id] || []
@@ -120,23 +120,23 @@ export function ConversationsKanban({
                       className="bg-background px-3 py-2.5 rounded-lg border border-border/60 hover:border-border hover:shadow-sm transition-all cursor-pointer group active:cursor-grabbing select-none"
                     >
                       <div className="flex justify-between items-center mb-1.5">
-                        <span className="font-medium text-[13px] text-foreground truncate max-w-[140px]">
+                        <span className="font-medium text-sm text-foreground truncate max-w-[140px]">
                           {conv.customers?.name || 'Visitante'}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/70 flex items-center shrink-0 ml-1">
+                        <span className="text-xs text-muted-foreground/70 flex items-center shrink-0 ml-1">
                           <Clock className="h-2.5 w-2.5 mr-0.5" />
                           {new Date(conv.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                       
                       {conv.last_message_preview && (
-                        <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed mb-2">
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-2">
                           {conv.last_message_preview}
                         </p>
                       )}
                       
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/60">
+                        <span className="text-xs uppercase tracking-wider font-medium text-muted-foreground/60">
                           {conv.channel}
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -144,7 +144,7 @@ export function ConversationsKanban({
                             conv.status === 'open' ? 'bg-blue-500' :
                             conv.status === 'human' ? 'bg-amber-500' : 'bg-gray-400'
                           }`} />
-                          <span className="text-[10px] text-muted-foreground/70">
+                          <span className="text-xs text-muted-foreground/70">
                             {conv.status === 'open' ? 'Agente' : conv.status === 'human' ? 'Humano' : 'Encerrada'}
                           </span>
                         </div>
