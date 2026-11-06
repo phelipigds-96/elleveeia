@@ -1,5 +1,5 @@
 import PainelClient from "./components/painel-client"
-import { getConversationsList, getConversationMessages } from "./actions"
+import { getConversationsList, getConversationMessages, getAgentProfileContext } from "./actions"
 
 export const metadata = {
   title: "Atendimento Omnichannel | Ellevee IA",
@@ -7,8 +7,11 @@ export const metadata = {
 }
 
 export default async function ConversationsPage() {
-  // Carga base inicial realizada estritamente no servidor (RSC)
-  const initialConversations = await getConversationsList()
+  // Carga base inicial realizada no servidor (RSC) com perfil do atendente e conversas filtradas por RBAC
+  const [currentUser, initialConversations] = await Promise.all([
+    getAgentProfileContext(),
+    getConversationsList(),
+  ])
   const initialSelectedId = initialConversations.length > 0 ? initialConversations[0].id : null
   const initialMessages = initialSelectedId ? await getConversationMessages(initialSelectedId) : []
 
@@ -18,6 +21,7 @@ export default async function ConversationsPage() {
         initialConversations={initialConversations}
         initialMessages={initialMessages}
         initialSelectedId={initialSelectedId}
+        currentUser={currentUser}
       />
     </div>
   )
