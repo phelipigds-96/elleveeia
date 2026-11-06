@@ -10,6 +10,10 @@ export interface CustomerData {
   name?: string | null
   phone?: string | null
   email?: string | null
+  address?: string | null
+  notes?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface ConversationData {
@@ -699,5 +703,219 @@ export async function reopenConversationAction(
       success: false,
       error: `Erro interno no servidor: ${error.message || "Falha desconhecida"}`,
     }
+  }
+}
+
+/**
+ * Server Action para buscar os detalhes completos do cliente (com fallback resiliente para address/notes)
+ */
+export async function getCustomerDetailsAction(
+  customerId: string
+): Promise<{ success: boolean; customer?: CustomerData; error?: string }> {
+  try {
+    if (!customerId) {
+      return { success: false, error: "Identificador do cliente não fornecido." }
+    }
+
+    const { companyId } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+
+    // 1. Tentar selecionar com as colunas completas
+    const { data, error } = await adminClient
+      .from("customers")
+      .select("id, name, phone, email, address, notes, created_at, updated_at")
+      .eq("id", customerId)
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    if (!error && data) {
+      return { success: true, customer: data }
+    }
+
+    // 2. Se as colunas address/notes ainda não foram criadas no Supabase (código 42703)
+    if (error && error.code === "42703") {
+      const { data: baseData, error: baseErr } = await adminClient
+        .from("customers")
+        .select("id, name, phone, email, created_at, updated_at")
+        .eq("id", customerId)
+        .eq("company_id", companyId)
+        .maybeSingle()
+
+      if (baseErr) return { success: false, error: baseErr.message }
+      return {
+        success: true,
+        customer: {
+          ...baseData,
+          address: null,
+          notes: null,
+        },
+      }
+    }
+
+    return { success: false, error: error?.message || "Cliente não encontrado." }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro ao carregar detalhes do cliente." }
+  }
+}
+
+/**
+ * Server Action para atualizar o perfil do cliente
+ */
+export async function updateCustomerProfileAction(params: {
+  customerId: string
+  name?: string
+  phone?: string
+  email?: string
+  address?: string
+  notes?: string
+}): Promise<{
+  success: boolean
+  customer?: CustomerData
+  pendingMigration?: boolean
+  error?: string
+}> {
+  try {
+    if (!params.customerId) {
+      return { success: false, error: "Identificador do cliente não fornecido." }
+    }
+
+    const { companyId } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+    const now = new Date().toISOString()
+
+    const updatePayload: Record<string, any> = {
+      updated_at: now,
+    }
+
+    if (params.name !== undefined) updatePayload.name = params.name.trim() || null
+    if (params.phone !== undefined) updatePayload.phone = params.phone.trim() || null
+    if (params.email !== undefined) updatePayload.email = params.email.trim() || null
+
+    let pendingMigration = false
+    const fullPayload = { ...updatePayload }
+    if (params.address !== undefined) fullPayload.address = params.address.trim() || null
+    if (params.notes !== undefined) fullPayload.notes = params.notes.trim() || null
+
+    // 1. Tenta atualizar com as novas colunas
+    const { data: updatedCust, error: fullErr } = await adminClient
+      .from("customers")
+      .update(fullPayload)
+      .eq("id", params.customerId)
+      .eq("company_id", companyId)
+      .select()
+      .maybeSingle()
+
+    let finalCustomer = updatedCust
+
+    // 2. Se deu erro de coluna inexistente (42703), salva os campos base
+    if (fullErr) {
+      if (fullErr.code === "42703") {
+        pendingMigration = true
+        const { data: baseCust, error: baseErr } = await adminClient
+          .from("customers")
+          .update(updatePayload)
+          .eq("id", params.customerId)
+          .eq("company_id", companyId)
+          .select()
+          .maybeSingle()
+
+        if (baseErr) {
+          return { success: false, error: `Falha ao salvar dados do cliente: ${baseErr.message}` }
+        }
+
+        finalCustomer = {
+          ...baseCust,
+          address: params.address || null,
+          notes: params.notes || null,
+        }
+      } else {
+        return { success: false, error: `Falha ao atualizar cliente: ${fullErr.message}` }
+      }
+    }
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      pendingMigration,
+      customer: finalCustomer,
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro desconhecido ao atualizar cliente." }
+  }
+}
+
+/**
+ * Server Action para adicionar uma nota interna na conversa (não enviada para o cliente)
+ */
+export async function createInternalNoteAction(params: {
+  conversationId: string
+  content: string
+}): Promise<{
+  success: boolean
+  message?: MessageData
+  error?: string
+}> {
+  try {
+    const trimmed = params.content?.trim()
+    if (!trimmed) {
+      return { success: false, error: "O conteúdo da nota interna não pode ser vazio." }
+    }
+
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+    const now = new Date().toISOString()
+
+    // 1. Insere na tabela messages com sender_type: 'human' e message_type: 'internal_note'
+    const { data: createdMsg, error: insertErr } = await adminClient
+      .from("messages")
+      .insert({
+        company_id: companyId,
+        conversation_id: params.conversationId,
+        sender_type: "human",
+        sender_id: userId,
+        content: trimmed,
+        message_type: "internal_note",
+        metadata: {
+          is_internal: true,
+          operator_id: userId,
+          operator_name: userName || "Atendente",
+        },
+      })
+      .select()
+      .single()
+
+    if (insertErr || !createdMsg) {
+      return {
+        success: false,
+        error: `Falha ao salvar nota interna: ${insertErr?.message || "Erro desconhecido"}`,
+      }
+    }
+
+    // 2. Atualizar updated_at da conversa sem alterar last_message_at (para não resetar ordenação externa de clientes)
+    await adminClient
+      .from("conversations")
+      .update({ updated_at: now })
+      .eq("id", params.conversationId)
+      .eq("company_id", companyId)
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      message: {
+        id: createdMsg.id,
+        company_id: createdMsg.company_id,
+        conversation_id: createdMsg.conversation_id,
+        sender_type: "human",
+        sender_id: createdMsg.sender_id,
+        content: createdMsg.content,
+        message_type: "internal_note",
+        metadata: createdMsg.metadata,
+        created_at: createdMsg.created_at,
+      },
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Erro interno ao salvar nota interna." }
   }
 }
