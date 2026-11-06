@@ -410,7 +410,12 @@ export default function PainelClient({
             updatedList[0]?.last_message_at !== prev[0]?.last_message_at ||
             updatedList.some((u) => {
               const p = prev.find((x) => x.id === u.id)
-              return !p || p.status !== u.status || p.unread_count !== u.unread_count
+              return (
+                !p ||
+                p.status !== u.status ||
+                p.unread_count !== u.unread_count ||
+                p.customers?.avatar_url !== u.customers?.avatar_url
+              )
             })
 
           if (!hasDiff) return prev
@@ -1099,6 +1104,7 @@ export default function PainelClient({
                       <img
                         src={conv.customers.avatar_url}
                         alt={customerName}
+                        referrerPolicy="no-referrer"
                         className="h-9 w-9 rounded-full object-cover border border-ellevee-stone/80"
                         onError={(e) => {
                           e.currentTarget.style.display = "none"
@@ -1204,6 +1210,7 @@ export default function PainelClient({
                     <img
                       src={activeConversation.customers.avatar_url}
                       alt={activeConversation.customers?.name || "Cliente"}
+                      referrerPolicy="no-referrer"
                       className="h-10 w-10 rounded-full object-cover border border-ellevee-stone shadow-2xs"
                       onError={(e) => {
                         e.currentTarget.style.display = "none"
@@ -1647,6 +1654,7 @@ export default function PainelClient({
                     <img
                       src={customerForm.avatar_url || activeConversation.customers?.avatar_url || ""}
                       alt={customerForm.name || "Cliente"}
+                      referrerPolicy="no-referrer"
                       className="h-11 w-11 rounded-full object-cover border border-ellevee-stone shrink-0"
                     />
                   ) : (
