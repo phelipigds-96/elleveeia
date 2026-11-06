@@ -22,6 +22,45 @@ export function extractUniqueBrands(matches: ProductSearchResult[]): string[] {
   return Array.from(brandMap.values())
 }
 
+export interface DiscoveredProductSegments {
+  hasProfessionalBaking: boolean
+  hasIndividualSnack: boolean
+  hasWholesaleBoxes: boolean
+  segmentLabels: string[]
+}
+
+export function detectProductSegments(matches: ProductSearchResult[]): DiscoveredProductSegments {
+  let hasProfessionalBaking = false
+  let hasIndividualSnack = false
+  let hasWholesaleBoxes = false
+
+  for (const m of matches) {
+    const nameUpper = (m.name || '').toUpperCase()
+    if (/\b\d+\s*X\s*\d+/i.test(nameUpper) || /\b(?:CX|CAIXA|FARDO|DISPLAY|FD)\b/i.test(nameUpper)) {
+      hasWholesaleBoxes = true
+    }
+    if (
+      /\b(?:1KG|1\.0|1\.01|1\.05|2KG|2\.1KG|BARRA|COBERTURA|GOTAS|RECHEIO|PASTA|BLOCO|CULINARIO|CULINARIA)\b/i.test(nameUpper) ||
+      (m.unit && /kg/i.test(m.unit))
+    ) {
+      hasProfessionalBaking = true
+    }
+    if (
+      /\b(?:\d{2,3}G|TABLETE|BOMBOM|SNACK|KIT\s*KAT|BIS|TUBINHO)\b/i.test(nameUpper) &&
+      !/\b(?:1KG|1\.0|2KG|CX|CAIXA|12X|14X|54X)\b/i.test(nameUpper)
+    ) {
+      hasIndividualSnack = true
+    }
+  }
+
+  const segmentLabels: string[] = []
+  if (hasProfessionalBaking) segmentLabels.push('confeitaria_e_receitas (ex: barras culinárias de 1kg, coberturas e gotas)')
+  if (hasIndividualSnack) segmentLabels.push('consumo_individual (ex: tabletes menores de 80g/90g, snacks e bombons)')
+  if (hasWholesaleBoxes) segmentLabels.push('atacado_e_caixas (ex: caixas fechadas e fardos para revenda)')
+
+  return { hasProfessionalBaking, hasIndividualSnack, hasWholesaleBoxes, segmentLabels }
+}
+
 export function applyCommercialStrategy(
   query: string,
   searchResult: StructuredSearchResponse,
@@ -104,9 +143,13 @@ export function applyCommercialStrategy(
       }
     }
 
-    return {
+    const segments = detectProductSegments(targetMatches)
+    const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
+
+    const payload: any = {
       strategy: 'brand_specific_discovery',
       brand: mentionedBrand,
+      is_broad_query: isBroadSegmented,
       products: targetMatches.slice(0, 5).map(m => {
         const item: any = {
           id: m.id,
@@ -124,13 +167,25 @@ export function applyCommercialStrategy(
         return item
       })
     }
+
+    if (isBroadSegmented) {
+      payload.available_segments = segments.segmentLabels
+      payload.consultative_hint = 'A consulta do cliente é ampla e o catálogo possui opções com finalidades distintas: ' +
+        segments.segmentLabels.join(', ') + '. Não jogue a lista de preços completa. Faça uma pergunta consultiva amigável perguntando se ele procura para confeitaria/receitas ou para consumo próprio/docinho.'
+    }
+
+    return payload
   }
 
   // 4. GENERIC DISCOVERY
-  return {
+  const segments = detectProductSegments(searchResult.matches)
+  const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
+
+  const payload: any = {
     strategy: 'generic_discovery',
     brands: uniqueBrands.slice(0, 4),
     product_count: searchResult.matches.length,
+    is_broad_query: isBroadSegmented,
     products: searchResult.matches.slice(0, 5).map(m => {
       const item: any = {
         id: m.id,
@@ -148,4 +203,12 @@ export function applyCommercialStrategy(
       return item
     })
   }
+
+  if (isBroadSegmented) {
+    payload.available_segments = segments.segmentLabels
+    payload.consultative_hint = 'A consulta do cliente é ampla e o catálogo possui opções com finalidades distintas: ' +
+      segments.segmentLabels.join(', ') + '. Não jogue a lista de preços completa. Faça uma pergunta consultiva amigável perguntando se ele procura para confeitaria/receitas ou para consumo próprio/docinho.'
+  }
+
+  return payload
 }
