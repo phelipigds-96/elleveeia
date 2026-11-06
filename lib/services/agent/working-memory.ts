@@ -329,7 +329,7 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
             existingList.push(inc)
           }
         }
-        next.discoveredProducts = existingList.slice(-10)
+        next.discoveredProducts = existingList.slice(-15)
       }
 
       const isConfirmedMatch = 

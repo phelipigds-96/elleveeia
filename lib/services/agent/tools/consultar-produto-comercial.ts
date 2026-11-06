@@ -16,14 +16,14 @@ export const consultarProdutoComercialTool: ToolDefinition = {
   execute: async (input, context) => {
     const { product_query, quantity = 1, price_type } = input
     
-    const searchResult = await searchProducts(context.companyId, product_query, 5)
+    const searchResult = await searchProducts(context.companyId, product_query, 12)
 
     // Resolução individual de preços para os candidatos retornados (máximo 5)
     const candidatePrices = new Map<string, { unit_price: number, subtotal: number }>()
     const candidateErrors = new Map<string, string>()
 
     if (searchResult.matches && searchResult.matches.length > 0) {
-      const targetMatches = searchResult.matches.slice(0, 5)
+      const targetMatches = searchResult.matches.slice(0, 10)
       await Promise.all(
         targetMatches.map(async (prod) => {
           try {
