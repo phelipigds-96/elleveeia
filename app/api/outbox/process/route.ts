@@ -3,6 +3,7 @@ import { processOutboxBatch } from '@/lib/services/outbox-dispatcher'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 /**
  * Validação de autorização do processador de outbox.

@@ -3,6 +3,7 @@ import { reconcileStalledOutboxBatch } from '@/lib/services/outbox-worker'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 function isAuthorized(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET

@@ -4,17 +4,23 @@ import { updateMessageDeliveryStatus } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   const startTime = Date.now()
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID()
 
   try {
     const url = new URL(request.url)
-    const secret =
+    const rawSecret =
       request.headers.get('x-ellevee-webhook-secret') ||
       url.searchParams.get('token') ||
       url.searchParams.get('secret') ||
       request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+
+    const secret = rawSecret ? rawSecret.trim().replace(/^['"]|['"]$/g, '') : null
 
     if (!secret) {
       return NextResponse.json(
