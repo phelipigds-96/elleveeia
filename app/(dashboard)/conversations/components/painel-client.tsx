@@ -27,7 +27,9 @@ import {
   Save,
   Hourglass,
   ListFilter,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Menu,
+  ChevronDown
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -84,6 +86,29 @@ function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
+function isSameDay(a: string, b: string): boolean {
+  if (!a || !b) return false
+  const d1 = new Date(a)
+  const d2 = new Date(b)
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  )
+}
+
+function formatDayLabel(isoString: string): string {
+  if (!isoString) return ""
+  const date = new Date(isoString)
+  const now = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(now.getDate() - 1)
+
+  if (isSameDay(isoString, now.toISOString())) return "Hoje"
+  if (isSameDay(isoString, yesterday.toISOString())) return "Ontem"
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+}
+
 function WhatsAppIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -110,6 +135,8 @@ export default function PainelClient({
   )
   const [search, setSearch] = useState("")
   const [loadingMessages, setLoadingMessages] = useState(false)
+  // Lista de conversas recolhida em telas pequenas (mobile)
+  const [isListOpen, setIsListOpen] = useState(false)
   
   // 3. Estados de envio de mensagem e Ações de Ciclo de Vida (Fase 1)
   const [inputContent, setInputContent] = useState("")
@@ -439,6 +466,7 @@ export default function PainelClient({
     if (convId === selectedId) return
 
     setSelectedId(convId)
+    setIsListOpen(false)
     setLoadingMessages(true)
 
     try {
@@ -928,12 +956,47 @@ export default function PainelClient({
     }
   }
 
+  // Feed de mensagens com separadores de dia inseridos entre mensagens
+  const messageFeed = useMemo(() => {
+    const feed: any[] = []
+    let lastDay = ""
+    for (const m of messages) {
+      const day = m.created_at ? new Date(m.created_at).toDateString() : ""
+      if (day && day !== lastDay) {
+        feed.push({
+          id: `divider-${day}-${m.id}`,
+          sender_type: "__divider__",
+          content: formatDayLabel(m.created_at),
+          created_at: m.created_at,
+        })
+        lastDay = day
+      }
+      feed.push(m)
+    }
+    return feed
+  }, [messages])
+
   return (
-    <div className="flex h-full w-full bg-[#F3F2ED] text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans">
+    <div className="flex h-full w-full bg-[#F3F2ED] text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
+      {/* Botão flutuante para abrir a lista de conversas em telas pequenas */}
+      {!activeConversation && (
+        <button
+          type="button"
+          onClick={() => setIsListOpen(true)}
+          className="lg:hidden absolute top-3 left-3 z-30 inline-flex items-center gap-2 h-9 px-3 rounded-md bg-ellevee-ink text-white text-xs font-medium shadow-lg focus-ring"
+        >
+          <Menu className="h-4 w-4" />
+          <span>Conversas</span>
+        </button>
+      )}
       {/* =====================================================================
           SIDEBAR: LISTA DE CONVERSAS (Quiet Luxury / Deep Ink)
       ====================================================================== */}
-      <aside className="w-80 sm:w-96 border-r border-ellevee-stone bg-white flex flex-col shrink-0 h-full">
+      <aside
+        className={`w-80 sm:w-96 border-r border-ellevee-stone bg-white flex-col shrink-0 h-full transition-transform duration-200 z-40 ${
+          isListOpen ? "absolute inset-y-0 left-0 flex shadow-2xl" : "hidden lg:flex"
+        }`}
+      >
         {/* Cabeçalho de Busca e Filtros */}
         <div className="p-3 border-b border-ellevee-stone space-y-2.5">
           <div className="flex items-center justify-between">
@@ -943,6 +1006,16 @@ export default function PainelClient({
                 {conversations.length}
               </span>
             </h1>
+
+            {/* Fechar lista (mobile) */}
+            <button
+              type="button"
+              onClick={() => setIsListOpen(false)}
+              className="lg:hidden inline-flex items-center justify-center h-7 w-7 rounded-md text-ellevee-sage hover:bg-[#F3F2ED] hover:text-ellevee-ink focus-ring"
+              title="Fechar lista de conversas"
+            >
+              <X className="h-4 w-4" />
+            </button>
 
             {/* Perfil do usuário atual */}
             {currentUser && (
@@ -1065,11 +1138,16 @@ export default function PainelClient({
         </div>
 
         {/* Lista de Itens */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto scroll-slim p-2 space-y-1">
           {filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-ellevee-sage p-6 text-center space-y-2">
-              <MessageSquare className="h-6 w-6 stroke-1 text-ellevee-sage/60" />
-              <p className="text-xs">Nenhuma conversa encontrada para os filtros aplicados.</p>
+              <div className="h-12 w-12 rounded-full bg-[#F3F2ED] flex items-center justify-center">
+                <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-sage/70" />
+              </div>
+              <p className="text-xs font-medium text-ellevee-ink">Nenhuma conversa encontrada</p>
+              <p className="text-[11px] text-ellevee-sage max-w-[220px] leading-relaxed">
+                Ajuste a busca ou troque a aba de status para ver outros atendimentos.
+              </p>
             </div>
           ) : (
             filteredConversations.map((conv) => {
@@ -1090,7 +1168,7 @@ export default function PainelClient({
                 <button
                   key={conv.id}
                   onClick={() => handleSelectConversation(conv.id)}
-                  className={`w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all relative cursor-pointer ${
+                  className={`conv-item focus-ring w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all relative cursor-pointer ${
                     isSelected
                       ? "bg-[#FBFBFA] border border-ellevee-stone shadow-2xs ring-1 ring-ellevee-ink/10"
                       : "hover:bg-[#F8F8F5] border border-transparent"
@@ -1136,7 +1214,7 @@ export default function PainelClient({
                   {/* Informações da Conversa */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className="font-semibold text-xs text-ellevee-ink truncate">
+                      <span className="font-semibold text-[13px] text-ellevee-ink truncate">
                         {customerName}
                       </span>
                       <span className="text-[10px] text-ellevee-sage shrink-0 font-mono">
@@ -1144,7 +1222,7 @@ export default function PainelClient({
                       </span>
                     </div>
 
-                    <p className="text-[11px] text-ellevee-sage truncate leading-relaxed">
+                    <p className="text-xs text-ellevee-sage truncate leading-relaxed">
                       {conv.last_message_preview || "Nenhuma mensagem recente"}
                     </p>
 
@@ -1192,6 +1270,16 @@ export default function PainelClient({
         </div>
       </aside>
 
+      {/* Overlay mobile: escurece o fundo quando a lista de conversas está aberta */}
+      {isListOpen && (
+        <button
+          type="button"
+          aria-label="Fechar lista de conversas"
+          onClick={() => setIsListOpen(false)}
+          className="lg:hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-[2px]"
+        />
+      )}
+
       {/* =====================================================================
           MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink) COM DRAWER RETRÁTIL
       ====================================================================== */}
@@ -1201,9 +1289,18 @@ export default function PainelClient({
             {/* Coluna Central do Chat */}
             <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
             {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
-            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3">
+            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
+                {/* Botão voltar para a lista (mobile) */}
+                <button
+                  type="button"
+                  onClick={() => setIsListOpen(true)}
+                  className="lg:hidden inline-flex items-center justify-center h-8 w-8 rounded-md text-ellevee-ink hover:bg-[#F3F2ED] focus-ring shrink-0"
+                  title="Ver lista de conversas"
+                >
+                  <Menu className="h-4 w-4" />
+                </button>
                 {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
                 <div className="relative shrink-0">
                   {activeConversation.customers?.avatar_url ? (
@@ -1384,18 +1481,36 @@ export default function PainelClient({
             </header>
 
             {/* Histórico de Mensagens: Fundo Warm Ivory (#F3F2ED) */}
-            <section className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F3F2ED] space-y-4">
+            <section className="flex-1 overflow-y-auto scroll-slim p-4 sm:p-6 bg-[#F3F2ED] space-y-4">
               <div className="max-w-3xl mx-auto space-y-4">
                 {loadingMessages ? (
-                  <div className="flex items-center justify-center p-8 text-ellevee-sage">
+                  <div className="flex flex-col items-center justify-center p-10 text-ellevee-sage space-y-3">
                     <Loader2 className="h-6 w-6 animate-spin text-ellevee-ink" />
+                    <p className="text-xs">Carregando histórico…</p>
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="text-center p-8 text-ellevee-sage text-xs">
-                    Nenhuma mensagem registrada nesta conversa.
+                  <div className="flex flex-col items-center justify-center p-10 text-center space-y-2">
+                    <div className="h-12 w-12 rounded-full bg-white border border-ellevee-stone flex items-center justify-center">
+                      <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-sage" />
+                    </div>
+                    <p className="text-sm font-medium text-ellevee-ink">Nenhuma mensagem registrada</p>
+                    <p className="text-xs text-ellevee-sage max-w-[280px] leading-relaxed">
+                      Esta conversa ainda não possui histórico. Envie a primeira mensagem para começar.
+                    </p>
                   </div>
                 ) : (
-                  messages.map((msg) => {
+                  messageFeed.map((msg) => {
+                    // Separador de dia (Hoje / Ontem / data completa)
+                    if ((msg as any).sender_type === "__divider__") {
+                      return (
+                        <div key={msg.id} className="flex justify-center py-1">
+                          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-ellevee-sage bg-white border border-ellevee-stone rounded-full px-2.5 py-0.5 shadow-2xs">
+                            {msg.content}
+                          </span>
+                        </div>
+                      )
+                    }
+
                     const isCustomer = msg.sender_type === "customer"
                     const isSystem = msg.sender_type === "system" || msg.message_type === "event"
                     const isInternalNote = msg.message_type === "internal_note" || msg.metadata?.is_internal
@@ -1406,7 +1521,7 @@ export default function PainelClient({
                     if (isSystem) {
                       return (
                         <div key={msg.id} className="flex justify-center my-3">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-white text-ellevee-ink border border-ellevee-stone shadow-2xs max-w-md text-center">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-white text-ellevee-ink border border-ellevee-stone shadow-2xs max-w-md text-center msg-bubble-system">
                             <Sparkles className="h-3.5 w-3.5 text-ellevee-accent shrink-0" />
                             <span>{msg.content}</span>
                           </div>
@@ -1449,9 +1564,9 @@ export default function PainelClient({
                           <span className="text-[10px] text-ellevee-sage px-1 font-mono">
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
-                          <div className="max-w-md bg-white border border-ellevee-stone rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-ellevee-ink shadow-2xs leading-relaxed break-words">
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
-                            <div className="flex justify-end items-center gap-1 mt-1 text-[10px] text-ellevee-sage font-mono">
+                          <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            <div className="flex justify-end items-center gap-1 mt-1 text-[10px] text-ellevee-sage font-mono opacity-70 transition-opacity group-hover:opacity-100">
                               <span>{formatTime(msg.created_at)}</span>
                             </div>
                           </div>
@@ -1479,13 +1594,13 @@ export default function PainelClient({
                         </span>
 
                         <div
-                          className={`max-w-md rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs shadow-2xs leading-relaxed break-words ${
+                          className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
                             isAgent
-                              ? "bg-white text-ellevee-ink border border-emerald-300 ring-1 ring-emerald-500/20"
-                              : "bg-ellevee-ink text-white border border-ellevee-ink"
+                              ? "msg-bubble-in border-emerald-300 ring-1 ring-emerald-500/20"
+                              : "msg-bubble-out"
                           }`}
                         >
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                           <div
                             className={`flex justify-end items-center gap-1.5 mt-1 text-[10px] font-mono ${
                               isAgent ? "text-ellevee-sage" : "text-white/70"
@@ -1628,7 +1743,7 @@ export default function PainelClient({
 
           {/* PAINEL LATERAL RETRÁTIL: PERFIL DO CLIENTE (Fase 2) */}
           {isProfileOpen && (
-            <aside className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto z-10">
+            <aside className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto scroll-slim z-40 fixed lg:static inset-y-0 right-0 shadow-2xl lg:shadow-none">
               {/* Header do Drawer */}
               <div className="p-4 border-b border-ellevee-stone flex items-center justify-between bg-[#FBFBFA]">
                 <div className="flex items-center gap-2">
@@ -1866,6 +1981,14 @@ export default function PainelClient({
             <p className="text-xs max-w-xs text-ellevee-sage">
               Selecione uma conversa na barra lateral para visualizar o histórico de mensagens e monitorar eventos em tempo real.
             </p>
+            <button
+              type="button"
+              onClick={() => setIsListOpen(true)}
+              className="lg:hidden mt-2 inline-flex items-center gap-2 h-9 px-3 rounded-md bg-ellevee-ink text-white text-xs font-medium shadow-2xs focus-ring"
+            >
+              <Menu className="h-4 w-4" />
+              <span>Ver conversas</span>
+            </button>
           </div>
         )}
       </main>
