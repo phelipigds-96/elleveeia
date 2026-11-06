@@ -71,6 +71,16 @@ export function formatWorkingMemoryPrompt(workingMemory: WorkingMemory | null | 
     prompt += `Orcamento Formal: ID ${workingMemory.activeQuote.id} (${workingMemory.activeQuote.status})${totalFormatted}\n`
   }
 
+  // Exposição do Buffer de Produtos Apresentados Recentemente
+  if (workingMemory.discoveredProducts && workingMemory.discoveredProducts.length > 0) {
+    prompt += `\n[PRODUTOS APRESENTADOS RECENTEMENTE]\n`
+    for (const p of workingMemory.discoveredProducts.slice(0, 8)) {
+      const priceStr = p.unitPrice ? ` | Preço: R$ ${p.unitPrice.toFixed(2)}` : ''
+      prompt += `- ${p.name} | ID: ${p.id}${priceStr}\n`
+    }
+    prompt += `ATENÇÃO: Ao calcular preço, consultar preço ou gerar orçamento para algum dos produtos acima, use OBRIGATORIAMENTE o ID indicado. NUNCA invente outros IDs.\n`
+  }
+
   return prompt
 }
 

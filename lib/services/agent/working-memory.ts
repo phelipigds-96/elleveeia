@@ -9,6 +9,14 @@ export interface CartItem {
   isPriceConfirmed: boolean
 }
 
+export interface DiscoveredProduct {
+  id: string
+  name: string
+  unitPrice?: number
+  subtotal?: number
+  brand?: string | null
+}
+
 export interface WorkingMemory {
   activeProduct?: {
     id: string
@@ -25,6 +33,7 @@ export interface WorkingMemory {
     total: number
     status: string
   }
+  discoveredProducts?: DiscoveredProduct[]
 }
 
 export interface AddCartItemParams {
@@ -275,6 +284,54 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
     const toolName = res.toolName
     
     if (toolName === 'buscar_produto' || toolName === 'consultar_produto_comercial') {
+      // 1. Atualizar buffer contínuo de produtos descobertos/apresentados (discoveredProducts)
+      const incomingProducts: DiscoveredProduct[] = []
+      if (Array.isArray(res.data.products)) {
+        for (const p of res.data.products) {
+          if (p?.id && p?.name) {
+            incomingProducts.push({
+              id: p.id,
+              name: p.name,
+              unitPrice: p.price?.unit_price ?? p.unit_price ?? p.unitPrice,
+              subtotal: p.price?.subtotal ?? p.subtotal,
+              brand: p.brand || null
+            })
+          }
+        }
+      } else if (res.data.product?.id && res.data.product?.name) {
+        incomingProducts.push({
+          id: res.data.product.id,
+          name: res.data.product.name,
+          unitPrice: res.data.price?.unit_price ?? res.data.pricing?.unit_price ?? res.data.unit_price,
+          subtotal: res.data.price?.subtotal ?? res.data.pricing?.subtotal ?? res.data.subtotal,
+          brand: res.data.product.brand || null
+        })
+      } else if (Array.isArray(res.data.matches)) {
+        for (const m of res.data.matches) {
+          if (m?.id && m?.name) {
+            incomingProducts.push({
+              id: m.id,
+              name: m.name,
+              unitPrice: m.price?.unit_price ?? m.unit_price,
+              brand: m.brand || null
+            })
+          }
+        }
+      }
+
+      if (incomingProducts.length > 0) {
+        const existingList = next.discoveredProducts ? [...next.discoveredProducts] : []
+        for (const inc of incomingProducts) {
+          const idx = existingList.findIndex(e => e.id === inc.id)
+          if (idx >= 0) {
+            existingList[idx] = { ...existingList[idx], ...inc }
+          } else {
+            existingList.push(inc)
+          }
+        }
+        next.discoveredProducts = existingList.slice(-10)
+      }
+
       const isConfirmedMatch = 
         res.data.strategy === 'specific_product' ||
         res.data.strategy === 'quantity_pricing' ||
@@ -339,14 +396,33 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
         next.activePrice = { unitPrice, priceType }
       }
 
-      // Se o produto calculado está no activeCart, atualizamos sua precificação com o valor validado
       const prodId = res.data.product_id ?? next.activeProduct?.id
-      if (prodId && next.activeCart?.some(i => i.productId === prodId)) {
-        next = updateCartItemPrice(next, prodId, {
-          unitPrice,
-          subtotal: res.data.subtotal,
-          priceType
-        })
+      if (prodId) {
+        const prodName = res.data.product_name ?? 
+          next.discoveredProducts?.find(p => p.id === prodId)?.name ?? 
+          (next.activeProduct && next.activeProduct.id === prodId ? next.activeProduct.name : undefined) ??
+          next.activeCart?.find(i => i.productId === prodId)?.name
+
+        if (prodName && typeof unitPrice === 'number') {
+          const qty = res.data.quantity ?? next.activeQuantity ?? 1
+          const subtotal = res.data.subtotal ?? Math.round(unitPrice * qty * 100) / 100
+          next = addItemToCart(next, {
+            productId: prodId,
+            name: prodName,
+            quantity: qty,
+            unitPrice,
+            subtotal,
+            priceType,
+            isPriceConfirmed: true
+          })
+          next.activeProduct = { id: prodId, name: prodName }
+        } else if (next.activeCart?.some(i => i.productId === prodId)) {
+          next = updateCartItemPrice(next, prodId, {
+            unitPrice,
+            subtotal: res.data.subtotal,
+            priceType
+          })
+        }
       }
     }
 
