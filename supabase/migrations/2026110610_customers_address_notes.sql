@@ -4,9 +4,11 @@
 -- 1. Colunas do Perfil do Cliente
 ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 COMMENT ON COLUMN public.customers.address IS 'Endereço residencial ou comercial do cliente';
 COMMENT ON COLUMN public.customers.notes IS 'Observações e anotações perenes sobre o perfil do cliente';
+COMMENT ON COLUMN public.customers.avatar_url IS 'URL da foto real de perfil do WhatsApp do cliente';
 
 -- 2. Habilitação de Realtime no Supabase para Mensagens e Conversas
 DO $$

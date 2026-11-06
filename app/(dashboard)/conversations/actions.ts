@@ -12,6 +12,7 @@ export interface CustomerData {
   email?: string | null
   address?: string | null
   notes?: string | null
+  avatar_url?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -729,7 +730,7 @@ export async function getCustomerDetailsAction(
     // 1. Tentar selecionar com as colunas completas
     const { data, error } = await adminClient
       .from("customers")
-      .select("id, name, phone, email, address, notes, created_at, updated_at")
+      .select("id, name, phone, email, address, notes, avatar_url, created_at, updated_at")
       .eq("id", customerId)
       .eq("company_id", companyId)
       .maybeSingle()
@@ -738,7 +739,7 @@ export async function getCustomerDetailsAction(
       return { success: true, customer: data }
     }
 
-    // 2. Se as colunas address/notes ainda não foram criadas no Supabase (código 42703)
+    // 2. Se as colunas address/notes/avatar_url ainda não foram criadas no Supabase (código 42703)
     if (error && error.code === "42703") {
       const { data: baseData, error: baseErr } = await adminClient
         .from("customers")
@@ -754,6 +755,7 @@ export async function getCustomerDetailsAction(
           ...baseData,
           address: null,
           notes: null,
+          avatar_url: null,
         },
       }
     }

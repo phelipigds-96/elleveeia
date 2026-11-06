@@ -24,7 +24,10 @@ import {
   StickyNote,
   Lock,
   FileText,
-  Save
+  Save,
+  Hourglass,
+  ListFilter,
+  ArrowLeftRight
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -81,6 +84,14 @@ function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
+function WhatsAppIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.456 5.711 1.457h.005c6.554 0 11.89-5.335 11.893-11.893a11.82 11.82 0 00-3.48-8.413Z"/>
+    </svg>
+  )
+}
+
 export default function PainelClient({
   initialConversations,
   initialMessages,
@@ -119,6 +130,7 @@ export default function PainelClient({
     email: string
     address: string
     notes: string
+    avatar_url: string
   }>({
     id: "",
     name: "",
@@ -126,6 +138,7 @@ export default function PainelClient({
     email: "",
     address: "",
     notes: "",
+    avatar_url: "",
   })
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(false)
@@ -179,6 +192,7 @@ export default function PainelClient({
       email: cust?.email || "",
       address: (cust as any)?.address || "",
       notes: (cust as any)?.notes || "",
+      avatar_url: (cust as any)?.avatar_url || "",
     })
 
     if (targetCustId) {
@@ -193,6 +207,7 @@ export default function PainelClient({
               email: res.customer?.email || prev.email,
               address: res.customer?.address || prev.address || "",
               notes: res.customer?.notes || prev.notes || "",
+              avatar_url: res.customer?.avatar_url || prev.avatar_url || "",
             }))
           }
         })
@@ -944,70 +959,102 @@ export default function PainelClient({
             />
           </div>
 
-          {/* Tabs de Filtro: Nova Taxonomia */}
-          <div className="flex gap-1 text-[11px] font-medium overflow-x-auto scrollbar-none pb-0.5">
+          {/* Tabs de Filtro: Ergonomia por Ícones Rápidos (Estilo ChatPro) */}
+          <div className={`grid ${isMasterOrAdmin ? "grid-cols-5" : "grid-cols-4"} gap-1 p-1 bg-[#F3F2ED] rounded-lg border border-ellevee-stone/70`}>
             {isMasterOrAdmin && (
               <button
+                type="button"
                 onClick={() => setActiveTab("all")}
-                className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                title={`Todas as Conversas (${counts.all})`}
+                className={`relative flex items-center justify-center py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                   activeTab === "all"
-                    ? "bg-ellevee-ink text-white font-semibold shadow-2xs border border-ellevee-ink"
-                    : "text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5]"
+                    ? "bg-white text-ellevee-ink font-semibold shadow-2xs border border-ellevee-stone ring-1 ring-ellevee-ink/5"
+                    : "text-ellevee-sage hover:text-ellevee-ink hover:bg-white/60"
                 }`}
               >
-                Todas ({counts.all})
+                <ListFilter className="h-4 w-4" />
+                {counts.all > 0 && (
+                  <span className="ml-1 text-[10px] font-mono text-ellevee-sage font-medium hidden sm:inline">
+                    {counts.all}
+                  </span>
+                )}
               </button>
             )}
 
             <button
+              type="button"
               onClick={() => setActiveTab("waiting")}
-              className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              title={`Aguardando Atendimento (${counts.waiting})`}
+              className={`relative flex items-center justify-center py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                 activeTab === "waiting"
-                  ? "bg-ellevee-ink text-white font-semibold shadow-2xs border border-ellevee-ink"
-                  : "text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5]"
+                  ? "bg-white text-amber-900 font-semibold shadow-2xs border border-amber-300 ring-1 ring-amber-400/20"
+                  : "text-ellevee-sage hover:text-amber-800 hover:bg-white/60"
               }`}
             >
-              <span>Aguardando</span>
+              <Hourglass className={`h-4 w-4 ${counts.waiting > 0 ? "text-amber-600 animate-pulse" : "text-amber-600/70"}`} />
               {counts.waiting > 0 ? (
-                <span className="h-4 px-1 rounded-full text-[9px] font-bold bg-amber-500 text-white flex items-center justify-center">
+                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-[9px] font-bold bg-amber-500 text-white flex items-center justify-center">
                   {counts.waiting}
                 </span>
               ) : (
-                <span className="text-[10px] opacity-70">({counts.waiting})</span>
+                <span className="ml-1 text-[10px] font-mono text-ellevee-sage/60 font-medium hidden sm:inline">
+                  0
+                </span>
               )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("in_progress")}
-              className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              title={`Em Atendimento Humano (${counts.inProgress})`}
+              className={`relative flex items-center justify-center py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                 activeTab === "in_progress"
-                  ? "bg-ellevee-ink text-white font-semibold shadow-2xs border border-ellevee-ink"
-                  : "text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5]"
+                  ? "bg-white text-emerald-900 font-semibold shadow-2xs border border-emerald-300 ring-1 ring-emerald-400/20"
+                  : "text-ellevee-sage hover:text-emerald-800 hover:bg-white/60"
               }`}
             >
-              Em Atendimento ({counts.inProgress})
+              <MessageSquare className="h-4 w-4 text-emerald-600" />
+              {counts.inProgress > 0 && (
+                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-[9px] font-bold bg-emerald-600 text-white flex items-center justify-center">
+                  {counts.inProgress}
+                </span>
+              )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("ai")}
-              className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              title={`IA Ativa (${counts.ai})`}
+              className={`relative flex items-center justify-center py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                 activeTab === "ai"
-                  ? "bg-ellevee-ink text-white font-semibold shadow-2xs border border-ellevee-ink"
-                  : "text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5]"
+                  ? "bg-white text-blue-900 font-semibold shadow-2xs border border-blue-300 ring-1 ring-blue-400/20"
+                  : "text-ellevee-sage hover:text-blue-800 hover:bg-white/60"
               }`}
             >
-              IA Ativa ({counts.ai})
+              <Bot className="h-4 w-4 text-blue-600" />
+              {counts.ai > 0 && (
+                <span className="ml-1 text-[10px] font-mono text-blue-700 font-medium hidden sm:inline">
+                  {counts.ai}
+                </span>
+              )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("closed")}
-              className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              title={`Atendimentos Finalizados (${counts.closed})`}
+              className={`relative flex items-center justify-center py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                 activeTab === "closed"
-                  ? "bg-ellevee-ink text-white font-semibold shadow-2xs border border-ellevee-ink"
-                  : "text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5]"
+                  ? "bg-white text-stone-900 font-semibold shadow-2xs border border-stone-300 ring-1 ring-stone-400/20"
+                  : "text-ellevee-sage hover:text-stone-800 hover:bg-white/60"
               }`}
             >
-              Finalizados ({counts.closed})
+              <CheckCircle2 className="h-4 w-4 text-stone-500" />
+              {counts.closed > 0 && (
+                <span className="ml-1 text-[10px] font-mono text-stone-500 font-medium hidden sm:inline">
+                  {counts.closed}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1046,17 +1093,38 @@ export default function PainelClient({
                     isWaiting ? "border-l-4 border-l-amber-500" : ""
                   }`}
                 >
-                  {/* Avatar com Iniciais */}
-                  <div
-                    className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
-                      isSelected
-                        ? "bg-ellevee-ink text-white"
-                        : isWaiting
-                        ? "bg-amber-100 text-amber-900 border border-amber-300"
-                        : "bg-[#F3F2ED] text-ellevee-ink border border-ellevee-stone"
-                    }`}
-                  >
-                    {initials}
+                  {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
+                  <div className="relative shrink-0">
+                    {conv.customers?.avatar_url ? (
+                      <img
+                        src={conv.customers.avatar_url}
+                        alt={customerName}
+                        className="h-9 w-9 rounded-full object-cover border border-ellevee-stone/80"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none"
+                          if (e.currentTarget.nextElementSibling) {
+                            (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                        conv.customers?.avatar_url ? "hidden" : ""
+                      } ${
+                        isSelected
+                          ? "bg-ellevee-ink text-white"
+                          : isWaiting
+                          ? "bg-amber-100 text-amber-900 border border-amber-300"
+                          : "bg-[#F3F2ED] text-ellevee-ink border border-ellevee-stone"
+                      }`}
+                    >
+                      {initials}
+                    </div>
+                    {/* Selo verde do WhatsApp estilo ChatPro */}
+                    <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs ring-1 ring-white">
+                      <WhatsAppIcon className="h-2 w-2" />
+                    </div>
                   </div>
 
                   {/* Informações da Conversa */}
@@ -1105,7 +1173,7 @@ export default function PainelClient({
                       )}
 
                       {conv.unread_count > 0 && (
-                        <span className="bg-ellevee-ink text-white text-[10px] font-bold px-1.5 py-0.2 rounded font-mono">
+                        <span className="min-w-[18px] h-4 px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center font-mono shadow-xs">
                           {conv.unread_count}
                         </span>
                       )}
@@ -1126,23 +1194,48 @@ export default function PainelClient({
           <>
             {/* Coluna Central do Chat */}
             <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-            {/* Header do Chat (Design Limpo, Arejado e Sem Poluição) */}
-            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-4">
-              {/* Lado Esquerdo: Identificação Clara do Cliente */}
+            {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
+            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3">
+              {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="h-10 w-10 rounded-full bg-ellevee-ink text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                  {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
+                {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
+                <div className="relative shrink-0">
+                  {activeConversation.customers?.avatar_url ? (
+                    <img
+                      src={activeConversation.customers.avatar_url}
+                      alt={activeConversation.customers?.name || "Cliente"}
+                      className="h-10 w-10 rounded-full object-cover border border-ellevee-stone shadow-2xs"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none"
+                        if (e.currentTarget.nextElementSibling) {
+                          (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`h-10 w-10 rounded-full bg-ellevee-ink text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs ${
+                      activeConversation.customers?.avatar_url ? "hidden" : ""
+                    }`}
+                  >
+                    {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs ring-1 ring-white">
+                    <WhatsAppIcon className="h-2 w-2" />
+                  </div>
                 </div>
+
+                {/* Nome e Metadados do Atendimento */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <h2
-                      className="font-semibold text-sm text-ellevee-ink truncate"
+                      className="font-semibold text-sm sm:text-base text-ellevee-ink truncate"
                       title={activeConversation.customers?.name || "Cliente Desconhecido"}
                     >
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase font-medium shrink-0">
-                      {activeConversation.channel || "WhatsApp"}
+                    <span title="WhatsApp Oficial" className="text-emerald-500 shrink-0">
+                      <WhatsAppIcon className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-ellevee-sage mt-0.5 truncate">
@@ -1154,39 +1247,37 @@ export default function PainelClient({
                     )}
                     <span>•</span>
                     <span className="truncate">
-                      {activeConversation.status === "closed"
-                        ? "Finalizado"
-                        : activeConversation.status === "human"
-                        ? !activeConversation.assigned_to
-                          ? "Aguardando Operador"
-                          : activeConversation.assigned_to === currentUser?.userId
-                          ? "Com Você"
-                          : "Com Operador"
-                        : `IA: ${activeConversation.agent_name || "Ativa"}`}
+                      {activeConversation.status === "closed" ? (
+                        <span className="text-stone-500 font-medium">Finalizado</span>
+                      ) : activeConversation.status === "human" ? (
+                        !activeConversation.assigned_to ? (
+                          <span className="text-amber-600 font-medium">Aguardando Atendente</span>
+                        ) : activeConversation.assigned_to === currentUser?.userId ? (
+                          <span className="text-emerald-700 font-semibold">Com Você</span>
+                        ) : (
+                          <span className="text-stone-600 font-medium">Com Operador</span>
+                        )
+                      ) : (
+                        <span className="text-blue-700 font-medium">IA: {activeConversation.agent_name || "Ativa"}</span>
+                      )}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Lado Direito: Ações Compactas com WhiteSpace Nowrap */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Lado Direito: Ações em Linha Reta Minimalistas Estilo ChatPro */}
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 {/* 1. Conversa Finalizada -> Reabrir */}
                 {activeConversation.status === "closed" ? (
-                  <>
-                    <span className="hidden sm:inline-flex text-xs font-medium text-stone-500 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 whitespace-nowrap">
-                      Finalizado
-                    </span>
-
-                    <button
-                      onClick={handleReopenConversation}
-                      disabled={isReopening}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
-                      title="Reativar esta conversa"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>{isReopening ? "Reabrindo..." : "Reabrir"}</span>
-                    </button>
-                  </>
+                  <button
+                    onClick={handleReopenConversation}
+                    disabled={isReopening}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-100 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    title="Reativar esta conversa"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 text-stone-500" />
+                    <span>{isReopening ? "Reabrindo..." : "Reabrir"}</span>
+                  </button>
                 ) : activeConversation.status === "human" ? (
                   /* 2. Conversa em Atendimento Humano */
                   <>
@@ -1194,7 +1285,7 @@ export default function PainelClient({
                       <button
                         onClick={handleTakeover}
                         disabled={isTakingOver}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
                         title="Pegar esta conversa que está na fila"
                       >
                         {isTakingOver ? (
@@ -1206,27 +1297,27 @@ export default function PainelClient({
                       </button>
                     )}
 
-                    {/* Botão Devolver para IA */}
+                    {/* Botão Devolver para IA (ChatPro: ⇄ transferir) */}
                     <button
                       onClick={handleReturnToAI}
                       disabled={isReturningToAI}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50/80 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
                     >
                       {isReturningToAI ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <Bot className="h-3.5 w-3.5 text-blue-600" />
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-stone-500" />
                       )}
                       <span>Devolver p/ {activeConversation.agent_name || "IA"}</span>
                     </button>
 
-                    {/* Botão Encerrar */}
+                    {/* Botão Encerrar (ChatPro: ✓ finalizar) */}
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                      title="Finalizar e arquivar este atendimento"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                      title="Finalizar atendimento"
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1242,13 +1333,13 @@ export default function PainelClient({
                     <button
                       onClick={handleTakeover}
                       disabled={isTakingOver}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-ellevee-ink hover:bg-black text-white transition-colors shadow-2xs disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer disabled:opacity-60 whitespace-nowrap"
                       title="Pausar a IA e assumir o atendimento humano"
                     >
                       {isTakingOver ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <UserCheck className="h-3.5 w-3.5" />
+                        <UserCheck className="h-3.5 w-3.5 text-stone-500" />
                       )}
                       <span>Assumir Conversa</span>
                     </button>
@@ -1256,7 +1347,7 @@ export default function PainelClient({
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200 border border-stone-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-stone-600 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       title="Finalizar atendimento"
                     >
                       {isClosing ? (
@@ -1269,18 +1360,18 @@ export default function PainelClient({
                   </>
                 )}
 
-                {/* Botão Perfil Retrátil */}
+                {/* Botão Perfil (ChatPro: 👤 perfil) */}
                 <button
                   onClick={() => setIsProfileOpen((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer whitespace-nowrap ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                     isProfileOpen
-                      ? "bg-ellevee-ink text-white border-ellevee-ink shadow-2xs"
-                      : "bg-white hover:bg-[#F8F8F5] text-ellevee-ink border-ellevee-stone shadow-2xs"
+                      ? "bg-ellevee-ink text-white shadow-2xs"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
                   }`}
                   title={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
                 >
                   <User className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{isProfileOpen ? "Ocultar Perfil" : "Perfil"}</span>
+                  <span className="hidden sm:inline">Perfil</span>
                 </button>
               </div>
             </header>
@@ -1552,9 +1643,17 @@ export default function PainelClient({
               <div className="p-4 space-y-5 flex-1">
                 {/* Card de Identificação */}
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-[#F8F8F5] border border-ellevee-stone">
-                  <div className="h-11 w-11 rounded-full bg-ellevee-ink text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    {(customerForm.name || "C").slice(0, 2).toUpperCase()}
-                  </div>
+                  {customerForm.avatar_url || activeConversation.customers?.avatar_url ? (
+                    <img
+                      src={customerForm.avatar_url || activeConversation.customers?.avatar_url || ""}
+                      alt={customerForm.name || "Cliente"}
+                      className="h-11 w-11 rounded-full object-cover border border-ellevee-stone shrink-0"
+                    />
+                  ) : (
+                    <div className="h-11 w-11 rounded-full bg-ellevee-ink text-white flex items-center justify-center font-bold text-sm shrink-0">
+                      {(customerForm.name || "C").slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-xs text-ellevee-ink truncate">
                       {customerForm.name || "Cliente Sem Nome"}
@@ -1562,8 +1661,8 @@ export default function PainelClient({
                     <p className="text-[11px] text-ellevee-sage font-mono truncate">
                       {customerForm.phone || activeConversation.external_id || "Sem telefone"}
                     </p>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium mt-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium mt-1">
+                      <WhatsAppIcon className="h-2.5 w-2.5 text-emerald-600" />
                       WhatsApp
                     </span>
                   </div>
