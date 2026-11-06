@@ -449,17 +449,22 @@ export default function PainelClient({
     const clientMessageId = crypto.randomUUID()
     const tempId = `temp-${clientMessageId}`
 
+    const attendantName = (currentUser?.userName?.trim() || "Atendente").split(/\s+/)[0] || "Atendente"
+    const prefix = `*Atendente ${attendantName}:*\n`
+    const optimisticContent = trimmed.startsWith("*Atendente") ? trimmed : `${prefix}${trimmed}`
+
     // Mensagem otimista na tela
     const optimisticMsg: MessageData = {
       id: tempId,
       conversation_id: selectedId,
       sender_type: "agent",
       sender_id: currentUser?.userId || null,
-      content: trimmed,
+      content: optimisticContent,
       message_type: "text",
       metadata: {
         delivery_status: "pending",
         client_message_id: clientMessageId,
+        operator_name: attendantName,
       },
       created_at: new Date().toISOString(),
     }
