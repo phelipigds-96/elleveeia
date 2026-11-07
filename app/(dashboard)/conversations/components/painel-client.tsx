@@ -926,13 +926,13 @@ export default function PainelClient({
         )
       case "sent":
         return (
-          <span title="Enviado ao WhatsApp (Gateway)" className="text-emerald-600">
+          <span title="Enviado ao WhatsApp (Gateway)" className="text-ellevee-sage-strong">
             <CheckCheck className="h-3 w-3 stroke-[2.5]" />
           </span>
         )
       case "delivered":
         return (
-          <span title="Entregue no aparelho do cliente" className="text-emerald-600">
+          <span title="Despacho aceito pelo gateway" className="text-ellevee-sage-strong">
             <CheckCheck className="h-3 w-3 stroke-[2.5]" />
           </span>
         )
@@ -950,7 +950,7 @@ export default function PainelClient({
         )
       default:
         return (
-          <span className="text-emerald-600">
+          <span className="text-ellevee-sage-strong">
             <Check className="h-3 w-3" />
           </span>
         )
@@ -1109,7 +1109,7 @@ export default function PainelClient({
                   : "text-ellevee-sage-strong hover:text-emerald-800 hover:bg-white/60"
               }`}
             >
-              <MessageSquare className="h-4 w-4 text-emerald-600" />
+              <MessageSquare className="h-4 w-4 text-ellevee-sage-strong" />
               {counts.inProgress > 0 && (
                 <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-emerald-600 text-white flex items-center justify-center">
                   {counts.inProgress}
@@ -1648,7 +1648,7 @@ export default function PainelClient({
             {activeConversation.status === "closed" ? (
               <footer className="border-t border-ellevee-stone px-6 py-4 bg-white shrink-0 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-ellevee-sage-strong">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-ellevee-sage-strong shrink-0" />
                   <span className="text-meta font-semibold text-ellevee-ink">
                     Este atendimento foi finalizado.
                   </span>
@@ -1817,7 +1817,7 @@ export default function PainelClient({
                       {customerForm.phone || activeConversation.external_id || "Sem telefone"}
                     </p>
                     <span className="inline-flex items-center gap-1.5 text-meta text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium mt-1">
-                      <WhatsAppIcon className="h-2.5 w-2.5 text-emerald-600" />
+                      <WhatsAppIcon className="h-2.5 w-2.5 text-ellevee-sage-strong" />
                       WhatsApp
                     </span>
                   </div>
