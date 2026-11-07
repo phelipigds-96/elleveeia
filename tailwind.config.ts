@@ -87,6 +87,11 @@ const config = {
         md: "6px",
         sm: "4px",
       },
+      // Escala tipográfica mínima para conteúdo operacional (rótulos, metadados,
+      // legendas). 13px é o menor tamanho legível em densidade de dashboard.
+      fontSize: {
+        meta: ["13px", { lineHeight: "1.5" }],
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

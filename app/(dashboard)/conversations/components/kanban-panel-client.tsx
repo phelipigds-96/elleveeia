@@ -117,14 +117,14 @@ export default function KanbanPanelClient({
             >
               <header className="flex items-center justify-between border-b border-ellevee-stone px-4 py-3">
                 <h2 className="text-sm font-semibold text-ellevee-ink">{stage.name}</h2>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-ellevee-ink-muted ring-1 ring-ellevee-stone">
+                <span className="rounded-full bg-white px-2 py-0.5 text-meta font-medium text-ellevee-ink-muted ring-1 ring-ellevee-stone">
                   {cards.length}
                 </span>
               </header>
 
               <div className="scroll-slim flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto p-3">
                 {cards.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-ellevee-stone bg-white/60 px-3 py-6 text-center text-xs text-ellevee-ink-muted">
+                  <p className="rounded-lg border border-dashed border-ellevee-stone bg-white/60 px-3 py-6 text-center text-meta text-ellevee-ink-muted">
                     Arraste uma conversa para cá
                   </p>
                 ) : null}
@@ -135,14 +135,15 @@ export default function KanbanPanelClient({
                     draggable
                     onDragStart={() => setDraggingId(conv.id)}
                     onDragEnd={() => setDraggingId(null)}
-                    className={`cursor-grab rounded-lg border border-ellevee-stone bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${
+                    aria-label={`Conversa ${conv.customer_name || conv.customer_phone || "sem cliente"} — ${stage.name}`}
+                    className={`cursor-grab rounded-lg border border-ellevee-stone bg-white p-3 shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-ellevee-ink/20 active:cursor-grabbing ${
                       pendingStage[conv.id] ? "opacity-60" : ""
                     }`}
                   >
                     <p className="truncate text-sm font-medium text-ellevee-ink">
                       {conv.customer_name || conv.customer_phone || "Conversa sem cliente"}
                     </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ellevee-ink-muted">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-meta text-ellevee-ink-muted">
                       {conv.channel ? (
                         <span className="rounded bg-ellevee-sage-light px-1.5 py-0.5 font-medium text-ellevee-sage-strong">
                           {CHANNEL_LABEL[conv.channel] || conv.channel}
@@ -157,7 +158,8 @@ export default function KanbanPanelClient({
                         value={conv.workflow_stage_id || ""}
                         disabled={pendingStage[conv.id] || isPending}
                         onChange={(e) => moveTo(conv.id, e.target.value)}
-                        className="focus-ring w-full rounded-md border border-ellevee-stone bg-white px-2 py-1 text-xs text-ellevee-ink"
+                        aria-label={`Mover ${conv.customer_name || conv.customer_phone || "conversa"} para outra etapa`}
+                        className="focus-ring w-full rounded-md border border-ellevee-stone bg-white px-2 py-1 text-meta text-ellevee-ink"
                       >
                         <option value="">Sem etapa</option>
                         {stages.map((s) => (
