@@ -88,13 +88,13 @@ export default async function ConversationsKanbanPage() {
     .sort((a, b) => a.position - b.position)
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] min-h-0 w-full flex-col gap-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-semibold tracking-tight text-ellevee-ink">
             Funil de atendimento
           </h1>
-          <p className="mt-1 text-sm text-ellevee-ink-muted">
+          <p className="mt-1 text-meta text-ellevee-ink-muted">
             {defaultWorkflow ? defaultWorkflow.name : "Nenhum workflow configurado"}
             {" · "}
             {conversations.length} conversa(s)
@@ -102,7 +102,7 @@ export default async function ConversationsKanbanPage() {
         </div>
         <a
           href="/conversations"
-          className="focus-ring rounded-lg border border-ellevee-stone bg-white px-3 py-2 text-sm text-ellevee-ink transition-colors hover:bg-ellevee-ivory"
+          className="focus-ring rounded-lg border border-ellevee-stone bg-white px-3 py-2 text-meta text-ellevee-ink transition-colors hover:bg-ellevee-ivory"
         >
           Ver lista de conversas
         </a>

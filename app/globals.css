@@ -177,7 +177,7 @@
     background-color: #F3F2ED;
     border: 1px dashed #E7E6E0;
     color: #5A6659;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   /* Nota interna: superfície âmbar contida, legível e sem competir com a conversa.
@@ -191,16 +191,16 @@
   }
   .msg-note-title {
     color: #854d0e;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
   }
   .msg-note-meta {
     color: #a16207;
-    font-size: 11px;
+    font-size: 13px;
   }
   .msg-note-body {
     color: #713f12;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.6;
     white-space: pre-wrap;
   }
