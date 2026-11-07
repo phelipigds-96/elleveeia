@@ -136,7 +136,10 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
     'buscar', 'procura', 'catalogo', 'produto', 'marca',
     'sabor', 'sabores', 'vende', 'vendem', 'trabalham'
   ]
-  const hasCatalogKeyword = words.some(w => catalogKeywords.includes(w))
+  const productInquiryVerbs = ['tem', 'teria', 'teriam', 'temos', 'vende', 'vendem', 'trabalham', 'trabalha', 'consegue']
+  const nonPronounWords = words.filter(w => !INSTITUTIONAL_KEYWORDS.includes(w) && !['tu', 'voce', 'voces', 'vc', 'vcs', 'te', 'ti', 'ele', 'ela', 'tem', 'temos', 'teria', 'teriam', 'ai', 'aqui', 'la', 'de', 'da', 'do', 'um', 'uma', 'o', 'a', 'os', 'as', 'e', 'pra', 'para', 'com', 'sem', 'ainda', 'por', 'acaso'].includes(w))
+  const hasProductQueryPattern = words.some(w => productInquiryVerbs.includes(w)) && nonPronounWords.length > 0
+  const hasCatalogKeyword = words.some(w => catalogKeywords.includes(w)) || hasProductQueryPattern
 
   // Unidade de medida explícita (ex: 1kg, 1 kg, 500g, 500 g, 1,5kg, 10 un)
   const hasUnitMeasure = UNIT_MEASURE_REGEX.test(userMessage)
