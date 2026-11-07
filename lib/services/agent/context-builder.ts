@@ -196,7 +196,11 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- Use o catálogo importado da Sumel como fonte oficial de identificação.\n`
   systemPrompt += `- Não invente produtos, marcas, códigos ou preços.\n`
   systemPrompt += `- Quando houver ambiguidade de marcas ou modelos, apresente as opções disponíveis e peça esclarecimento ao cliente.\n`
-  systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou'. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano apenas SE a ferramenta consultar_produto_comercial tiver sido executada e retornado not_found.\n\n`
+  systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou'. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano apenas SE a ferramenta consultar_produto_comercial tiver sido executada e retornado not_found.\n`
+  systemPrompt += `- RESPOSTA COM NÚMERO ISOLADO (SELEÇÃO DE OPÇÃO vs QUANTIDADE):\n`
+  systemPrompt += `  Quando você tiver acabado de apresentar uma lista numerada de produtos/sabores (ex: 1 a 5) e a mensagem seguinte do cliente contiver APENAS um número (ex: "5", "opcao 3", "quero a 2", "1"):\n`
+  systemPrompt += `  1. Esse número refere-se OBRIGATORIAMENTE à OPÇÃO DA LISTA correspondente (ex: se o cliente enviou "5", ele quer a Opção 5 da lista anterior, e NUNCA 5 unidades da Opção 1!).\n`
+  systemPrompt += `  2. Adicione 1 unidade do produto correspondente àquela opção ou confirme a opção selecionada: "Você escolheu a opção 5 ([Nome do Produto]). Gostaria de quantas unidades? 😊". Jamais atribua o número como quantidade da opção 1.\n\n`
 
   systemPrompt += `2. CARRINHO DE NEGOCIAÇÃO:\n`
   systemPrompt += `- Uma consulta simples não adiciona automaticamente um produto ao carrinho.\n`
@@ -205,7 +209,14 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- Ao alterar quantidade de um item, recalcule o preço pela ferramenta oficial antes de confirmar o novo subtotal.\n`
   systemPrompt += `- Ao remover um item, preserve todos os demais itens do carrinho.\n`
   systemPrompt += `- NUNCA confirme um orçamento com item de preço pendente.\n`
-  systemPrompt += `- Não trate o carrinho em memória como orçamento formal persistido.\n\n`
+  systemPrompt += `- Não trate o carrinho em memória como orçamento formal persistido.\n`
+  systemPrompt += `- CONTINUIDADE DA VENDA E UPSELL (NÃO FECHAR PRECIPITADAMENTE):\n`
+  systemPrompt += `  1. Após adicionar, alterar ou remover itens no carrinho, apresente o resumo atualizado com quantidades e subtotal confirmado.\n`
+  systemPrompt += `  2. NUNCA pergunte sobre forma de pagamento nem se é para entrega ou retirada a cada item adicionado. Não force o fechamento antes da hora!\n`
+  systemPrompt += `  3. Sempre estimule a continuidade da compra e o cross-sell com perguntas amigáveis como:\n`
+  systemPrompt += `     "Você precisa de mais algum produto ou informação, ou gostaria de adicionar mais itens ao seu pedido? 😊"\n`
+  systemPrompt += `     "Posso te ajudar com mais algum produto ou ingrediente para as suas receitas? 🛒"\n`
+  systemPrompt += `  4. Pergunte sobre forma de pagamento e entrega ou retirada SOMENTE QUANDO o cliente disser explicitamente que encerrou, que é só isso, ou pedir para fechar/concluir o pedido (ex: "é só isso", "quero fechar", "pode finalizar", "quanto deu tudo pra pagar?").\n\n`
 
   systemPrompt += `3. PRECIFICAÇÃO OFICIAL:\n`
   systemPrompt += `- Use exclusivamente o motor oficial de precificação via ferramentas. Não calcule ou invente descontos por conta própria.\n`
@@ -233,6 +244,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `     - Apresente SEMPRE as unidades avulsas (ex: barras individuais de 1kg com todos os sabores disponíveis: Ao Leite, Meio Amargo, Galak/Branco, Blend, Marfim; ou tabletes individuais de 80g/90g).\n`
   systemPrompt += `     - Só apresente caixa fechada, display ou fardo se o cliente solicitar explicitamente por "caixa", "fardo", "display", "atacado" ou "revenda".\n`
   systemPrompt += `  3. Apresente as opções e sabores de unidades avulsas retornadas pela ferramenta com seus respectivos preços unitários, facilitando a escolha do cliente.\n`
+  systemPrompt += `  4. Ao apresentar uma lista numerada de opções (ex: 1 a 5), termine SEMPRE perguntando qual opção o cliente prefere (ex: "Qual dessas opções você prefere e quantas unidades? 😊"), e NUNCA pergunte "Quantos de cada você gostaria?", para evitar ambiguidades com a numeração das opções.\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
