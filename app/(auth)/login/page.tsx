@@ -21,9 +21,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen w-full bg-background">
+    <div className="relative flex min-h-screen w-full bg-background">
       {/* Coluna da marca — fundo de ícones em movimento suave */}
-      <aside className="login-brand-panel relative hidden overflow-hidden lg:flex lg:w-[52%] lg:flex-col lg:justify-between lg:border-r lg:border-border lg:bg-muted/40 lg:p-12">
+      <aside className="login-brand-panel relative hidden overflow-hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:border-r lg:border-border lg:bg-muted/40 lg:p-12">
         <div className="animated-bg" aria-hidden>
           <svg className="bg-icon icon-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="2" />
@@ -79,7 +79,7 @@ export default function LoginPage() {
       </aside>
 
       {/* Coluna de acesso */}
-      <main className="relative flex min-h-screen w-full flex-col justify-center px-6 py-12 sm:px-10 lg:w-[48%]">
+      <main className="relative flex min-h-screen w-full flex-1 flex-col justify-center px-6 py-12 sm:px-10 lg:w-1/2">
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
