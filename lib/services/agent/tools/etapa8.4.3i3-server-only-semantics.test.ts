@@ -236,7 +236,7 @@ describe('ETAPA 8.4.3I.3 — Blindagem Final do Módulo Interno e Precisão Sem�
   // TESTE 5: PRECISÃO DO STATUS NA INTERFACE (DESPACHO ACEITO vs ENTREGA FÍSICA)
   // ============================================================================
   test('5. A interface não apresenta aceite do gateway como entrega no aparelho', () => {
-    const clientComponentPath = path.join('C:/Users/Phelipi/Projects/elleveeia/app/(dashboard)/conversations/components/conversations-client.tsx')
+    const clientComponentPath = path.join('C:/Users/Phelipi/Projects/elleveeia/app/(dashboard)/conversations/components/painel-client.tsx')
     const content = fs.readFileSync(clientComponentPath, 'utf-8')
 
     // Verifica que o status 'sent' é renderizado como "Despacho aceito"
