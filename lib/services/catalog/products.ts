@@ -31,12 +31,13 @@ export async function searchProducts(companyId: string, query: string, limit: nu
 
   // 1. Identificadores exatos
   if (parsed.identifiers.length > 0) {
+    const cleanId = (parsed.identifiers[0] || query).replace(/["\\]/g, '').trim()
     const { data: exactData } = await supabase
       .from('products')
       .select(`id, name, sku, barcode, unit, active, product_brands ( name ), product_categories ( name )`)
       .eq('company_id', companyId)
       .eq('active', true)
-      .or(`barcode.eq."${query}",sku.ilike."${query}"`)
+      .or(`barcode.eq."${cleanId}",sku.ilike."${cleanId}"`)
       .limit(1)
       
     if (exactData && exactData.length > 0) {
@@ -69,14 +70,24 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     .eq('active', true)
 
   for (const group of requiredDbTokens) {
-    const orCondition = group.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
-    dbQuery = dbQuery.or(orCondition)
+    const cleanVariants = group.variants
+      .map(v => v.replace(/["\\]/g, '').trim())
+      .filter(v => v.length > 0)
+    if (cleanVariants.length > 0) {
+      const orCondition = cleanVariants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
+      dbQuery = dbQuery.or(orCondition)
+    }
   }
 
   if (requiredDbTokens.length === 0 && parsed.tokenGroups.length > 0) {
     const fallbackGroup = parsed.tokenGroups[0]
-    const orCondition = fallbackGroup.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
-    dbQuery = dbQuery.or(orCondition)
+    const cleanVariants = fallbackGroup.variants
+      .map(v => v.replace(/["\\]/g, '').trim())
+      .filter(v => v.length > 0)
+    if (cleanVariants.length > 0) {
+      const orCondition = cleanVariants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
+      dbQuery = dbQuery.or(orCondition)
+    }
   }
 
   let { data, error } = await dbQuery.limit(200)
@@ -91,8 +102,13 @@ export async function searchProducts(companyId: string, query: string, limit: nu
       .eq('company_id', companyId)
       .eq('active', true)
       
-    const orCondition = fallbackToken.variants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
-    fallbackQuery = fallbackQuery.or(orCondition)
+    const cleanVariants = fallbackToken.variants
+      .map(v => v.replace(/["\\]/g, '').trim())
+      .filter(v => v.length > 0)
+    if (cleanVariants.length > 0) {
+      const orCondition = cleanVariants.map(v => `normalized_name.ilike."%${v}%"`).join(',')
+      fallbackQuery = fallbackQuery.or(orCondition)
+    }
     
     const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(200)
     data = fallbackData
