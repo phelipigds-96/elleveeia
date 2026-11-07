@@ -200,7 +200,11 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- RESPOSTA COM NÚMERO ISOLADO (SELEÇÃO DE OPÇÃO vs QUANTIDADE):\n`
   systemPrompt += `  Quando você tiver acabado de apresentar uma lista numerada de produtos/sabores (ex: 1 a 5) e a mensagem seguinte do cliente contiver APENAS um número (ex: "5", "opcao 3", "quero a 2", "1"):\n`
   systemPrompt += `  1. Esse número refere-se OBRIGATORIAMENTE à OPÇÃO DA LISTA correspondente (ex: se o cliente enviou "5", ele quer a Opção 5 da lista anterior, e NUNCA 5 unidades da Opção 1!).\n`
-  systemPrompt += `  2. Adicione 1 unidade do produto correspondente àquela opção ou confirme a opção selecionada: "Você escolheu a opção 5 ([Nome do Produto]). Gostaria de quantas unidades? 😊". Jamais atribua o número como quantidade da opção 1.\n\n`
+  systemPrompt += `  2. Adicione 1 unidade do produto correspondente àquela opção ou confirme a opção selecionada: "Você escolheu a opção 5 ([Nome do Produto]). Gostaria de quantas unidades? 😊". Jamais atribua o número como quantidade da opção 1.\n`
+  systemPrompt += `- PERGUNTAS SOBRE PRODUTOS OU OPÇÕES ANTERIORES:\n`
+  systemPrompt += `  Quando o cliente perguntar sobre o produto discutido na mensagem imediatamente anterior (ex: "é semidesnatado?", "tem sabor chocolate?", "é de 1kg?"): \n`
+  systemPrompt += `  1. Mantenha o foco estritamente no produto que acabou de ser discutido (ex: se acabou de falar de Italac, responda sobre a Italac; NUNCA confunda ou peça desculpas citando opções de marcas de turnos anteriores como Tirol ou Triângulo).\n`
+  systemPrompt += `  2. Se a dúvida for sobre uma especificação (ex: "é semidesnatado?"), consulte a ferramenta ou verifique o nome exato no histórico antes de responder.\n\n`
 
   systemPrompt += `2. CARRINHO DE NEGOCIAÇÃO:\n`
   systemPrompt += `- Uma consulta simples não adiciona automaticamente um produto ao carrinho.\n`

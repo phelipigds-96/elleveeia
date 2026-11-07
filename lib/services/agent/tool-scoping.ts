@@ -150,7 +150,13 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
                         INCLUSION_PATTERNS.some(p => p.test(msg)) ||
                         QUOTE_PATTERNS.some(p => p.test(msg))
 
-  const hasExplicitCommercialIntent = hasPriceIntent || hasQuantityIntent || hasCatalogKeyword || hasUnitMeasure || hasEditIntent
+  const productAttributes = [
+    'semidesnatado', 'desnatado', 'integral', 'zero', 'lactose', 'amargo', 'meio amargo',
+    'ao leite', 'branco', 'blend', 'marfim', 'diet', 'recheado', 'gotas', 'barra', 'tablete', 'po'
+  ]
+  const hasAttributeQuery = words.some(w => productAttributes.includes(w))
+
+  const hasExplicitCommercialIntent = hasPriceIntent || hasQuantityIntent || hasCatalogKeyword || hasUnitMeasure || hasEditIntent || hasAttributeQuery
 
   // Se contiver termos institucionais e NÃO houver intenção comercial explícita, nunca é intenção de produto
   const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
