@@ -14,13 +14,15 @@ type Stage = {
 
 type Conversation = {
   id: string
-  customer_name: string | null
-  customer_phone: string | null
+  customer_id: string | null
   channel: string | null
   status: string | null
   workflow_stage_id: string | null
   created_at: string | null
+  customers: { name: string | null; phone: string | null } | null
 }
+
+const UNSTAGED_KEY = "__unstaged__"
 
 const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -50,18 +52,25 @@ export default function KanbanPanelClient({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  const customerName = (conv: Conversation) =>
+    conv.customers?.name || conv.customers?.phone || "Conversa sem cliente"
+
   const cardsByStage = useMemo(() => {
     const map: Record<string, Conversation[]> = {}
     for (const stage of stages) map[stage.id] = []
     for (const conv of items) {
-      const key = conv.workflow_stage_id
-      if (key && map[key]) map[key].push(conv)
+      const key =
+        conv.workflow_stage_id && map[conv.workflow_stage_id] ? conv.workflow_stage_id : UNSTAGED_KEY
+      if (!map[key]) map[key] = []
+      map[key].push(conv)
     }
     for (const key of Object.keys(map)) {
       map[key].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
     }
     return map
   }, [items, stages])
+
+  const unstaged = cardsByStage[UNSTAGED_KEY] || []
 
   const moveTo = (conversationId: string, stageId: string) => {
     if (!conversationId || !stageId) return
@@ -135,13 +144,13 @@ export default function KanbanPanelClient({
                     draggable
                     onDragStart={() => setDraggingId(conv.id)}
                     onDragEnd={() => setDraggingId(null)}
-                    aria-label={`Conversa ${conv.customer_name || conv.customer_phone || "sem cliente"} — ${stage.name}`}
+                    aria-label={`Conversa ${customerName(conv)} — ${stage.name}`}
                     className={`cursor-grab rounded-lg border border-ellevee-stone bg-white p-3 shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-ellevee-ink/20 active:cursor-grabbing ${
                       pendingStage[conv.id] ? "opacity-60" : ""
                     }`}
                   >
                     <p className="truncate text-sm font-medium text-ellevee-ink">
-                      {conv.customer_name || conv.customer_phone || "Conversa sem cliente"}
+                      {customerName(conv)}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-meta text-ellevee-ink-muted">
                       {conv.channel ? (
@@ -158,7 +167,7 @@ export default function KanbanPanelClient({
                         value={conv.workflow_stage_id || ""}
                         disabled={pendingStage[conv.id] || isPending}
                         onChange={(e) => moveTo(conv.id, e.target.value)}
-                        aria-label={`Mover ${conv.customer_name || conv.customer_phone || "conversa"} para outra etapa`}
+                        aria-label={`Mover ${customerName(conv)} para outra etapa`}
                         className="focus-ring w-full rounded-md border border-ellevee-stone bg-white px-2 py-1 text-meta text-ellevee-ink"
                       >
                         <option value="">Sem etapa</option>
@@ -175,6 +184,53 @@ export default function KanbanPanelClient({
             </section>
           )
         })}
+
+        {unstaged.length > 0 ? (
+          <section
+            className="flex min-w-[280px] flex-1 flex-col rounded-xl border border-dashed border-ellevee-stone bg-white"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (draggingId) moveTo(draggingId, stages[0]?.id || "")
+              setDraggingId(null)
+            }}
+          >
+            <header className="flex items-center justify-between border-b border-ellevee-stone px-4 py-3">
+              <h2 className="text-sm font-semibold text-ellevee-ink-muted">Sem etapa</h2>
+              <span className="rounded-full bg-ellevee-ivory px-2 py-0.5 text-meta font-medium text-ellevee-ink-muted ring-1 ring-ellevee-stone">
+                {unstaged.length}
+              </span>
+            </header>
+
+            <div className="scroll-slim flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto p-3">
+              {unstaged.map((conv) => (
+                <article
+                  key={conv.id}
+                  draggable
+                  onDragStart={() => setDraggingId(conv.id)}
+                  onDragEnd={() => setDraggingId(null)}
+                  aria-label={`Conversa ${customerName(conv)} — sem etapa`}
+                  className={`cursor-grab rounded-lg border border-ellevee-stone bg-white p-3 shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-ellevee-ink/20 active:cursor-grabbing ${
+                    pendingStage[conv.id] ? "opacity-60" : ""
+                  }`}
+                >
+                  <p className="truncate text-sm font-medium text-ellevee-ink">
+                    {customerName(conv)}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-meta text-ellevee-ink-muted">
+                    {conv.channel ? (
+                      <span className="rounded bg-ellevee-sage-light px-1.5 py-0.5 font-medium text-ellevee-ink-muted">
+                        {CHANNEL_LABEL[conv.channel] || conv.channel}
+                      </span>
+                    ) : null}
+                    {conv.status ? <span>{conv.status}</span> : null}
+                    {conv.created_at ? <span>{formatTime(conv.created_at)}</span> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   )

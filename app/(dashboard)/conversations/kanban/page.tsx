@@ -14,12 +14,12 @@ type StageRow = {
 
 type ConversationRow = {
   id: string
-  customer_name: string | null
-  customer_phone: string | null
+  customer_id: string | null
   channel: string | null
   status: string | null
   workflow_stage_id: string | null
   created_at: string | null
+  customers: { name: string | null; phone: string | null } | null
 }
 
 export default async function ConversationsKanbanPage() {
@@ -66,7 +66,7 @@ export default async function ConversationsKanbanPage() {
       .order("position", { ascending: true }),
     supabase
       .from("conversations")
-      .select("id, customer_name, customer_phone, channel, status, workflow_stage_id, created_at")
+      .select("id, customer_id, channel, status, workflow_stage_id, created_at, customers(name, phone)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(300),
