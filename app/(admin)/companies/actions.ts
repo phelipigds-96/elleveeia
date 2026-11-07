@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/service"
 import { createClient } from "@/lib/supabase/server"
 import { CompanyMock } from "@/components/companies/mock-companies"
+import {
+  WORKFLOW_TEMPLATES,
+  getCompanyWorkflowForAdmin,
+  applyStagesToCompanyWorkflow,
+  SaveStagesInput,
+  WorkflowTemplate,
+} from "@/lib/services/workflows/templates"
 
 export interface CreateCompanyInput {
   name: string
@@ -707,6 +714,159 @@ export async function updateCompanyLimitsAction(
     return {
       success: false,
       error: `Erro interno no servidor: ${err.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
+
+/**
+ * Consulta o workflow e as etapas de uma empresa para exibição no diálogo Super Admin
+ */
+export async function getCompanyWorkflowAction(companyId: string): Promise<ActionResult<{
+  workflow: any
+  templates: Record<string, WorkflowTemplate>
+}>> {
+  try {
+    const adminClient = createAdminClient()
+    const workflow = await getCompanyWorkflowForAdmin(companyId, adminClient)
+    return {
+      success: true,
+      data: {
+        workflow,
+        templates: WORKFLOW_TEMPLATES,
+      },
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Erro em getCompanyWorkflowAction:", err)
+    return {
+      success: false,
+      error: `Falha ao carregar funil da empresa: ${err.message || "Erro desconhecido"}`,
+    }
+  }
+}
+
+/**
+ * Salva as etapas customizadas de um workflow para uma empresa
+ */
+export async function saveCompanyWorkflowAction(params: {
+  companyId: string
+  workflowId?: string
+  stages: SaveStagesInput[]
+}): Promise<ActionResult<any>> {
+  try {
+    const adminClient = createAdminClient()
+    const { companyId, workflowId, stages } = params
+
+    if (!companyId) {
+      return { success: false, error: "Identificador da empresa é obrigatório." }
+    }
+    if (!stages || stages.length === 0) {
+      return { success: false, error: "O funil deve conter ao menos 1 etapa." }
+    }
+
+    const updatedWorkflow = await applyStagesToCompanyWorkflow({
+      companyId,
+      workflowId,
+      stages,
+      adminClient,
+    })
+
+    // Registrar auditoria
+    try {
+      const actor = await getAuditActor()
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: "company.workflow_updated",
+        target_company_id: companyId,
+        payload_summary: {
+          stages_count: stages.length,
+          stage_names: stages.map((s) => s.name),
+        },
+        reason: "Configuração do funil Kanban via Super Admin",
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria não-bloqueante:", auditErr.message)
+    }
+
+    revalidatePath("/companies")
+    revalidatePath("/conversations/kanban")
+    revalidatePath("/conversations")
+    revalidatePath("/settings/workflows")
+
+    return {
+      success: true,
+      data: updatedWorkflow,
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Erro em saveCompanyWorkflowAction:", err)
+    return {
+      success: false,
+      error: `Falha ao salvar funil: ${err.message || "Erro interno"}`,
+    }
+  }
+}
+
+/**
+ * Aplica um template de segmento pré-definido ao workflow da empresa
+ */
+export async function applyCompanyWorkflowTemplateAction(params: {
+  companyId: string
+  workflowId?: string
+  templateKey: string
+}): Promise<ActionResult<any>> {
+  try {
+    const adminClient = createAdminClient()
+    const { companyId, workflowId, templateKey } = params
+
+    const template = WORKFLOW_TEMPLATES[templateKey]
+    if (!template) {
+      return { success: false, error: `Template '${templateKey}' não encontrado.` }
+    }
+
+    const updatedWorkflow = await applyStagesToCompanyWorkflow({
+      companyId,
+      workflowId,
+      stages: template.stages,
+      adminClient,
+    })
+
+    // Registrar auditoria
+    try {
+      const actor = await getAuditActor()
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: "company.workflow_template_applied",
+        target_company_id: companyId,
+        payload_summary: {
+          template_key: templateKey,
+          template_name: template.label,
+          stages_count: template.stages.length,
+          stage_names: template.stages.map((s) => s.name),
+        },
+        reason: `Aplicação do template '${template.label}' via Super Admin`,
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria não-bloqueante:", auditErr.message)
+    }
+
+    revalidatePath("/companies")
+    revalidatePath("/conversations/kanban")
+    revalidatePath("/conversations")
+    revalidatePath("/settings/workflows")
+
+    return {
+      success: true,
+      data: updatedWorkflow,
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Erro em applyCompanyWorkflowTemplateAction:", err)
+    return {
+      success: false,
+      error: `Falha ao aplicar template de funil: ${err.message || "Erro interno"}`,
     }
   }
 }

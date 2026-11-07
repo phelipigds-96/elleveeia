@@ -19,11 +19,19 @@ export interface WorkflowStage {
   position: number
   stage_type: 'initial' | 'in_progress' | 'final'
   is_active: boolean
+  color?: string | null
+  handled_by?: 'ai' | 'human' | 'waiting' | null
 }
 
 export interface WorkflowServiceOptions {
   supabaseClient?: any
   adminClient?: any
+}
+
+export interface CreateWorkflowStageOptions extends WorkflowServiceOptions {
+  color?: string
+  handled_by?: 'ai' | 'human' | 'waiting'
+  description?: string
 }
 
 export interface AuthenticatedUserContext {
@@ -103,9 +111,9 @@ export async function getCompanyWorkflows(options?: WorkflowServiceOptions) {
 }
 
 export const DEFAULT_WORKFLOW_STAGES = [
-  { name: 'Novo Contato', stage_type: 'initial' as const, position: 0 },
-  { name: 'Em Atendimento', stage_type: 'in_progress' as const, position: 1 },
-  { name: 'Finalizado', stage_type: 'final' as const, position: 2 }
+  { name: 'Novo Contato', stage_type: 'initial' as const, position: 0, color: '#eab308', handled_by: 'ai' as const },
+  { name: 'Em Atendimento', stage_type: 'in_progress' as const, position: 1, color: '#3b82f6', handled_by: 'human' as const },
+  { name: 'Finalizado', stage_type: 'final' as const, position: 2, color: '#22c55e', handled_by: 'human' as const }
 ] as const
 
 /**
@@ -176,6 +184,8 @@ async function ensureDefaultStages(
           name: defStage.name,
           position: defStage.position,
           stage_type: defStage.stage_type,
+          color: defStage.color,
+          handled_by: defStage.handled_by,
           is_active: true
         })
 
@@ -412,7 +422,7 @@ export async function createWorkflowStage(
   workflowId: string, 
   name: string, 
   stageType: string = 'in_progress',
-  options?: WorkflowServiceOptions
+  options?: CreateWorkflowStageOptions
 ) {
   const supabase = getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
@@ -456,14 +466,22 @@ export async function createWorkflowStage(
 
   const nextPos = stages && stages.length > 0 ? stages[0].position + 1 : 0
 
+  const defaultColor = finalStageType === 'initial' ? '#eab308' : finalStageType === 'final' ? '#22c55e' : '#3b82f6'
+  const defaultHandledBy = finalStageType === 'initial' ? 'ai' : 'human'
+  const finalColor = options?.color && /^#[0-9a-f]{3,8}$/i.test(options.color) ? options.color : defaultColor
+  const finalHandledBy = options?.handled_by && ['ai', 'human', 'waiting'].includes(options.handled_by) ? options.handled_by : defaultHandledBy
+
   const { data, error } = await supabase
     .from('workflow_stages')
     .insert({
       company_id: companyId,
       workflow_id: workflowId,
       name: name.trim(),
+      description: options?.description ? options.description.trim() : null,
       position: nextPos,
-      stage_type: finalStageType
+      stage_type: finalStageType,
+      color: finalColor,
+      handled_by: finalHandledBy
     })
     .select()
     .single()
@@ -534,6 +552,17 @@ export async function updateWorkflowStage(
 
     if (updates.is_active !== undefined) {
       sanitizedUpdates.is_active = Boolean(updates.is_active)
+    }
+
+    if (updates.color !== undefined) {
+      sanitizedUpdates.color = updates.color === null ? '#64748b' : String(updates.color).trim()
+    }
+
+    if (updates.handled_by !== undefined) {
+      if (!['ai', 'human', 'waiting'].includes(updates.handled_by)) {
+        throw new Error('Responsável da etapa inválido (deve ser ai, human ou waiting).')
+      }
+      sanitizedUpdates.handled_by = updates.handled_by
     }
   }
 

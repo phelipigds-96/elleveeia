@@ -10,6 +10,8 @@ type StageRow = {
   position: number
   stage_type: string
   is_active: boolean
+  color?: string | null
+  handled_by?: 'ai' | 'human' | 'waiting' | null
 }
 
 type CustomerRef = { name: string | null; phone: string | null }
@@ -65,7 +67,7 @@ export default async function ConversationsKanbanPage() {
       .order("created_at", { ascending: true }),
     supabase
       .from("workflow_stages")
-      .select("id, workflow_id, name, position, stage_type, is_active")
+      .select("id, workflow_id, name, position, stage_type, is_active, color, handled_by")
       .eq("company_id", companyId)
       .order("position", { ascending: true }),
     supabase
