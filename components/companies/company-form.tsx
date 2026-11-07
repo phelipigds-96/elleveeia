@@ -6,7 +6,8 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
-import { Building2, CheckCircle2, Shield, AlertCircle } from "lucide-react"
+import { Building2, CheckCircle2, Shield, AlertCircle, Kanban } from "lucide-react"
+import { WORKFLOW_TEMPLATES } from "@/lib/services/workflows/template-catalog"
 import { CompanyMock } from "./mock-companies"
 import { createCompanyAction } from "@/app/(admin)/companies/actions"
 import { toast } from "@/components/ui/toast"
@@ -25,6 +26,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
   const [adminEmail, setAdminEmail] = useState("")
   const [plan, setPlan] = useState<"Trial" | "Starter" | "Pro" | "Enterprise">("Pro")
   const [aiProvider, setAiProvider] = useState<"openai" | "gemini" | "hybrid">("openai")
+  const [workflowTemplateKey, setWorkflowTemplateKey] = useState<string>("none")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -57,6 +59,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         aiProvider,
         cnpj,
         adminEmail,
+        workflowTemplateKey,
       })
 
       if (!res.success) {
@@ -93,6 +96,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         setSlug("")
         setCnpj("")
         setAdminEmail("")
+        setWorkflowTemplateKey("none")
         setErrorMessage(null)
         onClose()
       }, 1000)
@@ -224,6 +228,31 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                   <option value="hybrid">Híbrido (Multi-Model Routing)</option>
                 </Select>
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-ellevee-ink flex items-center gap-1.5">
+                  <Kanban className="h-3.5 w-3.5 text-ellevee-ink" />
+                  Funil de Atendimento (Kanban)
+                </label>
+                <span className="text-[10px] text-ellevee-sage font-medium">Opcional</span>
+              </div>
+              <Select
+                value={workflowTemplateKey}
+                onChange={(e) => setWorkflowTemplateKey(e.target.value)}
+              >
+                <option value="none">Padrão da Plataforma (3 etapas básicas)</option>
+                <option value="retail_food">Varejo & Confeitaria (ex: Sumel · 6 etapas)</option>
+                <option value="events_party">Salão de Festas & Eventos (6 etapas)</option>
+                <option value="dental_clinic">Clínica Odontológica & Saúde (5 etapas)</option>
+                <option value="general_services">Serviços & B2B Geral (5 etapas)</option>
+              </Select>
+              <p className="text-[10px] text-ellevee-sage mt-1">
+                {workflowTemplateKey === "none"
+                  ? "Provisiona o funil padrão com 3 etapas. Poderá ser personalizado a qualquer momento pelo Super Admin."
+                  : WORKFLOW_TEMPLATES[workflowTemplateKey]?.description}
+              </p>
             </div>
 
             <div className="rounded-md bg-[#FBFBFA] border border-ellevee-stone p-3 flex items-start gap-2 text-xs text-ellevee-ink">

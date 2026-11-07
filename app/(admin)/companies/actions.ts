@@ -19,6 +19,7 @@ export interface CreateCompanyInput {
   aiProvider?: "openai" | "gemini" | "hybrid"
   cnpj?: string
   adminEmail?: string
+  workflowTemplateKey?: string
 }
 
 export interface ActionResult<T = any> {
@@ -195,6 +196,7 @@ export async function createCompanyAction(
     let aiProvider: "openai" | "gemini" | "hybrid" = "openai"
     let cnpj = ""
     let adminEmail = ""
+    let workflowTemplateKey = "none"
 
     if (inputOrFormData instanceof FormData) {
       name = String(inputOrFormData.get("name") || "")
@@ -203,6 +205,7 @@ export async function createCompanyAction(
       aiProvider = (inputOrFormData.get("aiProvider") as any) || "openai"
       cnpj = String(inputOrFormData.get("cnpj") || "")
       adminEmail = String(inputOrFormData.get("adminEmail") || "")
+      workflowTemplateKey = String(inputOrFormData.get("workflowTemplateKey") || "none")
     } else {
       name = inputOrFormData.name || ""
       slug = inputOrFormData.slug || ""
@@ -210,6 +213,7 @@ export async function createCompanyAction(
       aiProvider = inputOrFormData.aiProvider || "openai"
       cnpj = inputOrFormData.cnpj || ""
       adminEmail = inputOrFormData.adminEmail || ""
+      workflowTemplateKey = inputOrFormData.workflowTemplateKey || "none"
     }
 
     // 1. Validação de entradas
@@ -297,8 +301,27 @@ export async function createCompanyAction(
         allowed_llm_providers: allowedProviders,
       })
 
-    if (limitsInsertErr) {
+        if (limitsInsertErr) {
       console.warn("[SuperAdmin] Aviso ao inserir company_limits:", limitsInsertErr.message)
+    }
+
+    // 4.1. Provisionamento opcional do Funil Kanban
+    let appliedTemplateName = "Padrão (3 etapas básicas)"
+    try {
+      if (workflowTemplateKey && workflowTemplateKey !== "none" && WORKFLOW_TEMPLATES[workflowTemplateKey]) {
+        const template = WORKFLOW_TEMPLATES[workflowTemplateKey]
+        appliedTemplateName = template.label
+        await applyStagesToCompanyWorkflow({
+          companyId: createdCompany.id,
+          stages: template.stages,
+          adminClient,
+        })
+      } else {
+        // Inicializa o workflow padrão com as 3 etapas essenciais
+        await getCompanyWorkflowForAdmin(createdCompany.id, adminClient)
+      }
+    } catch (wfErr: any) {
+      console.warn("[SuperAdmin] Aviso ao provisionar workflow inicial:", wfErr.message)
     }
 
     // 5. Registro na tabela platform_audit_logs
@@ -318,6 +341,7 @@ export async function createCompanyAction(
           allowed_providers: allowedProviders,
           admin_email: adminEmail || null,
           cnpj: cnpj || null,
+          workflow_template: appliedTemplateName,
         },
         reason: "Provisionamento inicial de tenant via Painel SuperAdmin",
         status: "success",
@@ -330,6 +354,8 @@ export async function createCompanyAction(
     revalidatePath("/companies")
     revalidatePath("/paineladmin")
     revalidatePath("/audit")
+    revalidatePath("/conversations/kanban")
+    revalidatePath("/settings/workflows")
 
     return {
       success: true,
