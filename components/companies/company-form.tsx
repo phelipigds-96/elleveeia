@@ -6,7 +6,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
-import { Building2, CheckCircle2, Shield, AlertCircle, Kanban } from "lucide-react"
+import { Building2, CheckCircle2, Shield, AlertCircle, Kanban, Copy, Check, Key } from "lucide-react"
 import { WORKFLOW_TEMPLATES } from "@/lib/services/workflows/template-catalog"
 import { CompanyMock } from "./mock-companies"
 import { createCompanyAction } from "@/app/(admin)/companies/actions"
@@ -24,6 +24,14 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
   const [slug, setSlug] = useState("")
   const [cnpj, setCnpj] = useState("")
   const [adminEmail, setAdminEmail] = useState("")
+  const [adminPassword, setAdminPassword] = useState("")
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    email?: string | null
+    password?: string | null
+    slug?: string
+    name?: string
+  } | null>(null)
+  const [copied, setCopied] = useState(false)
   const [plan, setPlan] = useState<"Trial" | "Starter" | "Pro" | "Enterprise">("Pro")
   const [aiProvider, setAiProvider] = useState<"openai" | "gemini" | "hybrid">("openai")
   const [workflowTemplateKey, setWorkflowTemplateKey] = useState<string>("none")
@@ -59,6 +67,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         aiProvider,
         cnpj,
         adminEmail,
+        adminPassword,
         workflowTemplateKey,
       })
 
@@ -73,6 +82,12 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         "Empresa provisionada com sucesso",
         `A organização "${name}" (@${res.data?.slug || slug}) foi criada no banco de dados.`
       )
+      setCreatedCredentials({
+        name: res.data?.name || name,
+        slug: res.data?.slug || slug,
+        email: res.data?.adminEmail || adminEmail,
+        password: res.data?.adminPassword || adminPassword || null,
+      })
       setSuccess(true)
       setIsSubmitting(false)
 
@@ -81,25 +96,16 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
           id: res.data?.id,
           name,
           slug: res.data?.slug || slug,
+          cnpj: cnpj || "00.000.000/0001-00",
           plan,
           status: "Ativo",
           aiProvider,
           createdAt: new Date().toISOString().split("T")[0],
+          adminEmail: res.data?.adminEmail || adminEmail || `admin@${res.data?.slug || slug}.com`,
         })
       }
 
       router.refresh()
-
-      setTimeout(() => {
-        setSuccess(false)
-        setName("")
-        setSlug("")
-        setCnpj("")
-        setAdminEmail("")
-        setWorkflowTemplateKey("none")
-        setErrorMessage(null)
-        onClose()
-      }, 1000)
     } catch (err: any) {
       setErrorMessage(err.message || "Erro inesperado ao conectar ao servidor.")
       setIsSubmitting(false)
@@ -131,14 +137,92 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         )}
 
         {success ? (
-          <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+          <div className="py-6 flex flex-col items-center justify-center text-center space-y-4">
             <div className="h-12 w-12 rounded-full bg-[#F4F8E8] border border-[#D5E89B] text-[#3D5215] flex items-center justify-center animate-in zoom-in">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h4 className="font-display text-base font-bold text-ellevee-ink">Empresa Provisionada com Sucesso</h4>
-            <p className="text-xs text-ellevee-sage">
-              O tenant e suas quotas em <code className="font-mono text-ellevee-ink">company_limits</code> foram gravados no Supabase.
-            </p>
+            <div>
+              <h4 className="font-display text-base font-bold text-ellevee-ink">Empresa Provisionada com Sucesso</h4>
+              <p className="text-xs text-ellevee-sage mt-0.5">
+                Organização, limites, funil e conta de acesso foram criados no Supabase.
+              </p>
+            </div>
+
+            {createdCredentials && (
+              <div className="w-full text-left bg-[#FBFBFA] border border-ellevee-stone rounded-lg p-4 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-ellevee-stone/60">
+                  <span className="font-semibold text-ellevee-ink font-display">Credenciais de Acesso da Loja</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `Acesso Ellevee IA\nOrganização: ${createdCredentials.name} (@${createdCredentials.slug})\nLogin: ${createdCredentials.email || ""}\nSenha: ${createdCredentials.password || ""}`;
+                      navigator.clipboard.writeText(text);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-ellevee-ink hover:text-emerald-700 bg-white border border-ellevee-stone px-2 py-0.5 rounded shadow-2xs transition-colors"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-600" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        Copiar Acesso
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">Organização</span>
+                    <span className="font-semibold text-ellevee-ink">{createdCredentials.name}</span>
+                    <span className="text-ellevee-sage font-mono text-[10px] block">@{createdCredentials.slug}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">E-mail do Administrador</span>
+                    <span className="font-mono font-medium text-ellevee-ink truncate block">
+                      {createdCredentials.email || "Não informado"}
+                    </span>
+                  </div>
+                </div>
+
+                {createdCredentials.password && (
+                  <div className="pt-2 border-t border-ellevee-stone/40">
+                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">Senha Inicial</span>
+                    <div className="inline-flex items-center gap-1.5 bg-white border border-ellevee-stone px-2 py-1 rounded font-mono text-xs font-bold text-ellevee-ink mt-0.5">
+                      <Key className="h-3.5 w-3.5 text-ellevee-sage" />
+                      {createdCredentials.password}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="w-full pt-2 flex justify-end">
+              <Button
+                type="button"
+                onClick={() => {
+                  setSuccess(false);
+                  setName("");
+                  setSlug("");
+                  setCnpj("");
+                  setAdminEmail("");
+                  setAdminPassword("");
+                  setCreatedCredentials(null);
+                  setWorkflowTemplateKey("none");
+                  setErrorMessage(null);
+                  onClose();
+                }}
+                className="w-full font-semibold"
+              >
+                Concluir e Fechar
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4 py-4">
@@ -186,17 +270,36 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-ellevee-ink mb-1">
-                Email do Administrador Responsável
-              </label>
-              <Input
-                type="email"
-                placeholder="admin@organizacao.com.br"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                className="text-xs"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                  Email do Responsável <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  type="email"
+                  placeholder="admin@organizacao.com.br"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  required
+                  className="text-xs"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-ellevee-ink">
+                    Senha Inicial
+                  </label>
+                  <span className="text-[10px] text-ellevee-sage font-medium">Opcional</span>
+                </div>
+                <Input
+                  type="password"
+                  placeholder="Gerar automaticamente"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">

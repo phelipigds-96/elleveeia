@@ -53,20 +53,28 @@ export function DropdownMenuItem({
   children,
   onClick,
   destructive = false,
+  disabled = false,
 }: {
   className?: string
   children: React.ReactNode
   onClick?: () => void
   destructive?: boolean
+  disabled?: boolean
 }) {
   return (
     <div
-      onClick={onClick}
+      onClick={(e) => {
+        if (!disabled && onClick) {
+          onClick()
+        }
+      }}
       className={cn(
-        "relative flex cursor-pointer select-none items-center rounded-md px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
-        destructive
-          ? "text-rose-600 hover:bg-rose-50/80"
-          : "text-ellevee-ink hover:bg-[#F8F8F5] hover:text-black",
+        "relative flex select-none items-center rounded-md px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
+        disabled
+          ? "opacity-50 cursor-not-allowed text-ellevee-sage pointer-events-none"
+          : "cursor-pointer",
+        !disabled && destructive && "text-rose-600 hover:bg-rose-50/80",
+        !disabled && !destructive && "text-ellevee-ink hover:bg-[#F8F8F5] hover:text-black",
         className
       )}
     >

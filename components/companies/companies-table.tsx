@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { 
   Building2, 
   MoreVertical, 
@@ -12,8 +13,10 @@ import {
   Search, 
   Bot,
   X,
-  Kanban
+  Kanban,
+  Loader2
 } from "lucide-react"
+import { impersonateCompanyAction } from "@/app/(admin)/companies/actions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -88,11 +91,28 @@ export default function CompaniesTable({
     })
   }, [companies, searchTerm, planFilter, statusFilter, providerFilter])
 
-  const handleImpersonate = (company: CompanyMock) => {
-    toast.info(
-      "Modo Impersonate Ativo",
-      `Sessão administrativa iniciada como ${company.name} (@${company.slug})`
-    )
+  const router = useRouter()
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null)
+
+  const handleImpersonate = async (company: CompanyMock) => {
+    try {
+      setImpersonatingId(company.id)
+      toast.info("Iniciando Impersonate...", `Conectando ao workspace de ${company.name}`)
+      const res = await impersonateCompanyAction(company.id)
+      if (res.success && res.data?.redirectUrl) {
+        toast.success(
+          "Impersonate Ativo",
+          `Redirecionando para o ambiente de ${company.name}...`
+        )
+        router.push(res.data.redirectUrl)
+      } else {
+        toast.error("Erro ao impersonar", res.error || "Falha na transição de sessão.")
+        setImpersonatingId(null)
+      }
+    } catch (err: any) {
+      toast.error("Erro ao impersonar", err.message || "Erro inesperado.")
+      setImpersonatingId(null)
+    }
   }
 
   const getPlanBadge = (plan: CompanyMock["plan"]) => {
@@ -351,8 +371,15 @@ export default function CompaniesTable({
                             <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
                             Configurar Funil (Kanban)
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleImpersonate(company)}>
-                            <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                          <DropdownMenuItem
+                            disabled={impersonatingId === company.id}
+                            onClick={() => handleImpersonate(company)}
+                          >
+                            {impersonatingId === company.id ? (
+                              <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin text-ellevee-ink" />
+                            ) : (
+                              <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            )}
                             Acessar como (Impersonate)
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
