@@ -29,7 +29,8 @@ import {
   ListFilter,
   ArrowLeftRight,
   Menu,
-  ChevronDown
+  ChevronDown,
+  LayoutGrid
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -977,7 +978,7 @@ export default function PainelClient({
   }, [messages])
 
   return (
-    <div className="flex h-full w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
+    <div className="flex h-full min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
       {/* Botão flutuante para abrir a lista de conversas em telas pequenas */}
       {!activeConversation && (
         <button
@@ -1023,6 +1024,17 @@ export default function PainelClient({
                 {currentUser.role === "master" || currentUser.role === "admin" ? "Master" : "Atendente"}
               </span>
             )}
+
+            {/* Acesso ao quadro de funil (Kanban) */}
+            <a
+              href="/conversations/kanban"
+              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring"
+              title="Abrir o funil de atendimento (Kanban)"
+              aria-label="Abrir o funil de atendimento (Kanban)"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Funil</span>
+            </a>
           </div>
 
           {/* Campo de Busca */}
@@ -1289,11 +1301,11 @@ export default function PainelClient({
       {/* =====================================================================
           MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink) COM DRAWER RETRÁTIL
       ====================================================================== */}
-      <main className="flex-1 flex flex-row h-full bg-ellevee-ivory overflow-hidden">
+      <main className="flex-1 flex flex-row h-full min-h-0 bg-ellevee-ivory overflow-hidden">
         {activeConversation ? (
           <>
             {/* Coluna Central do Chat */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+            <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden min-w-0">
             {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
             <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
