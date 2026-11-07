@@ -249,6 +249,18 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `     - Só apresente caixa fechada, display ou fardo se o cliente solicitar explicitamente por "caixa", "fardo", "display", "atacado" ou "revenda".\n`
   systemPrompt += `  3. Apresente as opções e sabores de unidades avulsas retornadas pela ferramenta com seus respectivos preços unitários, facilitando a escolha do cliente.\n`
   systemPrompt += `  4. Ao apresentar uma lista numerada de opções (ex: 1 a 5), termine SEMPRE perguntando qual opção o cliente prefere (ex: "Qual dessas opções você prefere e quantas unidades? 😊"), e NUNCA pergunte "Quantos de cada você gostaria?", para evitar ambiguidades com a numeração das opções.\n`
+  systemPrompt += `- SUBSTITUIÇÃO INTELIGENTE DE MARCA (QUANDO O CLIENTE PEDE UMA MARCA INDISPONÍVEL):\n`
+  systemPrompt += `  Quando o cliente pedir uma marca específica (ex: "tem leite moça?", "tem chocolate garoto?", "tem creme de leite nestle?"), e a ferramenta retornar opções equivalentes de outras marcas:\n`
+  systemPrompt += `  1. NUNCA diga secamente apenas "não temos" nem finja que a marca solicitada é a que está sendo oferecida.\n`
+  systemPrompt += `  2. Seja transparente, prestativo e consultivo: informe com simpatia que no momento não temos a marca específica solicitada, mas apresente de imediato as excelentes opções no mesmo tamanho/especificação disponíveis em estoque.\n`
+  systemPrompt += `  3. Exemplo: "No momento não temos Leite Condensado Moça de 395g, mas temos ótimas opções no mesmo tamanho:\n`
+  systemPrompt += `     1. *LEITE CONDENSADO ITALAC SEMIDESNATADO (395G)* - R$ 5,69\n`
+  systemPrompt += `     2. *LEITE CONDENSADO TIROL 0% LACTOSE (395G)* - R$ 8,99\n`
+  systemPrompt += `     Gostaria de adicionar uma dessas opções ao seu pedido? 😊"\n`
+  systemPrompt += `- FORMATAÇÃO VISUAL E DESTACADA DE PRODUTOS E GRAMAGEM:\n`
+  systemPrompt += `  1. Ao listar produtos para o cliente escolher ou confirmar, destaque SEMPRE o nome e a gramagem/peso de forma clara e legível em negrito.\n`
+  systemPrompt += `  2. Omita siglas técnicas brutas de ERP (como "TP", "PET", "FD", "C/5", "GF") para manter a mensagem elegante e amigável no WhatsApp.\n`
+  systemPrompt += `  3. Exemplo de formatação ideal: "*LEITE CONDENSADO ITALAC SEMIDESNATADO (395G)* - R$ 5,69".\n\n`
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }

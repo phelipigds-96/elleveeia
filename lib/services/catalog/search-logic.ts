@@ -77,9 +77,18 @@ export function parseQuery(query: string): ParsedProductQuery {
           variants.add(`${num}gr`)
           variants.add(`${num} gr`)
           variants.add(`${num}`)
-          if (num === 395) {
-            variants.add('39')
+
+          // Tolerância de proximidade / Reduflação de mercado
+          if ([390, 395, 400].includes(num)) {
+            ['390g', '390 g', '390gr', '390 gr', '390', '395g', '395 g', '395gr', '395 gr', '395', '400g', '400 g', '400gr', '400 gr', '400', '39'].forEach(v => variants.add(v))
+          } else if ([80, 85, 90, 100].includes(num)) {
+            ['80g', '80 g', '80gr', '80', '85g', '85 g', '85gr', '85', '90g', '90 g', '90gr', '90', '100g', '100 g', '100gr', '100'].forEach(v => variants.add(v))
+          } else if ([126, 130, 140].includes(num)) {
+            ['126g', '126 g', '126gr', '126', '130g', '130 g', '130gr', '130', '140g', '140 g', '140gr', '140'].forEach(v => variants.add(v))
+          } else if ([200, 250].includes(num)) {
+            ['200g', '200 g', '200gr', '200', '250g', '250 g', '250gr', '250'].forEach(v => variants.add(v))
           }
+
           if (num >= 1000 && num % 1000 === 0) {
             const inKg = num / 1000
             variants.add(`${inKg}kg`)
@@ -99,19 +108,13 @@ export function parseQuery(query: string): ParsedProductQuery {
           variants.add(`${inGrams} g`)
           variants.add(`${inGrams}gr`)
           variants.add(`${inGrams} gr`)
-          if (num === 1) {
-            variants.add('1 01kg')
-            variants.add('1.01kg')
-            variants.add('1 05kg')
-            variants.add('1.05kg')
-            variants.add('1 01 kg')
-            variants.add('1 05 kg')
-            variants.add('1.0kg')
-            variants.add('1 0kg')
+          if ([1, 1.01, 1.05].includes(num)) {
+            ['1kg', '1 kg', '1k', '1 k', '1 01kg', '1.01kg', '1 05kg', '1.05kg', '1 01 kg', '1 05 kg', '1.0kg', '1 0kg', '1000g', '1000 g', '1000gr', '1010g', '1050g'].forEach(v => variants.add(v))
           } else if (num === 2.5) {
             variants.add('2 5kg')
             variants.add('2.5kg')
             variants.add('2 5 kg')
+            variants.add('2500g')
           }
           weightValue = num
           unitValue = 'kg'
@@ -159,26 +162,32 @@ export function parseQuery(query: string): ParsedProductQuery {
 
   // 3.1 Extrair números isolados que representam gramagens no varejo (ex: 395, 400, 900, 200, 500, 126, 90)
   // quando o cliente não digita a unidade 'g' (ex: "leite condensado italac 395")
-  const standaloneWeightMatches = text.match(/\b(?:395|400|900|200|500|126|90|80|60|40|32|150|250|300|350|750|800|1000)\b/g)
+  const standaloneWeightMatches = text.match(/\b(?:390|395|400|900|200|250|500|126|130|140|90|85|80|60|40|32|150|300|350|750|800|1000)\b/g)
   if (standaloneWeightMatches) {
     for (const numStr of standaloneWeightMatches) {
       const num = parseInt(numStr, 10)
-      const variants = [
-        numStr,
-        `${num}g`,
-        `${num} g`,
-        `${num}gr`,
-        `${num} gr`
-      ]
-      if (num === 395) {
-        variants.push('39')
+      const variants = new Set<string>()
+      variants.add(numStr)
+      variants.add(`${num}g`)
+      variants.add(`${num} g`)
+      variants.add(`${num}gr`)
+      variants.add(`${num} gr`)
+
+      if ([390, 395, 400].includes(num)) {
+        ['390g', '390 g', '390gr', '390 gr', '390', '395g', '395 g', '395gr', '395 gr', '395', '400g', '400 g', '400gr', '400 gr', '400', '39'].forEach(v => variants.add(v))
+      } else if ([80, 85, 90, 100].includes(num)) {
+        ['80g', '80 g', '80gr', '80', '85g', '85 g', '85gr', '85', '90g', '90 g', '90gr', '90', '100g', '100 g', '100gr', '100'].forEach(v => variants.add(v))
+      } else if ([126, 130, 140].includes(num)) {
+        ['126g', '126 g', '126gr', '126', '130g', '130 g', '130gr', '130', '140g', '140 g', '140gr', '140'].forEach(v => variants.add(v))
+      } else if ([200, 250].includes(num)) {
+        ['200g', '200 g', '200gr', '200', '250g', '250 g', '250gr', '250'].forEach(v => variants.add(v))
+      } else if (num === 1000) {
+        ['1kg', '1 kg', '1k', '1 k'].forEach(v => variants.add(v))
       }
-      if (num === 1000) {
-        variants.push('1kg', '1 kg', '1k', '1 k')
-      }
+
       groups.push({
         original: `${num}g`,
-        variants,
+        variants: Array.from(variants),
         isGeneric: false,
         isUnit: true
       })
@@ -299,8 +308,10 @@ export function calculateMatchScore(
   const DERIVATIVE_PREFIXES = /\b(?:bombom|bombons|bala|balas|cocada|cocadas|fondant|picole|picoles|ducrem|bisc|biscoito|biscoitos|cookies|carmed|geladinho)\b/i
   const isDerivativeProduct = DERIVATIVE_PREFIXES.test(productName)
   const queryAskedDerivative = DERIVATIVE_PREFIXES.test(parsed.originalQuery)
+  // Se o próprio termo principal da busca for o produto (ex: "trakinas", "oreo", "carmed", "ducrem", "bis"), não é um derivado indesejado
+  const queryIsTargetingProduct = /\b(?:trakinas|oreo|carmed|ducrem|passatempo|tortinhas|negresco|chamyto|danone|kit\s*kat|bis|snack)\b/i.test(parsed.originalQuery)
 
-  if (isDerivativeProduct && !queryAskedDerivative) {
+  if (isDerivativeProduct && !queryAskedDerivative && !queryIsTargetingProduct) {
     penalty += 35 // Penaliza derivados quando a busca é pelo insumo primário
   }
 
