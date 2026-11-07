@@ -151,7 +151,7 @@
   /* Superfície padrão de cartões/áreas do painel */
   .panel-surface {
     background-color: #ffffff;
-    border: 1px solid rgba(214, 211, 204, 0.9);
+    border: 1px solid #E7E6E0;
     border-radius: 12px;
   }
 
@@ -166,7 +166,7 @@
   }
   .msg-bubble-in {
     background-color: #ffffff;
-    border: 1px solid rgba(214, 211, 204, 0.9);
+    border: 1px solid #E7E6E0;
     color: #202520;
   }
   .msg-bubble-out {
@@ -174,9 +174,9 @@
     color: #f7f6f2;
   }
   .msg-bubble-system {
-    background-color: rgba(243, 242, 237, 1);
-    border: 1px dashed rgba(214, 211, 204, 1);
-    color: #5a6659;
+    background-color: #F3F2ED;
+    border: 1px dashed #E7E6E0;
+    color: #5A6659;
     font-size: 12px;
   }
 

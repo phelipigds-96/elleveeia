@@ -16,7 +16,7 @@ export default async function ConversationsPage() {
   const initialMessages = initialSelectedId ? await getConversationMessages(initialSelectedId) : []
 
   return (
-    <div className="h-[calc(100vh-6.5rem)] w-full">
+    <div className="flex h-[calc(100vh-6.5rem)] min-h-0 w-full flex-col">
       <PainelClient
         initialConversations={initialConversations}
         initialMessages={initialMessages}
