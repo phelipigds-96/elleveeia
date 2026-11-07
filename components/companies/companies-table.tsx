@@ -11,7 +11,8 @@ import {
   LogIn, 
   Search, 
   Bot,
-  X
+  X,
+  Kanban
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,6 +41,7 @@ import {
 import CompanyLimitsDialog from "./company-limits-dialog"
 import CompanyPlanDialog from "./company-plan-dialog"
 import CompanyStatusDialog from "./company-status-dialog"
+import CompanyWorkflowDialog from "./company-workflow-dialog"
 import { toast } from "@/components/ui/toast"
 
 export default function CompaniesTable({
@@ -58,6 +60,7 @@ export default function CompaniesTable({
   const [activeCompanyForLimits, setActiveCompanyForLimits] = useState<CompanyMock | null>(null)
   const [activeCompanyForPlan, setActiveCompanyForPlan] = useState<CompanyMock | null>(null)
   const [activeCompanyForStatus, setActiveCompanyForStatus] = useState<CompanyMock | null>(null)
+  const [activeCompanyForWorkflow, setActiveCompanyForWorkflow] = useState<CompanyMock | null>(null)
 
   // Filtros ativos?
   const hasActiveFilters = searchTerm !== "" || planFilter !== "ALL" || statusFilter !== "ALL" || providerFilter !== "ALL"
@@ -344,6 +347,10 @@ export default function CompaniesTable({
                             <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
                             Ajustar Limites
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setActiveCompanyForWorkflow(company)}>
+                            <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            Configurar Funil (Kanban)
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleImpersonate(company)}>
                             <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
                             Acessar como (Impersonate)
@@ -423,6 +430,12 @@ export default function CompaniesTable({
           if (onUpdateCompany) onUpdateCompany(updated)
           setActiveCompanyForStatus(null)
         }}
+      />
+
+      <CompanyWorkflowDialog
+        company={activeCompanyForWorkflow}
+        open={!!activeCompanyForWorkflow}
+        onClose={() => setActiveCompanyForWorkflow(null)}
       />
     </div>
   )

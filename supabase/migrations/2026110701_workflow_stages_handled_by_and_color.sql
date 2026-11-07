@@ -21,20 +21,22 @@ BEGIN
   END IF;
 END $$;
 
--- Backfill inteligente: deriva o responsável do tipo de etapa já existente.
+-- Backfill inteligente: deriva o responsável e cores padrão do tipo de etapa existente.
 UPDATE public.workflow_stages
-SET handled_by = CASE
+SET 
+  handled_by = CASE
     WHEN stage_type = 'initial' THEN 'ai'
     WHEN stage_type = 'in_progress' THEN 'human'
     WHEN stage_type = 'final' THEN 'human'
     ELSE 'human'
+  END,
+  color = CASE 
+    WHEN stage_type = 'initial' THEN '#eab308'
+    WHEN stage_type = 'in_progress' THEN '#3b82f6'
+    WHEN stage_type = 'final' THEN '#22c55e'
+    ELSE '#64748b'
   END
-WHERE handled_by IS NULL;
-
--- Colunas que já existiam sem valor explícito herdam o default da coluna.
-UPDATE public.workflow_stages
-SET color = '#64748b'
-WHERE color IS NULL;
+WHERE handled_by IS NULL OR color IS NULL OR color = '#64748b';
 
 COMMENT ON COLUMN public.workflow_stages.color IS
   'Cor hexadecimal (ex.: #3b82f6) usada na coluna do funil Kanban.';

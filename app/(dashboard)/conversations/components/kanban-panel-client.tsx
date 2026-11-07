@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition } from "react"
+import { Bot, User, Clock } from "lucide-react"
 import { moveConversationToStageAction } from "../kanban/actions"
 import { getConversationsList } from "../actions"
 
@@ -11,6 +12,8 @@ type Stage = {
   position: number
   stage_type: string
   is_active: boolean
+  color?: string | null
+  handled_by?: 'ai' | 'human' | 'waiting' | null
 }
 
 type CustomerRef = { name: string | null; phone: string | null }
@@ -176,7 +179,8 @@ export default function KanbanPanelClient({
           return (
             <section
               key={stage.id}
-              className="flex min-w-[280px] flex-1 flex-col rounded-xl border border-ellevee-stone bg-ellevee-stone-subtle"
+              className="flex min-w-[280px] flex-1 flex-col rounded-xl border border-ellevee-stone bg-ellevee-stone-subtle overflow-hidden"
+              style={{ borderTop: `4px solid ${stage.color || '#64748b'}` }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault()
@@ -184,9 +188,32 @@ export default function KanbanPanelClient({
                 setDraggingId(null)
               }}
             >
-              <header className="flex items-center justify-between border-b border-ellevee-stone px-4 py-3">
-                <h2 className="text-sm font-semibold text-ellevee-ink">{stage.name}</h2>
-                <span className="rounded-full bg-white px-2 py-0.5 text-meta font-medium text-ellevee-ink-muted ring-1 ring-ellevee-stone">
+              <header className="flex items-center justify-between border-b border-ellevee-stone px-4 py-3 bg-white/70 backdrop-blur-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: stage.color || '#64748b' }}
+                  />
+                  <h2 className="text-sm font-semibold text-ellevee-ink truncate" title={stage.name}>
+                    {stage.name}
+                  </h2>
+                  {stage.handled_by === 'ai' && (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200 flex-shrink-0">
+                      <Bot className="h-3 w-3" /> IA
+                    </span>
+                  )}
+                  {stage.handled_by === 'waiting' && (
+                    <span className="inline-flex items-center gap-1 rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 border border-purple-200 flex-shrink-0">
+                      <Clock className="h-3 w-3" /> Espera
+                    </span>
+                  )}
+                  {stage.handled_by === 'human' && (
+                    <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200 flex-shrink-0">
+                      <User className="h-3 w-3" /> Humano
+                    </span>
+                  )}
+                </div>
+                <span className="rounded-full bg-white px-2 py-0.5 text-meta font-medium text-ellevee-ink-muted ring-1 ring-ellevee-stone flex-shrink-0 ml-2">
                   {cards.length}
                 </span>
               </header>

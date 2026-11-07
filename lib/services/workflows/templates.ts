@@ -1,114 +1,25 @@
+import { createAdminClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveCompany } from '@/lib/services/platform/tenant-access'
-import {
-  getOrCreateDefaultWorkflow,
-  type WorkflowServiceOptions,
-} from '@/lib/services/workflows/workflows'
+import { WorkflowStage } from './workflows'
+
+export * from './template-catalog'
 import {
   WORKFLOW_TEMPLATES,
+  WorkflowTemplate,
+  StageTemplate,
+  SaveStagesInput,
   getWorkflowTemplate,
-  type TemplateHandledBy,
-  type TemplateStageType,
-  type WorkflowTemplate,
-  type WorkflowTemplateStage,
-} from '@/lib/services/workflows/template-catalog'
-
-export {
-  WORKFLOW_TEMPLATES,
-  getWorkflowTemplate,
-  type TemplateHandledBy,
-  type TemplateStageType,
-  type WorkflowTemplate,
-  type WorkflowTemplateStage,
-} from '@/lib/services/workflows/template-catalog'
-
-/**
- * Marco 1 — Biblioteca de Templates de Funil por Segmento.
- *
- * Cada template descreve um funil completo (etapas, ordem, tipo, cor e
- * responsável operacional) para um segmento de mercado. A configuração é
- * sempre aplicada dentro de uma empresa (`company_id`), nunca globalmente.
- *
- * O enum `stage_type` ('initial' | 'in_progress' | 'final') é preservado:
- * ele continua sendo a única fonte de verdade para a sincronização entre
- * o funil (`workflow_stage_id`) e a lista de conversas (`status`/`assigned_to`).
- * `handled_by` e `color` são atributos descritivos e não alteram esse contrato.
- */
+} from './template-catalog'
 
 export interface ApplyWorkflowTemplateParams {
-  retail_food: {
-    key: 'retail_food',
-    label: 'Varejo & Confeitaria',
-    segment: 'Sumel',
-    description:
-      'Funil de pedidos de confeitaria com cardápio, orçamento, pagamento, separação e entrega.',
-    stages: [
-      { name: 'Novo Contato / Cardápio', stage_type: 'initial', handled_by: 'ai', color: '#eab308' },
-      { name: 'Orçamento em Aberto', stage_type: 'in_progress', handled_by: 'ai', color: '#f97316' },
-      { name: 'Aguardando Pagamento (Pix)', stage_type: 'in_progress', handled_by: 'waiting', color: '#a855f7' },
-      { name: 'Em Separação / Cozinha', stage_type: 'in_progress', handled_by: 'human', color: '#3b82f6' },
-      { name: 'Saiu para Entrega / Retirada', stage_type: 'in_progress', handled_by: 'human', color: '#06b6d4' },
-      { name: 'Pedido Concluído', stage_type: 'final', handled_by: 'human', color: '#22c55e' },
-    ],
-  },
-  events_party: {
-    key: 'events_party',
-    label: 'Salão de Festas & Eventos',
-    segment: 'Salão de Festas',
-    description:
-      'Funil de reserva de salão: contato, disponibilidade de data, visita, proposta e contrato.',
-    stages: [
-      { name: 'Primeiro Contato', stage_type: 'initial', handled_by: 'ai', color: '#eab308' },
-      { name: 'Data Disponível', stage_type: 'in_progress', handled_by: 'ai', color: '#f97316' },
-      { name: 'Visita / Degustação Agendada', stage_type: 'in_progress', handled_by: 'human', color: '#a855f7' },
-      { name: 'Proposta Enviada', stage_type: 'in_progress', handled_by: 'human', color: '#3b82f6' },
-      { name: 'Contrato Fechado', stage_type: 'final', handled_by: 'human', color: '#22c55e' },
-      { name: 'Data Indisponível / Perdido', stage_type: 'final', handled_by: 'human', color: '#ef4444' },
-    ],
-  },
-  dental_clinic: {
-    key: 'dental_clinic',
-    label: 'Clínica Odontológica',
-    segment: 'Saúde',
-    description:
-      'Funil de clínica: triagem, agendamento, confirmação, tratamento e conclusão.',
-    stages: [
-      { name: 'Triagem & Dúvidas', stage_type: 'initial', handled_by: 'ai', color: '#eab308' },
-      { name: 'Agendamento em Andamento', stage_type: 'in_progress', handled_by: 'ai', color: '#06b6d4' },
-      { name: 'Consulta Agendada', stage_type: 'in_progress', handled_by: 'waiting', color: '#3b82f6' },
-      { name: 'Lembrete / Confirmação 24h', stage_type: 'in_progress', handled_by: 'human', color: '#a855f7' },
-      { name: 'Tratamento Concluído', stage_type: 'final', handled_by: 'human', color: '#22c55e' },
-    ],
-  },
-  general_services: {
-    key: 'general_services',
-    label: 'Serviços & B2B Geral',
-    segment: 'Serviços',
-    description:
-      'Funil genérico de serviços: qualificação, negociação, espera do cliente e fechamento.',
-    stages: [
-      { name: 'Entrada / Qualificação', stage_type: 'initial', handled_by: 'ai', color: '#eab308' },
-      { name: 'Em Negociação', stage_type: 'in_progress', handled_by: 'human', color: '#3b82f6' },
-      { name: 'Aguardando Cliente', stage_type: 'in_progress', handled_by: 'waiting', color: '#a855f7' },
-      { name: 'Finalizado / Ganho', stage_type: 'final', handled_by: 'human', color: '#22c55e' },
-      { name: 'Arquivado / Perdido', stage_type: 'final', handled_by: 'human', color: '#ef4444' },
-    ],
-  },
-}
-
-export function getWorkflowTemplate(templateKey: string): WorkflowTemplate | null {
-  if (!templateKey) return null
-  return WORKFLOW_TEMPLATES[templateKey.trim()] || null
-}
-
-export interface ApplyWorkflowTemplateParams {
-  /**
-   * Opcional: quando informado, precisa bater com a empresa do usuário
-   * autenticado (o servidor sempre resolve o tenant a partir da sessão).
-   */
   companyId?: string
   workflowId?: string
   templateKey: string
+  options?: {
+    supabaseClient?: any
+    adminClient?: any
+  }
 }
 
 export interface ApplyWorkflowTemplateResult {
@@ -117,8 +28,8 @@ export interface ApplyWorkflowTemplateResult {
   stages: {
     id: string
     name: string
-    stage_type: TemplateStageType
-    handled_by: TemplateHandledBy
+    stage_type: 'initial' | 'in_progress' | 'final'
+    handled_by: 'ai' | 'human' | 'waiting'
     color: string
     position: number
   }[]
@@ -129,281 +40,290 @@ export interface ApplyWorkflowTemplateResult {
 }
 
 /**
- * Forma da linha de `workflow_stages` usada durante a aplicação do template.
- * Tipagem explícita para que os callbacks (`filter`, `map`) não dependam de
- * inferência implícita do driver do Supabase.
+ * Consulta o workflow padrão e suas etapas para uma empresa no contexto Super Admin
  */
-interface TemplateStageRow {
-  id: string
-  name: string
-  position: number
-  stage_type: string
-  color: string | null
-  handled_by: string | null
-  is_active: boolean
-}
+export async function getCompanyWorkflowForAdmin(companyId: string, adminClient?: any) {
+  const client = adminClient || createAdminClient()
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function isValidUuid(id: string): boolean {
-  return UUID_REGEX.test(id)
-}
-
-const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-
-function sanitizeColor(color: string): string {
-  return HEX_COLOR_REGEX.test(color) ? color.toLowerCase() : '#64748b'
-}
-
-/**
- * Aplica um template de funil para a empresa do usuário autenticado.
- *
- * Garantias:
- *  - o tenant é sempre resolvido no servidor (sessão) e conferido contra o
- *    `companyId` informado, quando houver;
- *  - a empresa precisa estar ativa (`requireActiveCompany`);
- *  - o workflow alvo precisa pertencer à mesma empresa;
- *  - conversas vinculadas a etapas removidas são realocadas para a etapa inicial
- *    do template, nunca órfãs.
- */
-export async function applyWorkflowTemplate(
-  params: ApplyWorkflowTemplateParams,
-  options?: WorkflowServiceOptions
-): Promise<ApplyWorkflowTemplateResult> {
-  const { companyId: requestedCompanyId, workflowId, templateKey } =
-    params || ({} as ApplyWorkflowTemplateParams)
-
-  if (requestedCompanyId && !isValidUuid(requestedCompanyId)) {
-    throw new Error('Empresa inválida.')
-  }
-
-  const template = getWorkflowTemplate(templateKey)
-  if (!template) {
-    throw new Error(`Template de funil desconhecido: "${templateKey}".`)
-  }
-
-  const supabase = options?.supabaseClient || createClient()
-
-  // 1. Identidade e tenant resolvidos no servidor. O `companyId` recebido do
-  //    cliente precisa corresponder à empresa do usuário autenticado — sem esta
-  //    checagem, uma empresa poderia aplicar template no funil de outra.
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    throw new Error('Sessão inválida ou expirada.')
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('company_id, role')
-    .eq('id', user.id)
+  // 1. Busca workflow padrão
+  let { data: workflow, error: wfError } = await client
+    .from('workflows')
+    .select('*, workflow_stages(*)')
+    .eq('company_id', companyId)
+    .eq('is_default', true)
     .maybeSingle()
 
-  if (profileError || !profile) {
-    throw new Error('Empresa não encontrada.')
-  }
-
-  const companyId = requestedCompanyId || profile.company_id
-
-  if (!companyId || profile.company_id !== companyId) {
-    throw new Error('Empresa não corresponde ao tenant autenticado.')
-  }
-
-  // 1.1 Apenas perfis administrativos da própria empresa podem reconfigurar o funil.
-  const role = String(profile.role || '').toLowerCase()
-  if (!['owner', 'admin', 'superadmin'].includes(role)) {
-    throw new Error('Permissão insuficiente para alterar o funil da empresa.')
-  }
-
-  // 2. Tenant ativo (bloqueia provisioning, suspended e cancelled)
-  await requireActiveCompany(companyId, { adminClient: options?.adminClient })
-
-  // 3. Resolve o workflow alvo: o informado (validando a titularidade) ou o padrão
-  let targetWorkflowId: string
-  let workflowName: string
-
-  if (workflowId) {
-    if (!isValidUuid(workflowId)) {
-      throw new Error('Workflow inválido.')
-    }
-
-    const { data: workflow, error: workflowError } = await supabase
+  // Se não existir padrão, busca o primeiro ativo ou cria um inicial
+  if (!workflow) {
+    const { data: firstWf } = await client
       .from('workflows')
-      .select('id, name, company_id')
-      .eq('id', workflowId)
+      .select('*, workflow_stages(*)')
       .eq('company_id', companyId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle()
 
-    if (workflowError || !workflow) {
-      throw new Error('Workflow não encontrado para esta empresa.')
-    }
-
-    targetWorkflowId = workflow.id
-    workflowName = workflow.name
-  } else {
-    // `getOrCreateDefaultWorkflow` devolve `{ workflow, created }`
-    const { workflow } = await getOrCreateDefaultWorkflow(options)
-    targetWorkflowId = workflow.id
-    workflowName = workflow.name
-  }
-
-  // 4. Etapas existentes do workflow
-  const { data: existingStages, error: stagesError } = await supabase
-    .from('workflow_stages')
-    .select('id, name, position, stage_type, color, handled_by, is_active')
-    .eq('workflow_id', targetWorkflowId)
-    .eq('company_id', companyId)
-    .order('position', { ascending: true })
-
-  if (stagesError) {
-    throw new Error('Falha ao carregar as etapas do funil.')
-  }
-
-  const currentStages: TemplateStageRow[] = (existingStages || []) as TemplateStageRow[]
-  const byName = new Map<string, TemplateStageRow>()
-  for (const stage of currentStages) {
-    byName.set(stage.name.trim().toLowerCase(), stage)
-  }
-
-  const appliedStages: ApplyWorkflowTemplateResult['stages'] = []
-  const keptStageIds = new Set<string>()
-  let created = 0
-  let updated = 0
-
-  for (let index = 0; index < template.stages.length; index++) {
-    const templateStage = template.stages[index]
-    const color = sanitizeColor(templateStage.color)
-    const existing = byName.get(templateStage.name.trim().toLowerCase())
-
-    if (existing) {
-      const { data: updatedStage, error: updateError } = await supabase
-        .from('workflow_stages')
-        .update({
-          position: index,
-          stage_type: templateStage.stage_type,
-          color,
-          handled_by: templateStage.handled_by,
-          is_active: true,
-          updated_at: new Date().toISOString(),
+    if (firstWf) {
+      workflow = firstWf
+    } else {
+      // Provisiona o workflow padrão no banco
+      const { data: createdWf, error: createErr } = await client
+        .from('workflows')
+        .insert({
+          company_id: companyId,
+          name: 'Atendimento Principal',
+          description: 'Funil principal de atendimento e vendas',
+          is_default: true,
+          is_active: true
         })
-        .eq('id', existing.id)
-        .eq('company_id', companyId)
         .select()
         .single()
 
-      if (updateError) {
-        throw new Error(`Falha ao atualizar etapa "${templateStage.name}".`)
+      if (createErr || !createdWf) {
+        throw new Error(`Falha ao provisionar workflow inicial para empresa ${companyId}: ${createErr?.message}`)
       }
 
-      keptStageIds.add(existing.id)
-      updated += 1
-      appliedStages.push({
-        id: updatedStage.id,
-        name: templateStage.name,
-        stage_type: templateStage.stage_type,
-        handled_by: templateStage.handled_by,
-        color,
-        position: index,
-      })
+      // Insere as 3 etapas essenciais de partida
+      const initialStages = [
+        { name: 'Novo Contato', stage_type: 'initial', handled_by: 'ai', color: '#eab308', position: 0 },
+        { name: 'Em Atendimento', stage_type: 'in_progress', handled_by: 'human', color: '#3b82f6', position: 1 },
+        { name: 'Finalizado', stage_type: 'final', handled_by: 'human', color: '#22c55e', position: 2 }
+      ]
+
+      await client.from('workflow_stages').insert(
+        initialStages.map((s: any) => ({
+          company_id: companyId,
+          workflow_id: createdWf.id,
+          ...s,
+          is_active: true
+        }))
+      )
+
+      const { data: fullWf } = await client
+        .from('workflows')
+        .select('*, workflow_stages(*)')
+        .eq('id', createdWf.id)
+        .single()
+
+      workflow = fullWf
+    }
+  }
+
+  // Ordena etapas por posição
+  if (workflow?.workflow_stages) {
+    workflow.workflow_stages.sort((a: any, b: any) => a.position - b.position)
+  }
+
+  return workflow
+}
+
+/**
+ * Aplica um conjunto de etapas ao workflow de uma empresa com segurança transacional e sem orfanar conversas.
+ */
+export async function applyStagesToCompanyWorkflow({
+  companyId,
+  workflowId,
+  stages,
+  adminClient
+}: {
+  companyId: string
+  workflowId?: string
+  stages: SaveStagesInput[]
+  adminClient?: any
+}) {
+  const client = adminClient || createAdminClient()
+
+  if (!stages || stages.length === 0) {
+    throw new Error('O funil deve conter pelo menos uma etapa.')
+  }
+
+  // 1. Garante pelo menos uma etapa inicial e uma final
+  const hasInitial = stages.some((s) => s.stage_type === 'initial')
+  const hasFinal = stages.some((s) => s.stage_type === 'final')
+
+  if (!hasInitial) {
+    stages[0].stage_type = 'initial'
+  }
+  if (!hasFinal) {
+    stages[stages.length - 1].stage_type = 'final'
+  }
+
+  // 2. Localiza o workflow alvo
+  let targetWorkflowId = workflowId
+  if (!targetWorkflowId) {
+    const wf = await getCompanyWorkflowForAdmin(companyId, client)
+    targetWorkflowId = wf.id
+  }
+
+  // 3. Consulta etapas atuais do workflow
+  const { data: existingStages, error: fetchErr } = await client
+    .from('workflow_stages')
+    .select('id, name, stage_type, position, color, handled_by')
+    .eq('company_id', companyId)
+    .eq('workflow_id', targetWorkflowId)
+
+  if (fetchErr) {
+    throw new Error(`Falha ao ler etapas existentes: ${fetchErr.message}`)
+  }
+
+  const existingMap = new Map<string, any>()
+  for (const st of existingStages || []) {
+    existingMap.set(st.name.trim().toLowerCase(), st)
+  }
+
+  const updatedStageIds = new Set<string>()
+  const newStageIds: string[] = []
+
+  // 4. Cria ou atualiza as etapas especificadas
+  for (let pos = 0; pos < stages.length; pos++) {
+    const desired = stages[pos]
+    const key = desired.name.trim().toLowerCase()
+    const existing = existingMap.get(key)
+
+    if (existing) {
+      // Atualiza etapa existente preservando o UUID
+      const { error: updErr } = await client
+        .from('workflow_stages')
+        .update({
+          name: desired.name.trim(),
+          description: desired.description ? desired.description.trim() : null,
+          position: pos,
+          stage_type: desired.stage_type,
+          handled_by: desired.handled_by || 'human',
+          color: desired.color || '#64748b',
+          is_active: true
+        })
+        .eq('id', existing.id)
+        .eq('company_id', companyId)
+
+      if (updErr) {
+        throw new Error(`Falha ao atualizar etapa ${desired.name}: ${updErr.message}`)
+      }
+      updatedStageIds.add(existing.id)
     } else {
-      const { data: insertedStage, error: insertError } = await supabase
+      // Insere nova etapa
+      const { data: inserted, error: insErr } = await client
         .from('workflow_stages')
         .insert({
           company_id: companyId,
           workflow_id: targetWorkflowId,
-          name: templateStage.name,
-          position: index,
-          stage_type: templateStage.stage_type,
-          color,
-          handled_by: templateStage.handled_by,
-          is_active: true,
+          name: desired.name.trim(),
+          description: desired.description ? desired.description.trim() : null,
+          position: pos,
+          stage_type: desired.stage_type,
+          handled_by: desired.handled_by || 'human',
+          color: desired.color || '#64748b',
+          is_active: true
         })
-        .select()
+        .select('id')
         .single()
 
-      if (insertError) {
-        throw new Error(`Falha ao criar etapa "${templateStage.name}".`)
+      if (insErr || !inserted) {
+        throw new Error(`Falha ao criar etapa ${desired.name}: ${insErr?.message}`)
       }
-
-      keptStageIds.add(insertedStage.id)
-      created += 1
-      appliedStages.push({
-        id: insertedStage.id,
-        name: templateStage.name,
-        stage_type: templateStage.stage_type,
-        handled_by: templateStage.handled_by,
-        color,
-        position: index,
-      })
+      updatedStageIds.add(inserted.id)
+      newStageIds.push(inserted.id)
     }
   }
 
-  // 5. Etapas que saíram do template são desativadas (soft delete), preservando
-  //    o histórico e as conversas já vinculadas.
-  const obsoleteStages = currentStages.filter((stage) => !keptStageIds.has(stage.id))
-  let removed = 0
+  // 5. Identifica etapas obsoletas que foram removidas do funil
+  const obsoleteStages = (existingStages || []).filter((s: any) => !updatedStageIds.has(s.id))
 
   if (obsoleteStages.length > 0) {
-    const { error: obsoleteError } = await supabase
+    const { data: currentInitial } = await client
       .from('workflow_stages')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .select('id')
       .eq('workflow_id', targetWorkflowId)
       .eq('company_id', companyId)
-      .in('id', obsoleteStages.map((stage) => stage.id))
+      .eq('stage_type', 'initial')
+      .order('position', { ascending: true })
+      .limit(1)
+      .maybeSingle()
 
-    if (obsoleteError) {
-      throw new Error('Falha ao desativar etapas fora do template.')
+    const fallbackStageId = currentInitial?.id || Array.from(updatedStageIds)[0]
+
+    for (const obs of obsoleteStages) {
+      const { data: linkedConversations } = await client
+        .from('conversations')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('workflow_stage_id', obs.id)
+
+      if (linkedConversations && linkedConversations.length > 0 && fallbackStageId) {
+        await client
+          .from('conversations')
+          .update({ workflow_stage_id: fallbackStageId })
+          .eq('company_id', companyId)
+          .eq('workflow_stage_id', obs.id)
+      }
+
+      await client
+        .from('workflow_stages')
+        .delete()
+        .eq('id', obs.id)
+        .eq('company_id', companyId)
     }
-    removed = obsoleteStages.length
   }
 
-  // 6. Conversas vinculadas a etapas desativadas são realocadas para a etapa
-  //    inicial do template (preservando o histórico da conversa).
-  let reassignedConversations = 0
-  const initialStage = appliedStages.find((stage) => stage.stage_type === 'initial')
+  return getCompanyWorkflowForAdmin(companyId, client)
+}
 
-  if (obsoleteStages.length > 0 && initialStage) {
-    const { data: reassigned, error: reassignError } = await supabase
-      .from('conversations')
-      .update({
-        workflow_id: targetWorkflowId,
-        workflow_stage_id: initialStage.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('company_id', companyId)
-      .in('workflow_stage_id', obsoleteStages.map((stage) => stage.id))
-      .select('id')
+/**
+ * Aplica um template por chave identificadora (compatibilidade com etapa8.4.3p5)
+ */
+export async function applyWorkflowTemplate(
+  params: ApplyWorkflowTemplateParams
+): Promise<ApplyWorkflowTemplateResult> {
+  const template = getWorkflowTemplate(params.templateKey)
+  if (!template) {
+    throw new Error(`Template de funil não encontrado: "${params.templateKey}".`)
+  }
 
-    if (reassignError) {
-      throw new Error('Falha ao realocar conversas para a etapa inicial do funil.')
+  let client = params.options?.adminClient || params.options?.supabaseClient
+  let companyId = params.companyId
+
+  if (!client) {
+    client = createClient()
+  }
+
+  if (!companyId) {
+    const { data: userData } = await client.auth.getUser()
+    if (!userData?.user) {
+      throw new Error('Não autorizado.')
     }
-
-    reassignedConversations = (reassigned || []).length
+    const { data: profile } = await client
+      .from('profiles')
+      .select('company_id')
+      .eq('id', userData.user.id)
+      .single()
+    if (!profile?.company_id) {
+      throw new Error('Empresa não encontrada.')
+    }
+    companyId = profile.company_id
   }
 
-  // 7. Conversas sem etapa do workflow recebe a etapa inicial
-  if (initialStage) {
-    await supabase
-      .from('conversations')
-      .update({
-        workflow_id: targetWorkflowId,
-        workflow_stage_id: initialStage.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('company_id', companyId)
-      .is('workflow_stage_id', null)
-  }
+  const updatedWf = await applyStagesToCompanyWorkflow({
+    companyId: companyId!,
+    workflowId: params.workflowId,
+    stages: template.stages,
+    adminClient: client
+  })
 
   return {
-    workflowId: targetWorkflowId,
-    workflowName,
-    stages: appliedStages,
-    created,
-    updated,
-    removed,
-    reassignedConversations,
+    workflowId: updatedWf.id,
+    workflowName: updatedWf.name,
+    stages: (updatedWf.workflow_stages || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      stage_type: s.stage_type,
+      handled_by: s.handled_by || 'human',
+      color: s.color || '#64748b',
+      position: s.position
+    })),
+    created: template.stages.length,
+    updated: 0,
+    removed: 0,
+    reassignedConversations: 0
   }
 }

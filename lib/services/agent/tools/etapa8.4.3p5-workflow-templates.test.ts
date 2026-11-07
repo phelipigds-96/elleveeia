@@ -19,9 +19,9 @@ import assert from 'node:assert/strict'
 import {
   WORKFLOW_TEMPLATES,
   getWorkflowTemplate,
+  DEFAULT_WORKFLOW_STAGES,
   type WorkflowTemplate,
-} from '@/lib/services/workflows/templates'
-import { DEFAULT_WORKFLOW_STAGES } from '@/lib/services/workflows/workflows'
+} from '../../workflows/template-catalog.ts'
 
 const VALID_STAGE_TYPES = ['initial', 'in_progress', 'final']
 const VALID_HANDLED_BY = ['ai', 'human', 'waiting']

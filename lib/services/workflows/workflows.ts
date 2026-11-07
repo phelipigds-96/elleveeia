@@ -22,12 +22,18 @@ export interface WorkflowStage {
   /** Cor hexadecimal da coluna no Kanban (Marco 1). Opcional para compatibilidade. */
   color?: string | null
   /** Responsável operacional pela etapa (Marco 1). Não substitui `stage_type`. */
-  handled_by?: 'ai' | 'human' | 'waiting'
+  handled_by?: 'ai' | 'human' | 'waiting' | null
 }
 
 export interface WorkflowServiceOptions {
   supabaseClient?: any
   adminClient?: any
+}
+
+export interface CreateWorkflowStageOptions extends WorkflowServiceOptions {
+  color?: string | null
+  handled_by?: 'ai' | 'human' | 'waiting' | null
+  description?: string | null
 }
 
 export interface AuthenticatedUserContext {
@@ -106,11 +112,8 @@ export async function getCompanyWorkflows(options?: WorkflowServiceOptions) {
   return workflows || []
 }
 
-export const DEFAULT_WORKFLOW_STAGES = [
-  { name: 'Novo Contato', stage_type: 'initial' as const, position: 0, color: '#eab308', handled_by: 'ai' as const },
-  { name: 'Em Atendimento', stage_type: 'in_progress' as const, position: 1, color: '#3b82f6', handled_by: 'human' as const },
-  { name: 'Finalizado', stage_type: 'final' as const, position: 2, color: '#22c55e', handled_by: 'human' as const }
-] as const
+import { DEFAULT_WORKFLOW_STAGES } from './template-catalog'
+export { DEFAULT_WORKFLOW_STAGES }
 
 /**
  * Recupera de forma segura o workflow padrão persistido após colisão 23505.
@@ -458,7 +461,7 @@ export async function createWorkflowStage(
   workflowId: string, 
   name: string, 
   stageType: string = 'in_progress',
-  options?: WorkflowServiceOptions & { color?: string | null; handled_by?: string | null }
+  options?: CreateWorkflowStageOptions
 ) {
   const supabase = getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
@@ -506,16 +509,22 @@ export async function createWorkflowStage(
 
   const nextPos = stages && stages.length > 0 ? stages[0].position + 1 : 0
 
+  const defaultColor = finalStageType === 'initial' ? '#eab308' : finalStageType === 'final' ? '#22c55e' : '#3b82f6'
+  const defaultHandledBy = finalStageType === 'initial' ? 'ai' : 'human'
+  const finalColor = options?.color && /^#[0-9a-f]{3,8}$/i.test(options.color) ? options.color : defaultColor
+  const finalHandledBy = options?.handled_by && ['ai', 'human', 'waiting'].includes(options.handled_by) ? options.handled_by : defaultHandledBy
+
   const { data, error } = await supabase
     .from('workflow_stages')
     .insert({
       company_id: companyId,
       workflow_id: workflowId,
       name: name.trim(),
+      description: options?.description ? options.description.trim() : null,
       position: nextPos,
       stage_type: finalStageType,
-      ...(stageColor ? { color: stageColor } : {}),
-      ...(stageHandledBy ? { handled_by: stageHandledBy } : {})
+      color: finalColor,
+      handled_by: finalHandledBy
     })
     .select()
     .single()
