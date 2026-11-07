@@ -58,6 +58,10 @@ export default function KanbanPanelClient({
   const [pendingStage, setPendingStage] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  // FASE 4 — Anúncio de alterações para leitores de tela: mover um cartão
+  // entre colunas só é percebido visualmente; sem isto, o usuário não recebe
+  // nenhuma confirmação do que mudou.
+  const [liveMessage, setLiveMessage] = useState<string | null>(null)
 
   // Normaliza o join de customers, que pode voltar como array ou objeto.
   const customerRef = (conv: Conversation): CustomerRef | null => {
@@ -138,12 +142,16 @@ export default function KanbanPanelClient({
     setPendingStage((p) => ({ ...p, [conversationId]: true }))
     setError(null)
 
+    const stageLabel = stage?.name || "Sem etapa"
+    setLiveMessage(`Conversa ${customerName(items.find((c) => c.id === conversationId) || ({} as Conversation))} movida para ${stageLabel}.`)
+
     startTransition(async () => {
       const result = await moveConversationToStageAction(conversationId, stageId)
       setPendingStage((p) => ({ ...p, [conversationId]: false }))
       if (!result.success) {
         setItems(previous)
         setError(result.error || "Não foi possível mover a conversa.")
+        setLiveMessage("Não foi possível mover a conversa. A posição anterior foi restaurada.")
       }
     })
   }
@@ -158,6 +166,11 @@ export default function KanbanPanelClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* Região viva: anuncia o resultado do movimento para leitores de tela. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {liveMessage || ""}
+      </div>
+
       {error ? (
         <div
           role="alert"
@@ -170,11 +183,19 @@ export default function KanbanPanelClient({
       <div className="scroll-slim flex min-h-0 flex-1 gap-4 overflow-x-auto pb-2">
         {stages.map((stage) => {
           const cards = cardsByStage[stage.id] || []
+          const stageColor = stage.color || "#64748b"
+          const stageTypeLabel =
+            stage.stage_type === "final"
+              ? "Etapa final"
+              : stage.stage_type === "in_progress"
+              ? "Etapa em andamento"
+              : "Etapa inicial"
           return (
             <section
               key={stage.id}
               className="flex min-w-[280px] flex-1 flex-col rounded-xl border border-ellevee-stone bg-ellevee-stone-subtle overflow-hidden"
-              style={{ borderTop: `4px solid ${stage.color || '#64748b'}` }}
+              style={{ borderTop: `4px solid ${stageColor}` }}
+              aria-label={`${stage.name} — ${stageTypeLabel}, ${cards.length} ${cards.length === 1 ? "conversa" : "conversas"}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault()
@@ -186,7 +207,8 @@ export default function KanbanPanelClient({
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: stage.color || '#64748b' }}
+                    style={{ backgroundColor: stageColor }}
+                    aria-hidden="true"
                   />
                   <h2 className="text-sm font-semibold text-ellevee-ink truncate" title={stage.name}>
                     {stage.name}
@@ -215,7 +237,7 @@ export default function KanbanPanelClient({
               <div className="scroll-slim flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto p-3">
                 {cards.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-ellevee-stone bg-white/60 px-3 py-6 text-center text-meta text-ellevee-ink-muted">
-                    Arraste uma conversa para cá
+                    Nenhuma conversa nesta etapa. Arraste um cartão para cá ou use o seletor no cartão.
                   </p>
                 ) : null}
 
