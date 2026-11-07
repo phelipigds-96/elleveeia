@@ -14,8 +14,8 @@ export default function AdminSettingsPage() {
             <h1 className="font-display text-2xl font-bold tracking-tight text-ellevee-ink">
               Configurações Globais
             </h1>
-            <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider text-ellevee-sage">
-              Simulação
+            <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider text-emerald-800 bg-emerald-50 border-emerald-200">
+              Produção
             </Badge>
           </div>
           <p className="text-xs text-ellevee-sage mt-1 font-sans">

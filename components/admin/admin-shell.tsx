@@ -206,12 +206,12 @@ export default function AdminShell({ children }: AdminShellProps) {
             </div>
           </div>
 
-          {/* Identificação Clara de Ambiente Demo / Simulação */}
+          {/* Identificação Clara de Ambiente de Produção */}
           <div className="px-2.5 py-1.5 rounded bg-white/10 border border-white/15 flex items-center justify-between text-[11px]">
             <span className="text-[#A6B5A6] font-medium">Ambiente:</span>
-            <span className="font-semibold text-ellevee-accent flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider">
-              <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
-              SIMULAÇÃO
+            <span className="font-semibold text-emerald-400 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              PRODUÇÃO
             </span>
           </div>
 
@@ -260,9 +260,9 @@ export default function AdminShell({ children }: AdminShellProps) {
 
           {/* Direita: Indicador de Ambiente e Perfil */}
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#F8F8F5] border border-ellevee-stone text-ellevee-ink">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              <span>Modo Demonstração</span>
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-50/90 border border-emerald-200/80 text-emerald-950">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              <span className="font-semibold">Produção Ativa</span>
             </div>
 
             <div className="h-4 w-px bg-ellevee-stone" />
