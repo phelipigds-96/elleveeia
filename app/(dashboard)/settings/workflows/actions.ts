@@ -20,6 +20,18 @@ const updateWorkflowStageSchema = z.object({
     errorMap: () => ({ message: 'Tipo de etapa deve ser initial, in_progress ou final.' })
   }).optional(),
   is_active: z.boolean().optional(),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, 'Cor deve ser um valor hexadecimal, por exemplo #3b82f6.')
+    .nullable()
+    .optional(),
+  handled_by: z
+    .enum(['ai', 'human', 'waiting'], {
+      errorMap: () => ({ message: 'Responsável da etapa deve ser ai, human ou waiting.' })
+    })
+    .nullable()
+    .optional(),
 }).strict('Campos adicionais ou não autorizados não podem ser informados na atualização da etapa.')
 
 /**
@@ -35,15 +47,29 @@ export async function createDefaultWorkflowAction() {
   return result.workflow
 }
 
-export async function createWorkflowStageAction(workflowId: string, name: string) {
+export async function createWorkflowStageAction(
+  workflowId: string,
+  name: string,
+  handled_by?: 'ai' | 'human' | 'waiting' | null,
+  color?: string | null
+) {
   if (!workflowId || !UUID_REGEX.test(workflowId.trim())) {
     throw new Error('Identificador de workflow inválido.')
   }
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     throw new Error('Nome da etapa é obrigatório.')
   }
+  if (handled_by && !['ai', 'human', 'waiting'].includes(handled_by)) {
+    throw new Error('Responsável da etapa deve ser ai, human ou waiting.')
+  }
+  if (color && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color.trim())) {
+    throw new Error('Cor da etapa inválida. Use um valor hexadecimal, por exemplo #3b82f6.')
+  }
 
-  const stage = await createWorkflowStage(workflowId.trim(), name.trim(), 'in_progress')
+  const stage = await createWorkflowStage(workflowId.trim(), name.trim(), 'in_progress', {
+    handled_by: handled_by || null,
+    color: color || null,
+  })
   revalidatePath('/settings/workflows')
   return stage
 }

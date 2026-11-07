@@ -130,6 +130,21 @@ export interface ApplyWorkflowTemplateResult {
   reassignedConversations: number
 }
 
+/**
+ * Forma da linha de `workflow_stages` usada durante a aplicação do template.
+ * Tipagem explícita para que os callbacks (`filter`, `map`) não dependam de
+ * inferência implícita do driver do Supabase.
+ */
+interface TemplateStageRow {
+  id: string
+  name: string
+  position: number
+  stage_type: string
+  color: string | null
+  handled_by: string | null
+  is_active: boolean
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function isValidUuid(id: string): boolean {
@@ -249,8 +264,8 @@ export async function applyWorkflowTemplate(
     throw new Error('Falha ao carregar as etapas do funil.')
   }
 
-  const currentStages = existingStages || []
-  const byName = new Map<string, (typeof currentStages)[number]>()
+  const currentStages: TemplateStageRow[] = (existingStages || []) as TemplateStageRow[]
+  const byName = new Map<string, TemplateStageRow>()
   for (const stage of currentStages) {
     byName.set(stage.name.trim().toLowerCase(), stage)
   }

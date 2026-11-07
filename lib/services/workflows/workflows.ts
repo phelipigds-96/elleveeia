@@ -170,6 +170,18 @@ async function ensureDefaultStages(
       .filter(Boolean)
   )
 
+  // Marco 1: se o funil já foi configurado com etapas de um template por
+  // segmento, as etapas padrão NÃO devem ser reintroduzidas — do contrário
+  // o funil voltaria a ter colunas genéricas que o cliente escolheu remover.
+  const defaultNames = new Set(DEFAULT_WORKFLOW_STAGES.map((s) => s.name.toLowerCase()))
+  const hasCustomStages = (stagesList || []).some(
+    (s: any) => s?.name && !defaultNames.has(String(s.name).trim().toLowerCase())
+  )
+
+  if (hasCustomStages) {
+    return
+  }
+
   for (const defStage of DEFAULT_WORKFLOW_STAGES) {
     if (!existingStageNames.has(defStage.name.toLowerCase())) {
       const { error: insertStageError } = await supabase
