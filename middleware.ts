@@ -10,6 +10,9 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/api/outbox') ||
     request.nextUrl.pathname.startsWith('/paineladmin') ||
     request.nextUrl.pathname.startsWith('/companies') ||
+    request.nextUrl.pathname.startsWith('/plans') ||
+    request.nextUrl.pathname.startsWith('/agents') ||
+    request.nextUrl.pathname.startsWith('/providers') ||
     request.nextUrl.pathname.startsWith('/audit') ||
     request.nextUrl.pathname.startsWith('/admin-settings') ||
     request.nextUrl.pathname.startsWith('/conversations')

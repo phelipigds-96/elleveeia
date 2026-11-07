@@ -106,6 +106,10 @@ export function humanizeAuditAction(action: string): {
       return { label: 'Cadastro', badgeVariant: 'default' }
     case 'plan.updated':
       return { label: 'Planos', badgeVariant: 'default' }
+    case 'agent.status_changed':
+      return { label: 'Agentes', badgeVariant: 'default' }
+    case 'provider.tested':
+      return { label: 'Provedores', badgeVariant: 'secondary' }
     case 'company.plan_changed':
       return { label: 'Plano', badgeVariant: 'default' }
     case 'company.limits_changed':
@@ -138,6 +142,12 @@ export function humanizeAuditDetails(action: string, payload: any, reason?: stri
     }
     if (action === 'plan.updated') {
       return `Plano ${payload.plan_name || payload.plan_key || ''} atualizado: ${payload.changes_summary || 'parâmetros e cotas ajustados'}`
+    }
+    if (action === 'agent.status_changed') {
+      return `Agente "${payload.agent_name || ''}" (${payload.company_name || ''}) alterado para ${payload.new_status || 'ativo'}`
+    }
+    if (action === 'provider.tested') {
+      return `Teste de conectividade com ${payload.provider || 'OpenAI'}: ${payload.status || 'OK'} (${payload.latency_ms || 0}ms)`
     }
     if (action === 'company.plan_changed') {
       return `Plano alterado para ${payload.plan_tier || payload.new_plan || 'Pro'}`
