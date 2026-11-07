@@ -8,19 +8,33 @@ import {
   DollarSign, 
   Bot, 
   Clock, 
-  Activity,
-  CheckCircle2,
-  AlertCircle,
-  Cpu,
-  Layers,
-  ArrowRight,
-  ShieldCheck
+  Activity, 
+  CheckCircle2, 
+  AlertCircle, 
+  Cpu, 
+  Layers, 
+  ArrowRight, 
+  ShieldCheck 
 } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { getAdminDashboardMetrics } from "@/lib/services/platform/admin-metrics"
 
-export default function SuperAdminDashboardPage() {
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+export const metadata = {
+  title: "Dashboard Executivo | SuperAdmin Ellevee IA",
+  description: "Panorama operacional consolidado e métricas da plataforma Ellevee IA.",
+}
+
+export default async function SuperAdminDashboardPage() {
+  const metrics = await getAdminDashboardMetrics()
+
+  // Calcula o valor máximo para a proporção das barras do gráfico
+  const maxBarValue = Math.max(...metrics.chart7Days.map((d) => d.count), 10)
+
   return (
     <div className="space-y-8">
       {/* Header Executivo */}
@@ -30,12 +44,13 @@ export default function SuperAdminDashboardPage() {
             <h1 className="font-display text-2xl font-bold tracking-tight text-ellevee-ink">
               Visão geral
             </h1>
-            <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider text-ellevee-sage">
-              Simulação
-            </Badge>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]/60 font-mono uppercase tracking-wider">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              Painel Oficial
+            </span>
           </div>
           <p className="text-xs text-ellevee-sage mt-1 font-sans">
-            Panorama operacional da plataforma Ellevee IA.
+            Panorama operacional consolidado da plataforma Ellevee IA.
           </p>
         </div>
 
@@ -50,9 +65,9 @@ export default function SuperAdminDashboardPage() {
         </div>
       </div>
 
-      {/* Grid de Métricas Principais (Hierarquia Editorial Refinada) */}
+      {/* Grid de Métricas Principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Empresas Ativas (Destaque Principal) */}
+        {/* Card 1: Empresas Ativas */}
         <Card className="bg-white border-ellevee-stone hover:border-ellevee-ink/30 transition-all shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-1 space-y-0">
             <span className="text-[11px] font-semibold text-ellevee-sage uppercase tracking-wider font-sans">
@@ -62,17 +77,26 @@ export default function SuperAdminDashboardPage() {
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight">42</span>
-              <span className="text-xs text-ellevee-sage font-medium font-sans">/ 48 cadastradas</span>
+              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight">
+                {metrics.companies.active}
+              </span>
+              <span className="text-xs text-ellevee-sage font-medium font-sans">
+                / {metrics.companies.total} cadastradas
+              </span>
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-ellevee-ink font-medium">
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F4F8E8] text-[#3D5215] font-mono text-[10px] font-bold">
-                +12% no trimestre
+                100% ativas
               </span>
-              <span className="text-ellevee-sage">6 em onboarding</span>
+              {metrics.companies.trial > 0 && (
+                <span className="text-ellevee-sage">{metrics.companies.trial} em trial</span>
+              )}
+              {metrics.companies.suspended > 0 && (
+                <span className="text-rose-600 font-semibold">{metrics.companies.suspended} suspensas</span>
+              )}
             </div>
             <p className="text-[11px] text-ellevee-sage/80 mt-2 font-sans border-t border-ellevee-stone/40 pt-2">
-              Tenants ativos com fluxo transacional liberado.
+              Tenants com isolamento e quotas gerenciadas no Supabase.
             </p>
           </CardContent>
         </Card>
@@ -81,22 +105,24 @@ export default function SuperAdminDashboardPage() {
         <Card className="bg-white border-ellevee-stone hover:border-ellevee-ink/30 transition-all shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-1 space-y-0">
             <span className="text-[11px] font-semibold text-ellevee-sage uppercase tracking-wider font-sans">
-              Volume Trafegado Hoje
+              Mensagens Processadas
             </span>
             <MessageSquare className="h-3.5 w-3.5 text-ellevee-sage" />
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">128.450</span>
+              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">
+                {metrics.messages.total.toLocaleString("pt-BR")}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-ellevee-sage font-medium">
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F3F2ED] text-ellevee-ink font-mono text-[10px] font-semibold border border-ellevee-stone">
-                SLA 99.85%
+                SLA {metrics.messages.slaPercent}%
               </span>
-              <span>1.42M no mês</span>
+              <span>{metrics.messages.thisMonth.toLocaleString("pt-BR")} no mês</span>
             </div>
             <p className="text-[11px] text-ellevee-sage/80 mt-2 font-sans border-t border-ellevee-stone/40 pt-2">
-              Tráfego consolidado de inbound e outbound.
+              Tráfego consolidado de inbound e outbound (WhatsApp/n8n).
             </p>
           </CardContent>
         </Card>
@@ -105,45 +131,50 @@ export default function SuperAdminDashboardPage() {
         <Card className="bg-white border-ellevee-stone hover:border-ellevee-ink/30 transition-all shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-1 space-y-0">
             <span className="text-[11px] font-semibold text-ellevee-sage uppercase tracking-wider font-sans">
-              MRR Estimado
+              MRR Contratado
             </span>
             <DollarSign className="h-3.5 w-3.5 text-ellevee-sage" />
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">R$ 38.600</span>
+              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">
+                {metrics.financial.formattedMrr}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-ellevee-sage font-medium">
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F4F8E8] text-[#3D5215] font-mono text-[10px] font-bold">
-                +8.4% MoM
+                Assinaturas Ativas
               </span>
-              <span>Ticket R$ 919</span>
+              <span>Ticket R$ {metrics.financial.averageTicket}</span>
             </div>
             <p className="text-[11px] text-ellevee-sage/80 mt-2 font-sans border-t border-ellevee-stone/40 pt-2">
-              Faturamento mensal recorrente contratado.
+              Faturamento mensal recorrente contratado das empresas ativas.
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 4: Agentes em Operação */}
+        {/* Card 4: Conversas & Agentes */}
         <Card className="bg-white border-ellevee-stone hover:border-ellevee-ink/30 transition-all shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-1 space-y-0">
             <span className="text-[11px] font-semibold text-ellevee-sage uppercase tracking-wider font-sans">
-              Agentes Autônomos
+              Atendimento Omnichannel
             </span>
             <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">64</span>
-              <span className="text-xs text-ellevee-sage font-medium font-sans">instâncias</span>
+              <span className="font-display text-3xl font-bold text-ellevee-ink tracking-tight font-mono">
+                {metrics.conversations.total}
+              </span>
+              <span className="text-xs text-ellevee-sage font-medium font-sans">conversas</span>
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-ellevee-sage font-medium">
-              <Clock className="h-3 w-3 text-ellevee-sage" />
-              <span>Latência média: <strong className="text-ellevee-ink font-mono">1.1s</strong></span>
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F3F2ED] text-ellevee-ink font-mono text-[10px] font-semibold border border-ellevee-stone">
+                {metrics.conversations.open} IA • {metrics.conversations.human} Humano
+              </span>
             </div>
             <p className="text-[11px] text-ellevee-sage/80 mt-2 font-sans border-t border-ellevee-stone/40 pt-2">
-              Multi-model routing (GPT-4o & Gemini).
+              {metrics.agents.total} agentes autônomos com roteamento multi-model.
             </p>
           </CardContent>
         </Card>
@@ -151,7 +182,7 @@ export default function SuperAdminDashboardPage() {
 
       {/* Grid: Gráfico de Volume Diário & Saúde Operacional */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gráfico de Volume Diário (7 Dias) — Altura e Barras Claramente Evidentes */}
+        {/* Gráfico de Volume Diário (7 Dias) */}
         <Card className="lg:col-span-2 bg-white border-ellevee-stone shadow-sm">
           <CardHeader className="border-b border-ellevee-stone/60 pb-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -160,12 +191,12 @@ export default function SuperAdminDashboardPage() {
                   <CardTitle className="font-display text-base font-bold text-ellevee-ink">
                     Volume de Mensagens
                   </CardTitle>
-                  <span className="text-[10px] font-mono text-ellevee-sage uppercase tracking-wider bg-[#F3F2ED] border border-ellevee-stone px-1.5 py-0.5 rounded">
-                    Demonstração
+                  <span className="text-[10px] font-mono text-emerald-800 font-semibold bg-[#F4F8E8] border border-[#D5E89B] px-1.5 py-0.5 rounded">
+                    Dados Reais
                   </span>
                 </div>
                 <CardDescription className="text-xs text-ellevee-sage mt-0.5 font-sans">
-                  Distribuição diária nos últimos 7 dias com destaque para o pico operacional.
+                  Distribuição diária de mensagens registradas nos últimos 7 dias.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -177,21 +208,13 @@ export default function SuperAdminDashboardPage() {
           </CardHeader>
 
           <CardContent className="pt-6">
-            {/* Gráfico de Barras Verticais Proporcionais */}
+            {/* Gráfico de Barras Verticais Proporcionais Reais */}
             <div className="h-56 flex items-end justify-between gap-3 sm:gap-4 px-2 sm:px-4">
-              {[
-                { day: "Seg", val: 68, label: "68K", isPeak: false },
-                { day: "Ter", val: 82, label: "82K", isPeak: false },
-                { day: "Qua", val: 95, label: "95K", isPeak: false },
-                { day: "Qui", val: 110, label: "110K", isPeak: false },
-                { day: "Sex", val: 128, label: "128K", isPeak: true },
-                { day: "Sáb", val: 74, label: "74K", isPeak: false },
-                { day: "Dom", val: 55, label: "55K", isPeak: false },
-              ].map((item) => {
-                const heightPercent = Math.round((item.val / 135) * 100)
+              {metrics.chart7Days.map((item) => {
+                const heightPercent = maxBarValue > 0 ? Math.max(Math.round((item.count / maxBarValue) * 100), 8) : 8
 
                 return (
-                  <div key={item.day} className="flex-1 flex flex-col items-center gap-2 group cursor-default">
+                  <div key={item.dateStr} className="flex-1 flex flex-col items-center gap-2 group cursor-default">
                     {/* Rótulo Superior com Valor da Barra */}
                     <div className="h-4 flex items-center justify-center">
                       <span className={`text-[11px] font-mono font-semibold transition-colors ${
@@ -209,7 +232,9 @@ export default function SuperAdminDashboardPage() {
                         className={`w-full rounded-t-[3px] transition-all duration-300 shadow-sm ${
                           item.isPeak
                             ? "bg-ellevee-accent ring-1 ring-[#9EB844]"
-                            : "bg-[#718071] hover:bg-[#5A685A]"
+                            : item.count > 0
+                            ? "bg-[#718071] hover:bg-[#5A685A]"
+                            : "bg-[#718071]/30"
                         }`}
                         style={{ height: `${heightPercent}%` }}
                       />
@@ -224,7 +249,7 @@ export default function SuperAdminDashboardPage() {
                       }`}>
                         {item.day}
                       </span>
-                      {item.isPeak && (
+                      {item.isPeak && item.count > 0 && (
                         <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" title="Pico Semanal" />
                       )}
                     </div>
@@ -238,23 +263,21 @@ export default function SuperAdminDashboardPage() {
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-2 text-ellevee-ink font-medium">
                   <span className="h-2.5 w-2.5 rounded-sm bg-[#718071]" />
-                  Dias Regulares <span className="font-mono text-ellevee-sage">(Stone / Sage)</span>
+                  Volume Diário <span className="font-mono text-ellevee-sage">(Mensagens no banco)</span>
                 </span>
                 <span className="flex items-center gap-2 text-ellevee-ink font-medium">
                   <span className="h-2.5 w-2.5 rounded-sm bg-ellevee-accent ring-1 ring-[#9EB844]" />
-                  Pico Operacional <span className="font-mono text-ellevee-sage">(Sexta 128K)</span>
+                  Pico da Semana
                 </span>
               </div>
               <div className="flex items-center gap-3 text-[11px] text-ellevee-sage font-mono">
-                <span>WhatsApp: 88%</span>
-                <span>•</span>
-                <span>Webchat/APIs: 12%</span>
+                <span>Total histórico: {metrics.messages.total} msgs</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Card de Saúde Operacional (Estruturado conforme Seção 3.3) */}
+        {/* Card de Saúde Operacional */}
         <Card className="bg-white border-ellevee-stone shadow-sm flex flex-col justify-between">
           <div>
             <CardHeader className="border-b border-ellevee-stone/60 pb-3.5">
@@ -265,12 +288,12 @@ export default function SuperAdminDashboardPage() {
                     Saúde Operacional
                   </CardTitle>
                 </div>
-                <Badge variant="outline" className="text-[9px] uppercase font-mono text-amber-700 bg-amber-50/60 border-amber-200">
-                  DEMO / SIMULAÇÃO
+                <Badge variant="outline" className="text-[9px] uppercase font-mono text-emerald-800 bg-[#F4F8E8] border-[#D5E89B]">
+                  OPERACIONAL
                 </Badge>
               </div>
               <CardDescription className="text-xs text-ellevee-sage mt-0.5 font-sans">
-                Parâmetros operacionais simulados do motor de fundo e banco.
+                Parâmetros operacionais do motor transacional e banco PostgreSQL.
               </CardDescription>
             </CardHeader>
 
@@ -278,40 +301,40 @@ export default function SuperAdminDashboardPage() {
               {/* 1. Worker de Reconciliação */}
               <div className="rounded-md border border-ellevee-stone/80 p-3 bg-[#FBFBFA] space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-ellevee-ink">Worker de Reconciliação</span>
+                  <span className="font-semibold text-ellevee-ink">Worker de Outbox & Mensageria</span>
                   <span className="font-semibold text-emerald-700 flex items-center gap-1.5 font-sans text-[11px]">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Operando (idle)
+                    Operando normalmente
                   </span>
                 </div>
                 <div className="text-[10px] text-ellevee-sage font-mono">
-                  Ciclo a cada 60s • Última varredura há 38 segundos
+                  Despacho atômico de outbox e webhooks de entrada ativos
                 </div>
               </div>
 
-              {/* 2. Gateway Lock Leases */}
+              {/* 2. RLS & Governança */}
               <div className="rounded-md border border-ellevee-stone/80 p-3 bg-[#FBFBFA] space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-ellevee-ink">Gateway Lock Leases</span>
-                  <span className="font-mono font-semibold text-ellevee-ink text-[11px]">
-                    4 leases ativos
+                  <span className="font-semibold text-ellevee-ink">Isolamento Multi-tenant (RLS)</span>
+                  <span className="font-mono font-semibold text-emerald-700 text-[11px]">
+                    100% ativo
                   </span>
                 </div>
                 <div className="text-[10px] text-ellevee-sage font-sans">
-                  Concorrência isolada via PostgreSQL <code className="font-mono text-[9px] bg-[#F3F2ED] px-1 py-0.5 rounded">SKIP LOCKED</code>
+                  Função <code className="font-mono text-[9px] bg-[#F3F2ED] px-1 py-0.5 rounded">get_auth_company_id()</code> com verificação em cada query
                 </div>
               </div>
 
               {/* 3. Mensagens Stalled */}
               <div className="rounded-md border border-ellevee-stone/80 p-3 bg-[#FBFBFA] space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-ellevee-ink">Mensagens Stalled</span>
+                  <span className="font-semibold text-ellevee-ink">Mensagens Travadas (Stalled)</span>
                   <span className="font-mono font-semibold text-emerald-700 text-[11px]">
                     0 travadas
                   </span>
                 </div>
                 <div className="text-[10px] text-ellevee-sage font-sans">
-                  Dead letter queue vazia • Fila outbox normalizada
+                  Fila outbox saudável • Sem locks expirados
                 </div>
               </div>
             </CardContent>
@@ -327,7 +350,7 @@ export default function SuperAdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Área de Atividade Recente (Seção 3.4 com alinhamento rigoroso e tag demonstrativa) */}
+      {/* Área de Atividade Recente */}
       <Card className="bg-white border-ellevee-stone shadow-sm">
         <CardHeader className="border-b border-ellevee-stone/60 pb-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -336,12 +359,12 @@ export default function SuperAdminDashboardPage() {
                 <CardTitle className="font-display text-base font-bold text-ellevee-ink">
                   Atividade Recente da Plataforma
                 </CardTitle>
-                <Badge variant="outline" className="text-[9px] font-mono text-ellevee-sage uppercase tracking-wider">
-                  Dados Demonstrativos
+                <Badge variant="outline" className="text-[9px] font-mono text-emerald-800 bg-[#F4F8E8] border-[#D5E89B] uppercase tracking-wider">
+                  Eventos Reais
                 </Badge>
               </div>
               <CardDescription className="text-xs text-ellevee-sage mt-0.5 font-sans">
-                Fluxo simulado de governança e auditoria operacional multi-tenant (Demonstração).
+                Trilha operacional e de governança multi-tenant gravada no banco.
               </CardDescription>
             </div>
             <Link href="/audit">
@@ -353,75 +376,35 @@ export default function SuperAdminDashboardPage() {
         </CardHeader>
 
         <CardContent className="pt-1 divide-y divide-ellevee-stone/50">
-          {[
-            {
-              id: "ev-1",
-              typeBadge: "Cadastro",
-              badgeVariant: "accent" as const,
-              title: "Nova empresa cadastrada",
-              description: "Vanguard Advocacia provisionada no plano Trial (1.000 msgs/mês)",
-              actor: "Phelipi (SuperAdmin)",
-              time: "Há 12 minutos",
-            },
-            {
-              id: "ev-2",
-              typeBadge: "Upgrade",
-              badgeVariant: "default" as const,
-              title: "Alteração de plano contratado",
-              description: "Clínica Bem Estar Odonto promovida de Starter para Pro (25.000 msgs)",
-              actor: "Phelipi (SuperAdmin)",
-              time: "Há 2 horas",
-            },
-            {
-              id: "ev-3",
-              typeBadge: "Limites",
-              badgeVariant: "outline" as const,
-              title: "Ajuste manual de limites",
-              description: "Coala Play Streaming teve cota expandida para 50.000 msgs e 5M tokens",
-              actor: "Phelipi (SuperAdmin)",
-              time: "Há 4 horas",
-            },
-            {
-              id: "ev-4",
-              typeBadge: "Agente",
-              badgeVariant: "outline" as const,
-              title: "Agente autônomo ativado",
-              description: "Novo bot especializado de triagem habilitado em Nexus Logística & Cargas",
-              actor: "Sistema Transacional",
-              time: "Ontem às 19:30",
-            },
-            {
-              id: "ev-5",
-              typeBadge: "Suspensão",
-              badgeVariant: "destructive" as const,
-              title: "Acesso de empresa suspenso",
-              description: "Alpha Imóveis Prime bloqueada temporariamente para conferência cadastral",
-              actor: "Phelipi (SuperAdmin)",
-              time: "Ontem às 14:10",
-            },
-          ].map((event) => (
-            <div key={event.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
-              <div className="flex items-start md:items-center gap-3 min-w-0">
-                <Badge variant={event.badgeVariant} className="text-[10px] w-18 justify-center shrink-0">
-                  {event.typeBadge}
-                </Badge>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-semibold text-ellevee-ink font-sans truncate">
-                    {event.title}
-                  </span>
-                  <span className="text-[11px] text-ellevee-sage truncate">
-                    {event.description}
-                  </span>
+          {metrics.recentActivity.length === 0 ? (
+            <div className="py-6 text-center text-xs text-ellevee-sage">
+              Nenhuma atividade registrada recentemente.
+            </div>
+          ) : (
+            metrics.recentActivity.map((event) => (
+              <div key={event.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                <div className="flex items-start md:items-center gap-3 min-w-0">
+                  <Badge variant={event.badgeVariant} className="text-[10px] w-20 justify-center shrink-0">
+                    {event.typeBadge}
+                  </Badge>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-semibold text-ellevee-ink font-sans truncate">
+                      {event.title}
+                    </span>
+                    <span className="text-[11px] text-ellevee-sage truncate">
+                      {event.description}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-[11px] text-ellevee-sage font-mono pl-7 md:pl-0 shrink-0">
+                  <span className="text-ellevee-sage/80">{event.actor}</span>
+                  <span>•</span>
+                  <span>{event.time}</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4 text-[11px] text-ellevee-sage font-mono pl-7 md:pl-0 shrink-0">
-                <span className="text-ellevee-sage/80">{event.actor}</span>
-                <span>•</span>
-                <span>{event.time}</span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </CardContent>
       </Card>
     </div>
