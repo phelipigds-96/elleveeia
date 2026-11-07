@@ -35,7 +35,7 @@ import {
   applyCompanyWorkflowTemplateAction,
 } from "@/app/(admin)/companies/actions"
 import { toast } from "@/components/ui/toast"
-import { WORKFLOW_TEMPLATES, WorkflowTemplate } from "@/lib/services/workflows/templates-data"
+import { WORKFLOW_TEMPLATES, WorkflowTemplate } from "@/lib/services/workflows/template-catalog"
 
 interface CompanyWorkflowDialogProps {
   company: CompanyMock | null

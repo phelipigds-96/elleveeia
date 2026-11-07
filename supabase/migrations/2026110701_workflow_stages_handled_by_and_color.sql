@@ -1,24 +1,30 @@
--- Migration: 2026110701_workflow_stages_handled_by_and_color.sql
--- Description: Adds visual color and operational responsibility (handled_by) to workflow_stages
+-- Marco 1 - Personalização de funis Kanban por empresa
+-- Adiciona cor e responsável (IA/Humano/Aguardando) às etapas de workflow,
+-- preservando o enum existente stage_type ('initial' | 'in_progress' | 'final').
 
-ALTER TABLE workflow_stages 
-ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#64748b',
-ADD COLUMN IF NOT EXISTS handled_by TEXT DEFAULT 'human';
+ALTER TABLE public.workflow_stages
+  ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#64748b';
 
-DO $$ 
-BEGIN 
+ALTER TABLE public.workflow_stages
+  ADD COLUMN IF NOT EXISTS handled_by TEXT DEFAULT 'human';
+
+DO $$
+BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'chk_workflow_stages_handled_by'
-  ) THEN 
-    ALTER TABLE workflow_stages 
-    ADD CONSTRAINT chk_workflow_stages_handled_by 
-    CHECK (handled_by IN ('ai', 'human', 'waiting'));
-  END IF; 
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.workflow_stages'::regclass
+      AND conname = 'ck_workflow_stages_handled_by'
+  ) THEN
+    ALTER TABLE public.workflow_stages
+      ADD CONSTRAINT ck_workflow_stages_handled_by
+      CHECK (handled_by IS NULL OR handled_by IN ('ai', 'human', 'waiting'));
+  END IF;
 END $$;
 
--- Backfill existing default stages with meaningful colors and responsibility
-UPDATE workflow_stages SET 
-  handled_by = CASE 
+-- Backfill inteligente: deriva o responsável e cores padrão do tipo de etapa existente.
+UPDATE public.workflow_stages
+SET 
+  handled_by = CASE
     WHEN stage_type = 'initial' THEN 'ai'
     WHEN stage_type = 'in_progress' THEN 'human'
     WHEN stage_type = 'final' THEN 'human'
@@ -30,4 +36,9 @@ UPDATE workflow_stages SET
     WHEN stage_type = 'final' THEN '#22c55e'
     ELSE '#64748b'
   END
-WHERE color IS NULL OR color = '#64748b' OR handled_by IS NULL;
+WHERE handled_by IS NULL OR color IS NULL OR color = '#64748b';
+
+COMMENT ON COLUMN public.workflow_stages.color IS
+  'Cor hexadecimal (ex.: #3b82f6) usada na coluna do funil Kanban.';
+COMMENT ON COLUMN public.workflow_stages.handled_by IS
+  'Responsavel da etapa: ai | human | waiting.';

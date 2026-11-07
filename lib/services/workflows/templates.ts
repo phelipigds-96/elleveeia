@@ -1,8 +1,43 @@
 import { createAdminClient } from '@/lib/supabase/service'
+import { createClient } from '@/lib/supabase/server'
+import { requireActiveCompany } from '@/lib/services/platform/tenant-access'
 import { WorkflowStage } from './workflows'
 
-export * from './templates-data'
-import { StageTemplate, WorkflowTemplate, SaveStagesInput, WORKFLOW_TEMPLATES } from './templates-data'
+export * from './template-catalog'
+import {
+  WORKFLOW_TEMPLATES,
+  WorkflowTemplate,
+  StageTemplate,
+  SaveStagesInput,
+  getWorkflowTemplate,
+} from './template-catalog'
+
+export interface ApplyWorkflowTemplateParams {
+  companyId?: string
+  workflowId?: string
+  templateKey: string
+  options?: {
+    supabaseClient?: any
+    adminClient?: any
+  }
+}
+
+export interface ApplyWorkflowTemplateResult {
+  workflowId: string
+  workflowName: string
+  stages: {
+    id: string
+    name: string
+    stage_type: 'initial' | 'in_progress' | 'final'
+    handled_by: 'ai' | 'human' | 'waiting'
+    color: string
+    position: number
+  }[]
+  created: number
+  updated: number
+  removed: number
+  reassignedConversations: number
+}
 
 /**
  * Consulta o workflow padrão e suas etapas para uma empresa no contexto Super Admin
@@ -108,11 +143,9 @@ export async function applyStagesToCompanyWorkflow({
   const hasFinal = stages.some((s) => s.stage_type === 'final')
 
   if (!hasInitial) {
-    // Promove a primeira para initial
     stages[0].stage_type = 'initial'
   }
   if (!hasFinal) {
-    // Promove a última para final
     stages[stages.length - 1].stage_type = 'final'
   }
 
@@ -149,7 +182,7 @@ export async function applyStagesToCompanyWorkflow({
     const existing = existingMap.get(key)
 
     if (existing) {
-      // Atualiza etapa existente preservando o UUID (para manter conversas associadas)
+      // Atualiza etapa existente preservando o UUID
       const { error: updErr } = await client
         .from('workflow_stages')
         .update({
@@ -198,7 +231,6 @@ export async function applyStagesToCompanyWorkflow({
   const obsoleteStages = (existingStages || []).filter((s: any) => !updatedStageIds.has(s.id))
 
   if (obsoleteStages.length > 0) {
-    // Encontra o ID da nova etapa inicial (ou primeira etapa ativa)
     const { data: currentInitial } = await client
       .from('workflow_stages')
       .select('id')
@@ -212,7 +244,6 @@ export async function applyStagesToCompanyWorkflow({
     const fallbackStageId = currentInitial?.id || Array.from(updatedStageIds)[0]
 
     for (const obs of obsoleteStages) {
-      // Verifica se há conversas associadas a esta etapa obsoleta
       const { data: linkedConversations } = await client
         .from('conversations')
         .select('id')
@@ -220,7 +251,6 @@ export async function applyStagesToCompanyWorkflow({
         .eq('workflow_stage_id', obs.id)
 
       if (linkedConversations && linkedConversations.length > 0 && fallbackStageId) {
-        // Realoca as conversas com segurança para a nova etapa inicial
         await client
           .from('conversations')
           .update({ workflow_stage_id: fallbackStageId })
@@ -228,7 +258,6 @@ export async function applyStagesToCompanyWorkflow({
           .eq('workflow_stage_id', obs.id)
       }
 
-      // Agora remove com segurança a etapa do banco
       await client
         .from('workflow_stages')
         .delete()
@@ -237,6 +266,64 @@ export async function applyStagesToCompanyWorkflow({
     }
   }
 
-  // 6. Retorna o workflow completo e atualizado
   return getCompanyWorkflowForAdmin(companyId, client)
+}
+
+/**
+ * Aplica um template por chave identificadora (compatibilidade com etapa8.4.3p5)
+ */
+export async function applyWorkflowTemplate(
+  params: ApplyWorkflowTemplateParams
+): Promise<ApplyWorkflowTemplateResult> {
+  const template = getWorkflowTemplate(params.templateKey)
+  if (!template) {
+    throw new Error(`Template de funil não encontrado: "${params.templateKey}".`)
+  }
+
+  let client = params.options?.adminClient || params.options?.supabaseClient
+  let companyId = params.companyId
+
+  if (!client) {
+    client = createClient()
+  }
+
+  if (!companyId) {
+    const { data: userData } = await client.auth.getUser()
+    if (!userData?.user) {
+      throw new Error('Não autorizado.')
+    }
+    const { data: profile } = await client
+      .from('profiles')
+      .select('company_id')
+      .eq('id', userData.user.id)
+      .single()
+    if (!profile?.company_id) {
+      throw new Error('Empresa não encontrada.')
+    }
+    companyId = profile.company_id
+  }
+
+  const updatedWf = await applyStagesToCompanyWorkflow({
+    companyId: companyId!,
+    workflowId: params.workflowId,
+    stages: template.stages,
+    adminClient: client
+  })
+
+  return {
+    workflowId: updatedWf.id,
+    workflowName: updatedWf.name,
+    stages: (updatedWf.workflow_stages || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      stage_type: s.stage_type,
+      handled_by: s.handled_by || 'human',
+      color: s.color || '#64748b',
+      position: s.position
+    })),
+    created: template.stages.length,
+    updated: 0,
+    removed: 0,
+    reassignedConversations: 0
+  }
 }

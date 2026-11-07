@@ -19,7 +19,9 @@ export interface WorkflowStage {
   position: number
   stage_type: 'initial' | 'in_progress' | 'final'
   is_active: boolean
+  /** Cor hexadecimal da coluna no Kanban (Marco 1). Opcional para compatibilidade. */
   color?: string | null
+  /** Responsável operacional pela etapa (Marco 1). Não substitui `stage_type`. */
   handled_by?: 'ai' | 'human' | 'waiting' | null
 }
 
@@ -29,9 +31,9 @@ export interface WorkflowServiceOptions {
 }
 
 export interface CreateWorkflowStageOptions extends WorkflowServiceOptions {
-  color?: string
-  handled_by?: 'ai' | 'human' | 'waiting'
-  description?: string
+  color?: string | null
+  handled_by?: 'ai' | 'human' | 'waiting' | null
+  description?: string | null
 }
 
 export interface AuthenticatedUserContext {
@@ -110,11 +112,8 @@ export async function getCompanyWorkflows(options?: WorkflowServiceOptions) {
   return workflows || []
 }
 
-export const DEFAULT_WORKFLOW_STAGES = [
-  { name: 'Novo Contato', stage_type: 'initial' as const, position: 0, color: '#eab308', handled_by: 'ai' as const },
-  { name: 'Em Atendimento', stage_type: 'in_progress' as const, position: 1, color: '#3b82f6', handled_by: 'human' as const },
-  { name: 'Finalizado', stage_type: 'final' as const, position: 2, color: '#22c55e', handled_by: 'human' as const }
-] as const
+import { DEFAULT_WORKFLOW_STAGES } from './template-catalog'
+export { DEFAULT_WORKFLOW_STAGES }
 
 /**
  * Recupera de forma segura o workflow padrão persistido após colisão 23505.
@@ -173,6 +172,18 @@ async function ensureDefaultStages(
       .map((s: any) => s.name?.trim().toLowerCase())
       .filter(Boolean)
   )
+
+  // Marco 1: se o funil já foi configurado com etapas de um template por
+  // segmento, as etapas padrão NÃO devem ser reintroduzidas — do contrário
+  // o funil voltaria a ter colunas genéricas que o cliente escolheu remover.
+  const defaultNames = new Set(DEFAULT_WORKFLOW_STAGES.map((s) => s.name.toLowerCase()))
+  const hasCustomStages = (stagesList || []).some(
+    (s: any) => s?.name && !defaultNames.has(String(s.name).trim().toLowerCase())
+  )
+
+  if (hasCustomStages) {
+    return
+  }
 
   for (const defStage of DEFAULT_WORKFLOW_STAGES) {
     if (!existingStageNames.has(defStage.name.toLowerCase())) {
@@ -418,6 +429,34 @@ export async function createWorkflow(name: string, description?: string, options
   return data
 }
 
+export const WORKFLOW_STAGE_HANDLED_BY_VALUES = ['ai', 'human', 'waiting'] as const
+export type WorkflowStageHandledBy = (typeof WORKFLOW_STAGE_HANDLED_BY_VALUES)[number]
+
+const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+
+/**
+ * Normaliza a cor da etapa (Marco 1). Cores inválidas caem no cinza padrão
+ * do Kanban, sem quebrar a gravação.
+ */
+function sanitizeStageColor(color: unknown): string | null {
+  if (color === undefined || color === null || color === '') return null
+  if (typeof color !== 'string') return null
+  const trimmed = color.trim()
+  if (!HEX_COLOR_REGEX.test(trimmed)) return null
+  return trimmed
+}
+
+/**
+ * Normaliza o responsável operacional da etapa (Marco 1).
+ */
+function sanitizeStageHandledBy(handledBy: unknown): WorkflowStageHandledBy | null {
+  if (handledBy === undefined || handledBy === null || handledBy === '') return null
+  if (typeof handledBy !== 'string') return null
+  const trimmed = handledBy.trim().toLowerCase()
+  if (!(WORKFLOW_STAGE_HANDLED_BY_VALUES as readonly string[]).includes(trimmed)) return null
+  return trimmed as WorkflowStageHandledBy
+}
+
 export async function createWorkflowStage(
   workflowId: string, 
   name: string, 
@@ -455,6 +494,10 @@ export async function createWorkflowStage(
 
   const validStageTypes = ['initial', 'in_progress', 'final']
   const finalStageType = validStageTypes.includes(stageType) ? stageType : 'in_progress'
+
+  // Marco 1: cor e responsável operacional são opcionais e nunca invalidam a criação
+  const stageColor = sanitizeStageColor(options?.color)
+  const stageHandledBy = sanitizeStageHandledBy(options?.handled_by)
 
   const { data: stages } = await supabase
     .from('workflow_stages')
@@ -554,15 +597,30 @@ export async function updateWorkflowStage(
       sanitizedUpdates.is_active = Boolean(updates.is_active)
     }
 
+    // Marco 1: cor da coluna no Kanban
     if (updates.color !== undefined) {
-      sanitizedUpdates.color = updates.color === null ? '#64748b' : String(updates.color).trim()
+      if (updates.color === null) {
+        sanitizedUpdates.color = null
+      } else {
+        const parsedColor = sanitizeStageColor(updates.color)
+        if (!parsedColor) {
+          throw new Error('Cor da etapa inválida. Use um valor hexadecimal, por exemplo #3b82f6.')
+        }
+        sanitizedUpdates.color = parsedColor
+      }
     }
 
+    // Marco 1: responsável operacional pela etapa (não substitui stage_type)
     if (updates.handled_by !== undefined) {
-      if (!['ai', 'human', 'waiting'].includes(updates.handled_by)) {
-        throw new Error('Responsável da etapa inválido (deve ser ai, human ou waiting).')
+      if (updates.handled_by === null) {
+        sanitizedUpdates.handled_by = null
+      } else {
+        const parsedHandledBy = sanitizeStageHandledBy(updates.handled_by)
+        if (!parsedHandledBy) {
+          throw new Error('Responsável da etapa inválido. Use ai, human ou waiting.')
+        }
+        sanitizedUpdates.handled_by = parsedHandledBy
       }
-      sanitizedUpdates.handled_by = updates.handled_by
     }
   }
 
