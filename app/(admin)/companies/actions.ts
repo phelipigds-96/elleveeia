@@ -1,8 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/service"
 import { createClient } from "@/lib/supabase/server"
+import { requirePlatformAdmin } from "@/lib/services/platform/admin"
 import { CompanyMock } from "@/components/companies/mock-companies"
 import {
   WORKFLOW_TEMPLATES,
@@ -19,6 +21,7 @@ export interface CreateCompanyInput {
   aiProvider?: "openai" | "gemini" | "hybrid"
   cnpj?: string
   adminEmail?: string
+  adminPassword?: string
   workflowTemplateKey?: string
 }
 
@@ -62,13 +65,14 @@ async function getAuditActor(): Promise<{ id: string; email: string }> {
 }
 
 /**
- * Consulta a lista real de empresas no Supabase com limites e contagem de mensagens
+ * Consulta a lista real de empresas no Supabase com limites, contagem de mensagens e dados de contato
  */
 export async function getCompaniesList(): Promise<CompanyMock[]> {
   const adminClient = createAdminClient()
 
-  // 1. Consulta empresas com seus respectivos limites contratados
-  const { data: rows, error: compErr } = await adminClient
+  // 1. Tenta consultar empresas com colunas de cnpj e contact_email
+  let rows: any[] = []
+  const { data: rowsWithCols, error: compErr } = await adminClient
     .from("companies")
     .select(`
       id,
@@ -78,6 +82,8 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       plan_tier,
       created_at,
       updated_at,
+      cnpj,
+      contact_email,
       company_limits (
         max_agents,
         max_monthly_messages,
@@ -88,9 +94,35 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
     `)
     .order("created_at", { ascending: false })
 
-  if (compErr) {
-    console.error("[SuperAdmin] Erro ao listar empresas do banco:", compErr.message)
-    throw new Error(`Falha ao consultar empresas no banco: ${compErr.message}`)
+  if (!compErr && rowsWithCols) {
+    rows = rowsWithCols
+  } else {
+    // Fallback caso as colunas novas ainda não tenham sido migradas no Supabase
+    const { data: fallbackRows, error: fallbackErr } = await adminClient
+      .from("companies")
+      .select(`
+        id,
+        name,
+        slug,
+        status,
+        plan_tier,
+        created_at,
+        updated_at,
+        company_limits (
+          max_agents,
+          max_monthly_messages,
+          max_monthly_quotes,
+          max_catalog_items,
+          allowed_llm_providers
+        )
+      `)
+      .order("created_at", { ascending: false })
+
+    if (fallbackErr) {
+      console.error("[SuperAdmin] Erro ao listar empresas do banco:", fallbackErr.message)
+      throw new Error(`Falha ao consultar empresas no banco: ${fallbackErr.message}`)
+    }
+    rows = fallbackRows || []
   }
 
   // 2. Consulta quantidade real de mensagens por tenant para cálculo de consumo
@@ -110,8 +142,45 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
     }
   }
 
-  // 3. Mapeia as linhas do PostgreSQL para o contrato visual da interface
-  const companies: CompanyMock[] = (rows || []).map((c: any) => {
+  // 3. Consulta perfis de administradores/owners para capturar email real do responsável
+  const { data: profilesData } = await adminClient
+    .from("profiles")
+    .select("company_id, email, role")
+    .in("role", ["owner", "admin"])
+
+  const companyAdminEmailMap = new Map<string, string>()
+  if (profilesData) {
+    for (const p of profilesData) {
+      if (p.company_id && p.email && !companyAdminEmailMap.has(p.company_id)) {
+        companyAdminEmailMap.set(p.company_id, p.email)
+      }
+    }
+  }
+
+  // 4. Consulta logs de auditoria de provisionamento para resgatar CNPJ/Email caso não estejam na coluna
+  const { data: auditLogs } = await adminClient
+    .from("platform_audit_logs")
+    .select("target_company_id, payload_summary")
+    .eq("action", "company.created")
+
+  const companyCnpjMap = new Map<string, string>()
+  const auditEmailMap = new Map<string, string>()
+  if (auditLogs) {
+    for (const log of auditLogs) {
+      if (log.target_company_id && log.payload_summary) {
+        const payload = log.payload_summary as any
+        if (payload.cnpj && !companyCnpjMap.has(log.target_company_id)) {
+          companyCnpjMap.set(log.target_company_id, payload.cnpj)
+        }
+        if (payload.admin_email && !auditEmailMap.has(log.target_company_id)) {
+          auditEmailMap.set(log.target_company_id, payload.admin_email)
+        }
+      }
+    }
+  }
+
+  // 5. Mapeia as linhas do PostgreSQL para o contrato visual da interface
+  const companies: CompanyMock[] = rows.map((c: any) => {
     const limits = Array.isArray(c.company_limits)
       ? c.company_limits[0]
       : c.company_limits
@@ -161,11 +230,18 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         ? 2000000
         : 10000000
 
+    const resolvedCnpj = c.cnpj || companyCnpjMap.get(c.id) || "Não informado"
+    const resolvedEmail =
+      c.contact_email ||
+      companyAdminEmailMap.get(c.id) ||
+      auditEmailMap.get(c.id) ||
+      `admin@${c.slug}.com`
+
     return {
       id: c.id,
       name: c.name,
       slug: c.slug,
-      cnpj: "00.000.000/0001-00",
+      cnpj: resolvedCnpj,
       plan: planUI,
       status: statusUI,
       agentsCount: 1,
@@ -176,7 +252,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       tokensLimit,
       aiProvider: providerUI,
       createdAt: c.created_at ? c.created_at.split("T")[0] : new Date().toISOString().split("T")[0],
-      adminEmail: `admin@${c.slug}.com`,
+      adminEmail: resolvedEmail,
     }
   })
 
@@ -188,7 +264,14 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
  */
 export async function createCompanyAction(
   inputOrFormData: FormData | CreateCompanyInput
-): Promise<ActionResult<{ id: string; name: string; slug: string }>> {
+): Promise<ActionResult<{
+  id: string
+  name: string
+  slug: string
+  adminEmail?: string | null
+  adminPassword?: string | null
+  userCreated?: boolean
+}>> {
   try {
     let name = ""
     let slug = ""
@@ -196,6 +279,7 @@ export async function createCompanyAction(
     let aiProvider: "openai" | "gemini" | "hybrid" = "openai"
     let cnpj = ""
     let adminEmail = ""
+    let adminPassword = ""
     let workflowTemplateKey = "none"
 
     if (inputOrFormData instanceof FormData) {
@@ -205,6 +289,7 @@ export async function createCompanyAction(
       aiProvider = (inputOrFormData.get("aiProvider") as any) || "openai"
       cnpj = String(inputOrFormData.get("cnpj") || "")
       adminEmail = String(inputOrFormData.get("adminEmail") || "")
+      adminPassword = String(inputOrFormData.get("adminPassword") || "")
       workflowTemplateKey = String(inputOrFormData.get("workflowTemplateKey") || "none")
     } else {
       name = inputOrFormData.name || ""
@@ -213,6 +298,7 @@ export async function createCompanyAction(
       aiProvider = inputOrFormData.aiProvider || "openai"
       cnpj = inputOrFormData.cnpj || ""
       adminEmail = inputOrFormData.adminEmail || ""
+      adminPassword = inputOrFormData.adminPassword || ""
       workflowTemplateKey = inputOrFormData.workflowTemplateKey || "none"
     }
 
@@ -254,23 +340,100 @@ export async function createCompanyAction(
     else if (plan === "Pro") planTierDb = "pro"
     else if (plan === "Enterprise") planTierDb = "enterprise"
 
-    // 3. Inserção na tabela companies
-    const { data: createdCompany, error: compInsertErr } = await adminClient
+    // 3. Inserção na tabela companies (com suporte a cnpj e contact_email)
+    let createdCompany: any = null
+    const baseCompanyData: any = {
+      name: trimmedName,
+      slug: cleanSlug,
+      status: "active",
+      plan_tier: planTierDb,
+    }
+
+    // Tenta primeiro com as colunas dedicadas cnpj e contact_email
+    const { data: compWithNewCols, error: errNewCols } = await adminClient
       .from("companies")
       .insert({
-        name: trimmedName,
-        slug: cleanSlug,
-        status: "active",
-        plan_tier: planTierDb,
+        ...baseCompanyData,
+        cnpj: cnpj.trim() || null,
+        contact_email: adminEmail.trim().toLowerCase() || null,
       })
       .select("id, name, slug, status, plan_tier, created_at")
       .single()
 
-    if (compInsertErr || !createdCompany) {
-      console.error("[SuperAdmin] Erro ao inserir company:", compInsertErr)
-      return {
-        success: false,
-        error: `Falha ao cadastrar empresa no banco: ${compInsertErr?.message || "Erro desconhecido"}`,
+    if (!errNewCols && compWithNewCols) {
+      createdCompany = compWithNewCols
+    } else {
+      // Fallback sem as colunas caso a migration ainda esteja em aplicação
+      const { data: compFallback, error: errFallback } = await adminClient
+        .from("companies")
+        .insert(baseCompanyData)
+        .select("id, name, slug, status, plan_tier, created_at")
+        .single()
+
+      if (errFallback || !compFallback) {
+        console.error("[SuperAdmin] Erro ao inserir company:", errFallback || errNewCols)
+        return {
+          success: false,
+          error: `Falha ao cadastrar empresa no banco: ${(errFallback || errNewCols)?.message || "Erro desconhecido"}`,
+        }
+      }
+      createdCompany = compFallback
+    }
+
+    // 3.1 Provisionamento do Usuário Administrador no Supabase Auth + Profiles
+    let authUserId: string | null = null
+    let userAlreadyExisted = false
+    const finalPassword =
+      adminPassword.trim().length >= 6
+        ? adminPassword.trim()
+        : `Sumel@${Math.floor(100000 + Math.random() * 900000)}`
+
+    if (adminEmail && adminEmail.trim().includes("@")) {
+      const cleanEmail = adminEmail.trim().toLowerCase()
+      try {
+        const { data: authUser, error: authErr } = await adminClient.auth.admin.createUser({
+          email: cleanEmail,
+          password: finalPassword,
+          email_confirm: true,
+          user_metadata: {
+            full_name: `${trimmedName} Admin`,
+          },
+        })
+
+        if (authUser?.user) {
+          authUserId = authUser.user.id
+        } else if (authErr) {
+          // Verifica se o usuário já existia no Auth
+          const { data: usersList } = await adminClient.auth.admin.listUsers()
+          const existing = usersList?.users?.find(
+            (u) => u.email?.toLowerCase() === cleanEmail
+          )
+          if (existing) {
+            authUserId = existing.id
+            userAlreadyExisted = true
+          } else {
+            console.warn("[SuperAdmin] Aviso ao criar usuário Auth:", authErr.message)
+          }
+        }
+
+        // Se obtivemos o ID do usuário, vinculamos o perfil na empresa como 'owner'
+        if (authUserId) {
+          const { error: profErr } = await adminClient.from("profiles").upsert(
+            {
+              id: authUserId,
+              company_id: createdCompany.id,
+              full_name: `${trimmedName} Admin`,
+              email: cleanEmail,
+              role: "owner",
+            },
+            { onConflict: "id" }
+          )
+          if (profErr) {
+            console.warn("[SuperAdmin] Aviso ao vincular profile:", profErr.message)
+          }
+        }
+      } catch (authExc: any) {
+        console.warn("[SuperAdmin] Exceção não-bloqueante no provisionamento de Auth:", authExc.message)
       }
     }
 
@@ -301,7 +464,7 @@ export async function createCompanyAction(
         allowed_llm_providers: allowedProviders,
       })
 
-        if (limitsInsertErr) {
+    if (limitsInsertErr) {
       console.warn("[SuperAdmin] Aviso ao inserir company_limits:", limitsInsertErr.message)
     }
 
@@ -339,11 +502,12 @@ export async function createCompanyAction(
           max_messages: maxMessages,
           max_agents: maxAgents,
           allowed_providers: allowedProviders,
-          admin_email: adminEmail || null,
+          admin_email: adminEmail ? adminEmail.trim().toLowerCase() : null,
+          admin_user_id: authUserId,
           cnpj: cnpj || null,
           workflow_template: appliedTemplateName,
         },
-        reason: "Provisionamento inicial de tenant via Painel SuperAdmin",
+        reason: "Provisionamento inicial de tenant com usuário responsável via Painel SuperAdmin",
         status: "success",
       })
     } catch (auditErr: any) {
@@ -363,6 +527,13 @@ export async function createCompanyAction(
         id: createdCompany.id,
         name: createdCompany.name,
         slug: createdCompany.slug,
+        adminEmail: adminEmail ? adminEmail.trim().toLowerCase() : null,
+        adminPassword: authUserId
+          ? userAlreadyExisted
+            ? "(usuário já cadastrado no Auth)"
+            : finalPassword
+          : null,
+        userCreated: !!authUserId,
       },
     }
   } catch (err: any) {
@@ -894,5 +1065,209 @@ export async function applyCompanyWorkflowTemplateAction(params: {
       success: false,
       error: `Falha ao aplicar template de funil: ${err.message || "Erro interno"}`,
     }
+  }
+}
+
+/**
+ * Inicia uma sessão administrativa de Impersonate para o SuperAdmin operar como o tenant alvo
+ */
+export async function impersonateCompanyAction(
+  targetCompanyId: string
+): Promise<ActionResult<{ redirectUrl: string; targetName: string }>> {
+  try {
+    // 1. Validação estrita: apenas operadores superadmin em platform_admins podem impersonar
+    const { operator, user } = await requirePlatformAdmin()
+
+    const adminClient = createAdminClient()
+
+    // 2. Consulta os dados da empresa alvo
+    const { data: targetCompany, error: compErr } = await adminClient
+      .from("companies")
+      .select("id, name, slug, status")
+      .eq("id", targetCompanyId)
+      .single()
+
+    if (compErr || !targetCompany) {
+      return { success: false, error: "Empresa de destino não encontrada." }
+    }
+
+    if (targetCompany.status === "suspended") {
+      return { success: false, error: "Não é possível impersonar uma organização suspensa." }
+    }
+
+    // 3. Captura o vínculo atual de company_id do profile do superadmin
+    const { data: currentProfile } = await adminClient
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const originalCompanyId =
+      currentProfile?.company_id || "90e69b50-1b4e-4f4a-94f2-78be1cf82833"
+
+    // 4. Grava os cookies seguros de impersonação
+    const cookieStore = cookies()
+    cookieStore.set("ellevee_impersonate_active", targetCompanyId, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24, // 24 horas
+    })
+    cookieStore.set("ellevee_impersonate_original", originalCompanyId, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+    })
+
+    // 5. Atualiza o profile do operador no banco para conceder acesso RLS transparente
+    await adminClient
+      .from("profiles")
+      .update({
+        company_id: targetCompanyId,
+        role: "owner",
+      })
+      .eq("id", user.id)
+
+    // 6. Auditoria obrigatória
+    try {
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: user.id,
+        actor_email: user.email,
+        action: "platform.impersonate_started",
+        target_company_id: targetCompanyId,
+        payload_summary: {
+          operator_role: operator.role,
+          target_name: targetCompany.name,
+          target_slug: targetCompany.slug,
+          original_company_id: originalCompanyId,
+        },
+        reason: "Sessão de suporte e onboarding administrativo via Painel SuperAdmin",
+        status: "success",
+      })
+    } catch (auditErr: any) {
+      console.warn("[SuperAdmin] Aviso de auditoria impersonate:", auditErr.message)
+    }
+
+    revalidatePath("/", "layout")
+    revalidatePath("/dashboard")
+    revalidatePath("/companies")
+
+    return {
+      success: true,
+      data: {
+        redirectUrl: "/dashboard",
+        targetName: targetCompany.name,
+      },
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Erro ao iniciar impersonação:", err)
+    return {
+      success: false,
+      error: `Falha ao iniciar impersonação: ${err.message || "Erro desconhecido"}`,
+    }
+  }
+}
+
+/**
+ * Encerra a sessão de Impersonate e restaura o perfil original do SuperAdmin
+ */
+export async function stopImpersonateAction(): Promise<ActionResult<{ redirectUrl: string }>> {
+  try {
+    const { user } = await requirePlatformAdmin()
+    const adminClient = createAdminClient()
+    const cookieStore = cookies()
+
+    const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
+    const originalCompanyId =
+      cookieStore.get("ellevee_impersonate_original")?.value ||
+      "90e69b50-1b4e-4f4a-94f2-78be1cf82833"
+
+    // 1. Restaura o perfil do operador para sua empresa original
+    await adminClient
+      .from("profiles")
+      .update({
+        company_id: originalCompanyId,
+        role: "admin",
+      })
+      .eq("id", user.id)
+
+    // 2. Remove os cookies
+    cookieStore.delete("ellevee_impersonate_active")
+    cookieStore.delete("ellevee_impersonate_original")
+
+    // 3. Auditoria obrigatória
+    if (targetCompanyId) {
+      try {
+        await adminClient.from("platform_audit_logs").insert({
+          actor_id: user.id,
+          actor_email: user.email,
+          action: "platform.impersonate_stopped",
+          target_company_id: targetCompanyId,
+          payload_summary: {
+            restored_company_id: originalCompanyId,
+          },
+          reason: "Encerramento voluntário de sessão de impersonação",
+          status: "success",
+        })
+      } catch (auditErr: any) {
+        console.warn("[SuperAdmin] Aviso de auditoria stop impersonate:", auditErr.message)
+      }
+    }
+
+    revalidatePath("/", "layout")
+    revalidatePath("/dashboard")
+    revalidatePath("/companies")
+
+    return {
+      success: true,
+      data: {
+        redirectUrl: "/companies",
+      },
+    }
+  } catch (err: any) {
+    console.error("[SuperAdmin] Erro ao encerrar impersonação:", err)
+    return {
+      success: false,
+      error: `Falha ao encerrar impersonação: ${err.message || "Erro desconhecido"}`,
+    }
+  }
+}
+
+/**
+ * Retorna os detalhes da empresa atualmente impersonada, caso haja uma sessão ativa
+ */
+export async function getImpersonateStatus(): Promise<{
+  isImpersonating: boolean
+  targetCompanyId?: string
+  targetCompanyName?: string
+  targetCompanySlug?: string
+}> {
+  try {
+    const cookieStore = cookies()
+    const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
+    if (!targetCompanyId) {
+      return { isImpersonating: false }
+    }
+
+    const adminClient = createAdminClient()
+    const { data: comp } = await adminClient
+      .from("companies")
+      .select("id, name, slug")
+      .eq("id", targetCompanyId)
+      .maybeSingle()
+
+    if (!comp) {
+      return { isImpersonating: false }
+    }
+
+    return {
+      isImpersonating: true,
+      targetCompanyId: comp.id,
+      targetCompanyName: comp.name,
+      targetCompanySlug: comp.slug,
+    }
+  } catch {
+    return { isImpersonating: false }
   }
 }
