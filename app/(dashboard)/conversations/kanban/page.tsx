@@ -88,7 +88,7 @@ export default async function ConversationsKanbanPage() {
     .sort((a, b) => a.position - b.position)
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-semibold tracking-tight text-ellevee-ink">

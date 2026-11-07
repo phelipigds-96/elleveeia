@@ -198,7 +198,15 @@ export default function PainelClient({
 
   const scrollToBottom = (smooth = true) => {
     setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" })
+      const anchor = messagesEndRef.current
+      // Rolagem restrita ao contêiner do histórico: evita que a página inteira
+      // (o <main> do layout) role junto e empurre a conversa para baixo.
+      const scroller = anchor?.closest("section")
+      if (scroller) {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" })
+      } else {
+        anchor?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" })
+      }
     }, 50)
   }
 
@@ -938,13 +946,13 @@ export default function PainelClient({
         )
       case "read":
         return (
-          <span title="Lido pelo cliente" className="text-blue-500">
+          <span title="Lido pelo cliente" className="text-ellevee-info">
             <CheckCheck className="h-3 w-3 stroke-[2.5]" />
           </span>
         )
       case "failed":
         return (
-          <span title="Falha no despacho do gateway" className="text-rose-500">
+          <span title="Falha no despacho do gateway" className="text-ellevee-danger">
             <AlertCircle className="h-3 w-3" />
           </span>
         )
@@ -978,7 +986,7 @@ export default function PainelClient({
   }, [messages])
 
   return (
-    <div className="flex h-full min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
+    <div className="flex h-full flex-1 min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
       {/* Botão flutuante para abrir a lista de conversas em telas pequenas */}
       {!activeConversation && (
         <button
@@ -1088,7 +1096,7 @@ export default function PainelClient({
             >
               <Hourglass className={`h-4 w-4 ${counts.waiting > 0 ? "text-ellevee-warning animate-pulse" : "text-ellevee-warning/70"}`} />
               {counts.waiting > 0 ? (
-                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-warning/100 text-white flex items-center justify-center">
+                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-warning text-white flex items-center justify-center">
                   {counts.waiting}
                 </span>
               ) : (
@@ -1250,8 +1258,8 @@ export default function PainelClient({
                     <div className="flex items-center justify-between mt-1 text-meta leading-relaxed">
                       {isWaiting ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-warning/100 animate-pulse" />
-                          <span className="font-mono font-medium text-ellevee-warning-strong bg-ellevee-warning/10 border border-amber-200 px-1 py-0.2 rounded">
+                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-warning animate-pulse" />
+                          <span className="font-mono font-medium text-ellevee-warning-strong bg-ellevee-warning/10 border border-ellevee-warning/40 px-1 py-0.2 rounded">
                             esperando há {formatWaitTime(conv.last_message_at || conv.updated_at || conv.created_at)}
                           </span>
                         </div>
@@ -1264,7 +1272,7 @@ export default function PainelClient({
                         </div>
                       ) : conv.status === "open" ? (
                         <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-info" />
                           <span className="text-ellevee-ink-muted font-medium">
                             IA ({conv.agent_name || "Ativa"})
                           </span>
@@ -1307,7 +1315,7 @@ export default function PainelClient({
         {activeConversation ? (
           <>
             {/* Coluna Central do Chat */}
-            <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden min-w-0">
+            <div className="flex-1 basis-0 flex flex-col h-full min-h-0 overflow-hidden min-w-0">
             {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
             <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
@@ -1507,15 +1515,20 @@ export default function PainelClient({
             </header>
 
             {/* Histórico de Mensagens: Fundo Warm Ivory (#F3F2ED) */}
-            <section className="flex-1 overflow-y-auto scroll-slim p-4 sm:p-6 bg-ellevee-ivory space-y-4">
-              <div className="max-w-3xl mx-auto space-y-4">
+            <section
+              role="log"
+              aria-live="polite"
+              aria-label="Histórico da conversa"
+              className="flex-1 basis-0 min-h-0 overflow-y-auto overscroll-contain scroll-slim p-3 sm:p-5 bg-ellevee-ivory space-y-3"
+            >
+              <div className="max-w-3xl mx-auto space-y-3">
                 {loadingMessages ? (
-                  <div className="flex flex-col items-center justify-center p-10 text-ellevee-ink-muted space-y-3">
+                  <div className="flex flex-col items-center justify-center p-8 text-ellevee-ink-muted space-y-3">
                     <Loader2 className="h-6 w-6 animate-spin text-ellevee-ink" />
                     <p className="text-meta">Carregando histórico…</p>
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-10 text-center space-y-2">
+                  <div className="flex flex-col items-center justify-center p-8 text-center space-y-2">
                     <div className="h-12 w-12 rounded-full bg-white border border-ellevee-stone flex items-center justify-center">
                       <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-ink-muted" />
                     </div>
@@ -1590,7 +1603,7 @@ export default function PainelClient({
                           <span className="text-meta text-ellevee-ink-muted px-1 font-mono">
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
-                          <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
+                          <div className="max-w-[85%] sm:max-w-md max-h-56 overflow-y-auto scroll-slim msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                             <div className="flex justify-end items-center gap-1 mt-1 text-meta text-ellevee-ink-muted font-mono opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                               <span>{formatTime(msg.created_at)}</span>
@@ -1620,7 +1633,7 @@ export default function PainelClient({
                         </span>
 
                         <div
-                          className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
+                          className={`max-w-[85%] sm:max-w-md max-h-56 overflow-y-auto scroll-slim msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
                             isAgent
                               ? "msg-bubble-in border-ellevee-success/40 ring-1 ring-ellevee-success/20"
                               : "msg-bubble-out"
