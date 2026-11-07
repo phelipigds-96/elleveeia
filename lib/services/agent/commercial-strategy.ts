@@ -218,5 +218,16 @@ export function applyCommercialStrategy(
       segments.segmentLabels.join(', ') + '. Não jogue a lista de preços completa. Faça uma pergunta consultiva amigável perguntando se ele procura para confeitaria/receitas ou para consumo próprio/docinho.'
   }
 
+  // Verifica se o cliente buscou uma marca de mercado não disponível, mas temos opções equivalentes
+  const KNOWN_MARKET_BRANDS = ['moca', 'leite moca', 'garoto', 'lacta', 'melken', 'harald', 'sicao', 'barry', 'callebaut', 'mavalerio', 'piracanjuba', 'itambe', 'tirol', 'italac', 'nestle', 'parmalat', 'elege']
+  const askedBrand = KNOWN_MARKET_BRANDS.find(b => normalizedQuery.includes(b))
+  const foundAskedBrand = askedBrand ? uniqueBrands.some(ub => ub.toLowerCase().includes(askedBrand)) : true
+
+  if (askedBrand && !foundAskedBrand && searchResult.matches.length > 0) {
+    payload.is_alternative_brand_recommendation = true
+    payload.requested_brand_missing = askedBrand
+    payload.consultative_hint = `O cliente solicitou a marca "${askedBrand.toUpperCase()}", porém não a temos em estoque no momento. Temos disponíveis excelentes opções equivalentes das marcas: ${uniqueBrands.join(', ')}. Avise com simpatia que não temos ${askedBrand.toUpperCase()} no momento e ofereça as opções disponíveis como alternativa.`
+  }
+
   return payload
 }
