@@ -183,11 +183,14 @@ export async function searchProducts(companyId: string, query: string, limit: nu
 export function normalizeCatalogProductName(name: string): string {
   if (!name) return name
   let fixed = name.trim()
-  if (fixed.length >= 38) {
+  if (fixed.length >= 37) {
     if (fixed.endsWith(' 39')) fixed += '5G'
     else if (fixed.endsWith(' 395')) fixed += 'G'
+    else if (fixed.endsWith(' 27X395')) fixed += 'G'
     else if (fixed.endsWith(' 27')) fixed += 'X395G'
     else if (fixed.endsWith(' 2.')) fixed += '5KG'
+    else if (fixed.endsWith(' 200')) fixed += 'G'
+    else if (fixed.endsWith(' 90')) fixed += 'G'
   }
   return fixed
 }
