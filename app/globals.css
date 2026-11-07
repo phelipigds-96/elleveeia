@@ -87,7 +87,7 @@
     pointer-events: none;
     overflow: hidden;
     z-index: 0;
-    color: rgba(99,102,241,0.12); /* subtle indigo */
+    color: rgba(113, 128, 113, 0.16); /* sage da paleta Ellevee */
   }
 
   .bg-icon {
@@ -99,6 +99,55 @@
     transform-origin: center;
     color: inherit;
     animation: float 18s ease-in-out infinite;
+  }
+
+  /* Fundo da coluna da marca: gradiente suave na paleta Ellevee
+     (ivory -> sage-light) com brilhos de accent e sage. */
+  .login-brand-panel {
+    background-image:
+      radial-gradient(60% 55% at 15% 20%, rgba(183, 217, 87, 0.16), transparent 70%),
+      radial-gradient(50% 45% at 85% 25%, rgba(113, 128, 113, 0.16), transparent 72%),
+      radial-gradient(55% 50% at 70% 85%, rgba(229, 242, 191, 0.35), transparent 70%),
+      linear-gradient(160deg, #F8F8F5 0%, #F3F2ED 45%, #EEF1EE 100%);
+  }
+
+  .brand-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(46px);
+    opacity: 0.55;
+    will-change: transform;
+    animation: blob-float 26s ease-in-out infinite;
+  }
+  .brand-blob-1 {
+    width: 320px;
+    height: 320px;
+    left: -80px;
+    top: -60px;
+    background: rgba(183, 217, 87, 0.35);
+  }
+  .brand-blob-2 {
+    width: 280px;
+    height: 280px;
+    right: -70px;
+    bottom: -70px;
+    background: rgba(113, 128, 113, 0.28);
+    animation-duration: 32s;
+  }
+  .brand-blob-3 {
+    width: 220px;
+    height: 220px;
+    right: 22%;
+    top: 38%;
+    background: rgba(229, 242, 191, 0.5);
+    animation-duration: 38s;
+  }
+
+  @keyframes blob-float {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    33%  { transform: translate3d(24px, 18px, 0) scale(1.06); }
+    66%  { transform: translate3d(-18px, 22px, 0) scale(0.96); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
   }
 
   /* Coluna da marca: movimento mais lento e ample, para não competir
