@@ -152,6 +152,8 @@ export default function PainelClient({
   const [isReturningToAI, setIsReturningToAI] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [isReopening, setIsReopening] = useState(false)
+  // FASE 4 — Confirmação em dois passos para ação destrutiva (encerrar).
+  const [confirmClose, setConfirmClose] = useState(false)
 
   // 4. Estados do Perfil do Cliente e Painel Retrátil (Fase 2)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -482,6 +484,7 @@ export default function PainelClient({
 
     setSelectedId(convId)
     setIsListOpen(false)
+    setConfirmClose(false)
     setLoadingMessages(true)
 
     try {
@@ -813,6 +816,7 @@ export default function PainelClient({
         }
         setMessages((prev) => [...prev, closeEventMsg])
         scrollToBottom(true)
+        setConfirmClose(false)
       } else {
         toast.error("Erro ao encerrar", result.error || "Falha ao finalizar conversa.")
       }
@@ -874,6 +878,21 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // FASE 4 — Confirmação em dois passos: o primeiro clique arma a confirmação
+  // (rótulo vira "Confirmar encerramento"), o segundo executa. O estado arma
+  // expira sozinho para não deixar o atendente em dúvida.
+  // =========================================================================
+  const requestClose = () => {
+    if (confirmClose) {
+      setConfirmClose(false)
+      void handleCloseConversation()
+      return
+    }
+    setConfirmClose(true)
+    window.setTimeout(() => setConfirmClose(false), 5000)
+  }
+
+  // =========================================================================
   // CONTAGENS E FILTRAGEM DA BARRA LATERAL (Nova Taxonomia)
   // =========================================================================
   const counts = useMemo(() => {
@@ -921,6 +940,26 @@ export default function PainelClient({
       return customerName.includes(term) || phone.includes(term) || preview.includes(term)
     })
   }, [conversations, activeTab, search])
+
+  // =========================================================================
+  // FASE 3 — DESTAQUE DA ETAPA DO FUNIL
+  // A etapa do funil (workflow_stage) é o eixo de trabalho do Kanban. Na Lista
+  // ela aparecia como um texto solto, sem cor e sem relação com o status do
+  // atendimento. Aqui a etapa ganha um ponto colorido (usando a cor definida
+  // pela empresa, quando existir) e passa a aparecer também no cabeçalho da
+  // conversa ativa, que antes não mostrava em que etapa o atendimento estava.
+  // =========================================================================
+  const stageColorOf = (conv: any): string => {
+    const raw =
+      conv?.workflow_stage_color ??
+      conv?.stage_color ??
+      conv?.workflow_stages?.color ??
+      null
+    if (typeof raw === "string" && /^#[0-9a-fA-F]{3,8}$/.test(raw.trim())) {
+      return raw.trim()
+    }
+    return "#64748b"
+  }
 
   // Renderizador de ícones de status de entrega da mensagem
   const renderDeliveryStatus = (msg: MessageData) => {
@@ -1139,15 +1178,21 @@ export default function PainelClient({
         </div>
 
         {/* Lista de Itens */}
-        <div className="flex-1 overflow-y-auto scroll-slim p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto scroll-slim p-2 space-y-1" aria-label="Lista de conversas">
           {filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-ellevee-ink-muted p-6 text-center space-y-2">
               <div className="h-12 w-12 rounded-full bg-ellevee-ivory flex items-center justify-center">
                 <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-ink-muted/70" />
               </div>
-              <p className="text-sm font-medium text-ellevee-ink">Nenhuma conversa encontrada</p>
+              <p className="text-sm font-medium text-ellevee-ink">
+                {conversations.length === 0
+                  ? "Nenhuma conversa por aqui"
+                  : "Nenhuma conversa encontrada"}
+              </p>
               <p className="text-sm text-ellevee-ink-muted max-w-[240px] leading-relaxed">
-                Ajuste a busca ou troque a aba de status para ver outros atendimentos.
+                {conversations.length === 0
+                  ? "Quando um contato chegar pelo WhatsApp, a conversa aparece aqui."
+                  : "Ajuste a busca ou troque a aba de status para ver outros atendimentos."}
               </p>
             </div>
           ) : (
@@ -1169,6 +1214,7 @@ export default function PainelClient({
                 <button
                   key={conv.id}
                   onClick={() => handleSelectConversation(conv.id)}
+                  aria-current={isSelected ? "true" : undefined}
                   className={`conv-item focus-ring w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all relative cursor-pointer ${
                     isSelected
                       ? "bg-ellevee-stone-subtle border border-ellevee-stone shadow-2xs ring-1 ring-ellevee-ink/10"
@@ -1253,13 +1299,19 @@ export default function PainelClient({
                       )}
                     </div>
 
-                    {/* Etapa do funil (mesma informação do Kanban) */}
+                    {/* Etapa do funil (mesma informação do Kanban) — FASE 3:
+                        ponto com a cor da etapa + rótulo legível. */}
                     {conv.workflow_stage_name ? (
                       <span
                         title={`Etapa no funil: ${conv.workflow_stage_name}`}
-                        className="mt-1 inline-flex items-center gap-1 rounded bg-ellevee-stone-subtle px-1.5 py-0.5 font-mono text-meta text-ellevee-ink-muted border border-ellevee-stone"
+                        className="mt-1 inline-flex items-center gap-1.5 max-w-full rounded bg-ellevee-stone-subtle px-1.5 py-0.5 text-meta text-ellevee-ink-muted border border-ellevee-stone"
                       >
-                        {conv.workflow_stage_name}
+                        <span
+                          aria-hidden="true"
+                          className="h-1.5 w-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: stageColorOf(conv) }}
+                        />
+                        <span className="truncate">{conv.workflow_stage_name}</span>
                       </span>
                     ) : null}
                   </div>
@@ -1368,6 +1420,23 @@ export default function PainelClient({
                         }
                       />
                     </span>
+                    {/* Etapa do funil no cabeçalho — FASE 3: dá contexto de
+                        trabalho sem precisar voltar para a Lista. */}
+                    {activeConversation.workflow_stage_name ? (
+                      <span
+                        title={`Etapa no funil: ${activeConversation.workflow_stage_name}`}
+                        className="hidden sm:inline-flex items-center gap-1.5 rounded bg-ellevee-stone-subtle border border-ellevee-stone px-1.5 py-0.5 text-meta text-ellevee-ink-muted whitespace-nowrap"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="h-1.5 w-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: stageColorOf(activeConversation) }}
+                        />
+                        <span className="max-w-[150px] truncate">
+                          {activeConversation.workflow_stage_name}
+                        </span>
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1421,20 +1490,41 @@ export default function PainelClient({
                       <span>Devolver p/ {activeConversation.agent_name || "IA"}</span>
                     </button>
 
-                    {/* Botão Encerrar (ChatPro: ✓ finalizar) */}
+                    {/* Botão Encerrar (ChatPro: ✓ finalizar) — FASE 4:
+                        confirmação em dois passos para evitar encerramento acidental. */}
                     <button
-                      onClick={handleCloseConversation}
+                      onClick={requestClose}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
-                      title="Finalizar atendimento"
-                      aria-label="Finalizar atendimento"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
+                        confirmClose
+                          ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
+                          : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
+                      }`}
+                      title={
+                        confirmClose
+                          ? "Clique novamente para confirmar o encerramento"
+                          : "Finalizar atendimento"
+                      }
+                      aria-label={
+                        confirmClose
+                          ? "Confirmar encerramento do atendimento"
+                          : "Finalizar atendimento"
+                      }
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : confirmClose ? (
+                        <AlertCircle className="h-3.5 w-3.5 text-white" />
                       ) : (
                         <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
-                      <span>Encerrar</span>
+                      <span>
+                        {isClosing
+                          ? "Encerrando..."
+                          : confirmClose
+                          ? "Confirmar"
+                          : "Encerrar"}
+                      </span>
                     </button>
                   </>
                 ) : (
@@ -1456,18 +1546,38 @@ export default function PainelClient({
                     </button>
 
                     <button
-                      onClick={handleCloseConversation}
+                      onClick={requestClose}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
-                      title="Finalizar atendimento"
-                      aria-label="Finalizar atendimento"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
+                        confirmClose
+                          ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
+                          : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
+                      }`}
+                      title={
+                        confirmClose
+                          ? "Clique novamente para confirmar o encerramento"
+                          : "Finalizar atendimento"
+                      }
+                      aria-label={
+                        confirmClose
+                          ? "Confirmar encerramento do atendimento"
+                          : "Finalizar atendimento"
+                      }
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : confirmClose ? (
+                        <AlertCircle className="h-3.5 w-3.5 text-white" />
                       ) : (
                         <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
-                      <span>Encerrar</span>
+                      <span>
+                        {isClosing
+                          ? "Encerrando..."
+                          : confirmClose
+                          ? "Confirmar"
+                          : "Encerrar"}
+                      </span>
                     </button>
                   </>
                 )}
@@ -1475,12 +1585,15 @@ export default function PainelClient({
                 {/* Botão Perfil (ChatPro: 👤 perfil) */}
                 <button
                   onClick={() => setIsProfileOpen((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                  aria-expanded={isProfileOpen}
+                  aria-controls="painel-perfil-cliente"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap focus-ring ${
                     isProfileOpen
                       ? "bg-ellevee-ink text-white shadow-2xs"
                       : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle"
                   }`}
                   title={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
+                  aria-label={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
                 >
                   <User className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Perfil</span>
@@ -1761,7 +1874,10 @@ export default function PainelClient({
 
           {/* PAINEL LATERAL RETRÁTIL: PERFIL DO CLIENTE (Fase 2) */}
           {isProfileOpen && (
-            <aside className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto scroll-slim z-40 fixed lg:static inset-y-0 right-0 shadow-2xl lg:shadow-none">
+            <aside
+              id="painel-perfil-cliente"
+              className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto scroll-slim z-40 fixed lg:static inset-y-0 right-0 shadow-2xl lg:shadow-none"
+            >
               {/* Header do Drawer */}
               <div className="p-4 border-b border-ellevee-stone flex items-center justify-between bg-ellevee-stone-subtle">
                 <div className="flex items-center gap-2">
