@@ -49,6 +49,10 @@ import {
   updateCustomerProfileAction,
   createInternalNoteAction
 } from "../actions"
+import {
+  StatusChip,
+  resolveStatusView,
+} from "@/components/conversations/conversation-status"
 
 interface PainelClientProps {
   initialConversations: ConversationData[]
@@ -1062,108 +1066,75 @@ export default function PainelClient({
             />
           </div>
 
-          {/* Tabs de Filtro: Ergonomia por Ícones Rápidos (Estilo ChatPro) */}
-          <div className={`grid ${isMasterOrAdmin ? "grid-cols-5" : "grid-cols-4"} gap-1 p-1 bg-ellevee-ivory rounded-lg border border-ellevee-stone/70`}>
+          {/* Faixa de filtros por status: rótulos visíveis + contadores.
+              Substitui a grade de só ícones, que escondia o contexto atual
+              (Fase 1 da auditoria visual). */}
+          <div className="flex flex-wrap items-center gap-1.5">
             {isMasterOrAdmin && (
               <button
                 type="button"
                 onClick={() => setActiveTab("all")}
                 aria-pressed={activeTab === "all"}
-                title={`Todas as Conversas (${counts.all})`}
-                className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
+                title={`Todas as conversas (${counts.all})`}
+                className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border ${
                   activeTab === "all"
-                    ? "bg-white text-ellevee-ink font-semibold shadow-2xs border border-ellevee-stone ring-1 ring-ellevee-ink/5"
-                    : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
+                    ? "bg-ellevee-ink text-white border-ellevee-ink font-semibold"
+                    : "bg-white text-ellevee-ink-muted border-ellevee-stone hover:text-ellevee-ink hover:border-ellevee-ink/30"
                 }`}
               >
-                <ListFilter className="h-4 w-4" />
-                {counts.all > 0 && (
-                  <span className="ml-1 text-meta font-mono text-ellevee-ink-muted font-medium hidden sm:inline">
-                    {counts.all}
-                  </span>
-                )}
+                <ListFilter className="h-3.5 w-3.5" />
+                <span>Todas</span>
+                <span className="font-mono opacity-70">{counts.all}</span>
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("waiting")}
-              aria-pressed={activeTab === "waiting"}
-              title={`Aguardando Atendimento (${counts.waiting})`}
-              className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
-                activeTab === "waiting"
-                  ? "bg-white text-ellevee-warning-strong font-semibold shadow-2xs border border-ellevee-warning/40 ring-1 ring-ellevee-warning/20"
-                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
-              }`}
-            >
-              <Hourglass className={`h-4 w-4 ${counts.waiting > 0 ? "text-ellevee-warning animate-pulse" : "text-ellevee-warning/70"}`} />
-              {counts.waiting > 0 ? (
-                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-warning text-white flex items-center justify-center">
-                  {counts.waiting}
-                </span>
-              ) : (
-                <span className="ml-1 text-meta font-mono text-ellevee-ink-muted/60 font-medium hidden sm:inline">
-                  0
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("in_progress")}
-              aria-pressed={activeTab === "in_progress"}
-              title={`Em Atendimento Humano (${counts.inProgress})`}
-              className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
-                activeTab === "in_progress"
-                  ? "bg-white text-ellevee-success-strong font-semibold shadow-2xs border border-ellevee-success/40 ring-1 ring-ellevee-success/20"
-                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
-              }`}
-            >
-              <MessageSquare className="h-4 w-4 text-ellevee-ink-muted" />
-              {counts.inProgress > 0 && (
-                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-success text-white flex items-center justify-center">
-                  {counts.inProgress}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("ai")}
-              aria-pressed={activeTab === "ai"}
-              title={`IA Ativa (${counts.ai})`}
-              className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
-                activeTab === "ai"
-                  ? "bg-white text-ellevee-info-strong font-semibold shadow-2xs border border-ellevee-info/40 ring-1 ring-ellevee-info/20"
-                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
-              }`}
-            >
-              <Bot className="h-4 w-4 text-ellevee-info" />
-              {counts.ai > 0 && (
-                <span className="ml-1 text-meta font-mono text-ellevee-info-strong font-medium hidden sm:inline">
-                  {counts.ai}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("closed")}
-              aria-pressed={activeTab === "closed"}
-              title={`Atendimentos Finalizados (${counts.closed})`}
-              className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
-                activeTab === "closed"
-                  ? "bg-white text-ellevee-ink font-semibold shadow-2xs border border-ellevee-stone ring-1 ring-ellevee-ink/10"
-                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
-              }`}
-            >
-              <CheckCircle2 className="h-4 w-4 text-ellevee-ink-muted" />
-              {counts.closed > 0 && (
-                <span className="ml-1 text-meta font-mono text-ellevee-ink-muted font-medium hidden sm:inline">
-                  {counts.closed}
-                </span>
-              )}
-            </button>
+            {(
+              [
+                { key: "waiting", label: "Aguardando", count: counts.waiting, tone: "warning" },
+                { key: "in_progress", label: "Em atendimento", count: counts.inProgress, tone: "success" },
+                { key: "ai", label: "IA", count: counts.ai, tone: "info" },
+                { key: "closed", label: "Finalizados", count: counts.closed, tone: "neutral" },
+              ] as const
+            ).map((tab) => {
+              const isActive = activeTab === tab.key
+              const toneClass =
+                tab.tone === "warning"
+                  ? "text-ellevee-warning-strong"
+                  : tab.tone === "success"
+                  ? "text-ellevee-success-strong"
+                  : tab.tone === "info"
+                  ? "text-ellevee-info-strong"
+                  : "text-ellevee-ink-muted"
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  aria-pressed={isActive}
+                  title={`${tab.label} (${tab.count})`}
+                  className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border ${
+                    isActive
+                      ? `bg-white ${toneClass} font-semibold border-ellevee-ink/20 shadow-2xs`
+                      : "bg-white text-ellevee-ink-muted border-ellevee-stone hover:text-ellevee-ink hover:border-ellevee-ink/30"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      tab.tone === "warning"
+                        ? "bg-ellevee-warning"
+                        : tab.tone === "success"
+                        ? "bg-ellevee-success"
+                        : tab.tone === "info"
+                        ? "bg-ellevee-info"
+                        : "bg-ellevee-stone"
+                    } ${tab.key === "waiting" && tab.count > 0 ? "animate-pulse" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  <span className="font-mono opacity-70">{tab.count}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1258,33 +1229,22 @@ export default function PainelClient({
 
                     {/* Status da Fila / Atendente / Espera */}
                     <div className="flex items-center justify-between mt-1 text-meta leading-relaxed">
-                      {isWaiting ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-warning animate-pulse" />
-                          <span className="font-mono font-medium text-ellevee-warning-strong bg-ellevee-warning/10 border border-ellevee-warning/40 px-1 py-0.2 rounded">
-                            esperando há {formatWaitTime(conv.last_message_at || conv.updated_at || conv.created_at)}
-                          </span>
-                        </div>
-                      ) : conv.status === "human" ? (
-                        <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-success" />
-                          <span className="text-ellevee-ink-muted font-medium">
-                            {conv.assigned_to === currentUser?.userId ? "Com você" : "Em atendimento"}
-                          </span>
-                        </div>
-                      ) : conv.status === "open" ? (
-                        <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-info" />
-                          <span className="text-ellevee-ink-muted font-medium">
-                            IA ({conv.agent_name || "Ativa"})
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-stone" />
-                          <span className="text-ellevee-ink-muted font-medium">Finalizado</span>
-                        </div>
-                      )}
+                      <StatusChip
+                        view={resolveStatusView(conv.status, !!conv.assigned_to)}
+                        detail={
+                          isWaiting
+                            ? `esperando há ${formatWaitTime(
+                                conv.last_message_at || conv.updated_at || conv.created_at
+                              )}`
+                            : conv.status === "human"
+                            ? conv.assigned_to === currentUser?.userId
+                              ? "com você"
+                              : "em atendimento"
+                            : conv.status === "open"
+                            ? conv.agent_name || "IA ativa"
+                            : undefined
+                        }
+                      />
 
                       {conv.unread_count > 0 && (
                         <span className="min-w-[18px] h-4 px-1 rounded-full bg-ellevee-success text-white text-meta font-bold flex items-center justify-center font-mono shadow-xs">
@@ -1392,19 +1352,21 @@ export default function PainelClient({
                     )}
                     <span>•</span>
                     <span className="truncate">
-                      {activeConversation.status === "closed" ? (
-                        <span className="text-ellevee-ink-muted font-medium">Finalizado</span>
-                      ) : activeConversation.status === "human" ? (
-                        !activeConversation.assigned_to ? (
-                          <span className="text-ellevee-warning font-medium">Aguardando Atendente</span>
-                        ) : activeConversation.assigned_to === currentUser?.userId ? (
-                          <span className="text-ellevee-success-strong font-semibold">Com Você</span>
-                        ) : (
-                          <span className="text-ellevee-ink-muted font-medium">Com Operador</span>
-                        )
-                      ) : (
-                        <span className="text-ellevee-info-strong font-medium">IA: {activeConversation.agent_name || "Ativa"}</span>
-                      )}
+                      <StatusChip
+                        view={resolveStatusView(
+                          activeConversation.status,
+                          !!activeConversation.assigned_to
+                        )}
+                        detail={
+                          activeConversation.status === "human"
+                            ? activeConversation.assigned_to === currentUser?.userId
+                              ? "com você"
+                              : "em atendimento"
+                            : activeConversation.status === "open"
+                            ? activeConversation.agent_name || "IA ativa"
+                            : undefined
+                        }
+                      />
                     </span>
                   </div>
                 </div>
