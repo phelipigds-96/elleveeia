@@ -87,18 +87,19 @@
     pointer-events: none;
     overflow: hidden;
     z-index: 0;
-    color: rgba(113, 128, 113, 0.16); /* sage da paleta Ellevee */
+    color: rgba(58, 64, 58, 0.55); /* ink da paleta Ellevee */
   }
 
   .bg-icon {
     position: absolute;
-    opacity: 0.06;
+    opacity: 0.22;
     width: 160px;
     height: 160px;
     will-change: transform, opacity;
     transform-origin: center;
     color: inherit;
     animation: float 18s ease-in-out infinite;
+    filter: drop-shadow(0 2px 6px rgba(58, 64, 58, 0.06));
   }
 
   /* Fundo da coluna da marca: gradiente suave na paleta Ellevee
@@ -154,7 +155,7 @@
      com o formulário de acesso. */
   .login-brand-panel .bg-icon {
     animation-name: drift;
-    animation-duration: 34s;
+    animation-duration: 20s;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
   }
@@ -167,12 +168,12 @@
     100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
   }
 
-  .bg-icon.icon-1 { left: 5%; top: 10%; }
-  .bg-icon.icon-2 { right: 8%; top: 18%; width: 120px; height:120px; animation-duration: 26s; opacity: 0.05 }
-  .bg-icon.icon-3 { left: 20%; bottom: 8%; width: 140px; height:140px; animation-duration: 22s; opacity: 0.04 }
-  .bg-icon.icon-4 { right: 20%; bottom: 18%; width: 180px; height:180px; animation-duration: 30s; opacity: 0.03 }
-  .bg-icon.icon-5 { left: 45%; top: 30%; width: 110px; height:110px; animation-duration: 24s; opacity: 0.05 }
-  .bg-icon.icon-6 { right: 35%; bottom: 30%; width: 150px; height:150px; animation-duration: 28s; opacity: 0.04 }
+  .bg-icon.icon-1 { left: 5%; top: 10%; color: rgba(183, 217, 87, 0.85); opacity: 0.55; }
+  .bg-icon.icon-2 { right: 8%; top: 18%; width: 120px; height:120px; animation-duration: 17s; color: rgba(113, 128, 113, 0.7); opacity: 0.4; }
+  .bg-icon.icon-3 { left: 20%; bottom: 8%; width: 140px; height:140px; animation-duration: 15s; color: rgba(58, 64, 58, 0.55); opacity: 0.3; }
+  .bg-icon.icon-4 { right: 20%; bottom: 18%; width: 180px; height:180px; animation-duration: 23s; color: rgba(113, 128, 113, 0.6); opacity: 0.26; }
+  .bg-icon.icon-5 { left: 45%; top: 30%; width: 110px; height:110px; animation-duration: 19s; color: rgba(183, 217, 87, 0.8); opacity: 0.45; }
+  .bg-icon.icon-6 { right: 35%; bottom: 30%; width: 150px; height:150px; animation-duration: 21s; color: rgba(58, 64, 58, 0.5); opacity: 0.28; }
 
   @keyframes float {
     0% { transform: translateY(0) rotate(0deg) scale(1); }
