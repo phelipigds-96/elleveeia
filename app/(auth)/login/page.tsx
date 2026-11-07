@@ -29,25 +29,42 @@ export default function LoginPage() {
         <div className="brand-blob brand-blob-3" aria-hidden />
 
         <div className="animated-bg" aria-hidden>
+          {/* Balões de conversa */}
           <svg className="bg-icon icon-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="2" />
+            <path d="M10 14h44a6 6 0 016 6v22a6 6 0 01-6 6H30L18 56v-8h-8a6 6 0 01-6-6V20a6 6 0 016-6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <circle cx="24" cy="31" r="2.5" fill="currentColor" />
+            <circle cx="32" cy="31" r="2.5" fill="currentColor" />
+            <circle cx="40" cy="31" r="2.5" fill="currentColor" />
           </svg>
-          <svg className="bg-icon icon-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="0.5" />
+          <svg className="bg-icon icon-3" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 18h38a6 6 0 016 6v16a6 6 0 01-6 6H22l-10 8v-8h-4a6 6 0 01-6-6V24a6 6 0 016-6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <path d="M18 30h16M18 37h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <svg className="bg-icon icon-3" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1" />
+          <svg className="bg-icon icon-6" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 12h40a4 4 0 014 4v24a4 4 0 01-4 4H30L20 52v-8h-8a4 4 0 01-4-4V16a4 4 0 014-4z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <circle cx="26" cy="28" r="2.5" fill="currentColor" />
+            <circle cx="38" cy="28" r="2.5" fill="currentColor" />
           </svg>
-          <svg className="bg-icon icon-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C8 6 4 8 2 12c2 4 6 6 10 10s8-6 10-10c-2-4-6-6-10-10z" stroke="currentColor" strokeWidth="1" />
+
+          {/* Ícones de IA */}
+          <svg className="bg-icon icon-2" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="16" y="16" width="32" height="32" rx="8" stroke="currentColor" strokeWidth="2" />
+            <rect x="26" y="26" width="12" height="12" rx="3" fill="currentColor" opacity="0.7" />
+            <path d="M24 16V8M32 16V8M40 16V8M24 56v-8M32 56v-8M40 56v-8M16 24H8M16 32H8M16 40H8M56 24h-8M56 32h-8M56 40h-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <svg className="bg-icon icon-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8L12 3z" stroke="currentColor" strokeWidth="0.75" />
+          <svg className="bg-icon icon-4" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M32 6l6.5 17.5L56 30l-17.5 6.5L32 54l-6.5-17.5L8 30l17.5-6.5L32 6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <circle cx="48" cy="16" r="4" fill="currentColor" opacity="0.75" />
           </svg>
-          <svg className="bg-icon icon-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 18V6a2 2 0 012-2h9l5 5v9a2 2 0 01-2 2H6a2 2 0 01-2-2z" stroke="currentColor" strokeWidth="1" />
-            <path d="M15 4v5h5" stroke="currentColor" strokeWidth="1" />
+          <svg className="bg-icon icon-7" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="32" r="24" stroke="currentColor" strokeWidth="2" strokeDasharray="6 6" />
+            <path d="M24 30a8 8 0 0116 0v6a8 8 0 01-16 0v-6z" stroke="currentColor" strokeWidth="2" />
+            <path d="M32 26v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
+
+          {/* Letra E da Ellevee */}
+          <span className="bg-icon bg-letter icon-5">E</span>
+          <span className="bg-icon bg-letter icon-8">E</span>
         </div>
 
         <div className="relative z-10 flex items-center gap-3">
