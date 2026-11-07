@@ -1,9 +1,11 @@
 import { getN8nIntegration, getInboundWebhookInfo } from '@/lib/services/integrations'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 import { N8nConfigCard } from './components/n8n-config-card'
 
 export const dynamic = 'force-dynamic'
 
 export default async function IntegrationsPage() {
+  await requireCompanyAdmin()
   const [n8nData, inboundData] = await Promise.all([
     getN8nIntegration(),
     getInboundWebhookInfo()

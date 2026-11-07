@@ -1,11 +1,13 @@
 import { listAgents } from '@/lib/services/agents'
 import { AgentsList } from './components/agents-list'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 import { Bot } from 'lucide-react'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AgentsPage() {
+  await requireCompanyAdmin()
   const agents = await listAgents()
 
   return (

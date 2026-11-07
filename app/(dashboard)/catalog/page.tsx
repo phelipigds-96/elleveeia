@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCompanyId } from '@/lib/services/conversations'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 import Link from 'next/link'
 
 export default async function CatalogPage() {
+  await requireCompanyAdmin()
   const supabase = createClient()
   const companyId = await getCompanyId()
 

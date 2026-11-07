@@ -395,8 +395,13 @@ export async function createCompanyAction(
           email: cleanEmail,
           password: finalPassword,
           email_confirm: true,
+          app_metadata: {
+            skip_tenant_trigger: true,
+            created_via: "superadmin_panel",
+          },
           user_metadata: {
             full_name: `${trimmedName} Admin`,
+            company_id: createdCompany.id,
           },
         })
 
@@ -430,6 +435,31 @@ export async function createCompanyAction(
           )
           if (profErr) {
             console.warn("[SuperAdmin] Aviso ao vincular profile:", profErr.message)
+          }
+
+          // Prevenção defensiva contra tenants fantasmas gerados por triggers legadas em auth.users
+          try {
+            const { data: ghostCompanies } = await adminClient
+              .from("companies")
+              .select("id, name, slug")
+              .neq("id", createdCompany.id)
+              .or(`name.ilike.Empresa de ${trimmedName}%,slug.ilike.${cleanSlug}-%`)
+
+            if (ghostCompanies && ghostCompanies.length > 0) {
+              for (const ghost of ghostCompanies) {
+                const { count } = await adminClient
+                  .from("profiles")
+                  .select("id", { count: "exact", head: true })
+                  .eq("company_id", ghost.id)
+
+                if (!count || count === 0) {
+                  await adminClient.from("companies").delete().eq("id", ghost.id)
+                  console.info(`[SuperAdmin] Tenant fantasma automático removido com sucesso: ${ghost.id} (${ghost.slug})`)
+                }
+              }
+            }
+          } catch (cleanErr: any) {
+            console.warn("[SuperAdmin] Aviso na verificação de tenants fantasmas:", cleanErr?.message)
           }
         }
       } catch (authExc: any) {
