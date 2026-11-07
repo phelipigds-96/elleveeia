@@ -177,6 +177,16 @@ export function calculateMatchScore(
     penalty += 25 // Penaliza unidades avulsas quando o cliente pediu especificamente caixa fechada/atacado
   }
 
+  // Verificação de produtos derivados (bombons, balas, cocadas, fondants, biscoitos com sabor de ingrediente)
+  // Exemplo: se o cliente busca "leite condensado", não deve trazer "bombom de leite condensado" ou "cocada de leite condensado"
+  const DERIVATIVE_PREFIXES = /\b(?:bombom|bombons|bala|balas|cocada|cocadas|fondant|picole|picoles|ducrem|bisc|biscoito|biscoitos|cookies|carmed|geladinho)\b/i
+  const isDerivativeProduct = DERIVATIVE_PREFIXES.test(productName)
+  const queryAskedDerivative = DERIVATIVE_PREFIXES.test(parsed.originalQuery)
+
+  if (isDerivativeProduct && !queryAskedDerivative) {
+    penalty += 35 // Penaliza derivados quando a busca é pelo insumo primário
+  }
+
   // Calcula confiana (1.0 = sem penalidades, reduz conforme a penalidade cresce)
   // Penalidade de 20 jǭ derruba a confiana para 0.60
   const confidence = Math.max(0, 1.0 - (penalty / 50))

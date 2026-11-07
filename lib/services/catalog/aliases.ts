@@ -36,6 +36,9 @@ export const ALIASES: Record<string, string[]> = {
   
   // Unidades e Embalagens
   'kg': ['quilo', 'kilo', 'quilograma'],
+  '395g': ['395g', '395', '395gr', '39'],
+  '395': ['395g', '395', '395gr', '39'],
+  '39': ['395g', '395'],
   'unidade': ['un', 'und', 'unid'],
   'pacote': ['pct', 'pcte'],
   'caixa': ['cx', 'caixas'],

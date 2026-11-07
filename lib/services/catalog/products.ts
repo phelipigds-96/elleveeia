@@ -110,7 +110,8 @@ export async function searchProducts(companyId: string, query: string, limit: nu
   const scoredProducts = validProducts.map((row: any) => {
     const brand = row.product_brands?.name || null
     const category = row.product_categories?.name || null
-    const { score, confidence } = calculateMatchScore(row.normalized_name, brand, category, parsed)
+    const cleanName = normalizeCatalogProductName(row.name)
+    const { score, confidence } = calculateMatchScore(cleanName, brand, category, parsed)
     
     return {
       product: mapProductRow(row),
@@ -179,10 +180,22 @@ export async function searchProducts(companyId: string, query: string, limit: nu
   }
 }
 
+export function normalizeCatalogProductName(name: string): string {
+  if (!name) return name
+  let fixed = name.trim()
+  if (fixed.length >= 38) {
+    if (fixed.endsWith(' 39')) fixed += '5G'
+    else if (fixed.endsWith(' 395')) fixed += 'G'
+    else if (fixed.endsWith(' 27')) fixed += 'X395G'
+    else if (fixed.endsWith(' 2.')) fixed += '5KG'
+  }
+  return fixed
+}
+
 function mapProductRow(row: any): ProductSearchResult {
   return {
     id: row.id,
-    name: row.name,
+    name: normalizeCatalogProductName(row.name),
     sku: row.sku,
     barcode: row.barcode,
     unit: row.unit,
