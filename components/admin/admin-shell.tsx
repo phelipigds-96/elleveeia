@@ -50,8 +50,8 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     items: [
       { name: "Empresas", href: "/companies", icon: Building2 },
       { name: "Planos e limites", href: "/plans", icon: Layers },
-      { name: "Agentes", href: "#", icon: Bot, disabled: true, badge: "Em breve" },
-      { name: "Provedores", href: "#", icon: Cpu, disabled: true, badge: "Em breve" },
+      { name: "Agentes", href: "/agents", icon: Bot },
+      { name: "Provedores", href: "/providers", icon: Cpu },
     ],
   },
   {
@@ -71,6 +71,12 @@ export default function AdminShell({ children }: AdminShellProps) {
   const getBreadcrumb = () => {
     if (pathname.startsWith("/plans")) {
       return { section: "Gestão", page: "Planos e Limites" }
+    }
+    if (pathname.startsWith("/agents")) {
+      return { section: "Gestão", page: "Agentes de IA" }
+    }
+    if (pathname.startsWith("/providers")) {
+      return { section: "Gestão", page: "Provedores de IA" }
     }
     if (pathname.startsWith("/companies")) {
       return { section: "Gestão", page: "Empresas" }
