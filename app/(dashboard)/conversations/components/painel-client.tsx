@@ -920,19 +920,19 @@ export default function PainelClient({
     switch (status) {
       case "pending":
         return (
-          <span title="Pendente na fila da Outbox" className="text-ellevee-sage-strong/70">
+          <span title="Pendente na fila da Outbox" className="text-ellevee-ink-muted/70">
             <Clock className="h-3 w-3 animate-spin" />
           </span>
         )
       case "sent":
         return (
-          <span title="Enviado ao WhatsApp (Gateway)" className="text-ellevee-sage-strong">
+          <span title="Enviado ao WhatsApp (Gateway)" className="text-ellevee-ink-muted">
             <CheckCheck className="h-3 w-3 stroke-[2.5]" />
           </span>
         )
       case "delivered":
         return (
-          <span title="Despacho aceito pelo gateway" className="text-ellevee-sage-strong">
+          <span title="Despacho aceito pelo gateway" className="text-ellevee-ink-muted">
             <CheckCheck className="h-3 w-3 stroke-[2.5]" />
           </span>
         )
@@ -950,7 +950,7 @@ export default function PainelClient({
         )
       default:
         return (
-          <span className="text-ellevee-sage-strong">
+          <span className="text-ellevee-ink-muted">
             <Check className="h-3 w-3" />
           </span>
         )
@@ -1004,7 +1004,7 @@ export default function PainelClient({
           <div className="flex items-center justify-between">
             <h1 className="font-display font-bold text-sm tracking-tight text-ellevee-ink flex items-center gap-1.5">
               <span>Atendimento</span>
-              <span className="text-meta font-mono font-medium px-1.5 py-0.2 rounded bg-ellevee-stone-subtle text-ellevee-sage-strong border border-ellevee-stone">
+              <span className="text-meta font-mono font-medium px-1.5 py-0.2 rounded bg-ellevee-stone-subtle text-ellevee-ink-muted border border-ellevee-stone">
                 {conversations.length}
               </span>
             </h1>
@@ -1013,7 +1013,7 @@ export default function PainelClient({
             <button
               type="button"
               onClick={() => setIsListOpen(false)}
-              className="lg:hidden inline-flex items-center justify-center h-7 w-7 rounded-md text-ellevee-sage-strong hover:bg-ellevee-ivory hover:text-ellevee-ink focus-ring"
+              className="lg:hidden inline-flex items-center justify-center h-7 w-7 rounded-md text-ellevee-ink-muted hover:bg-ellevee-ivory hover:text-ellevee-ink focus-ring"
               aria-label="Fechar lista de conversas"
               title="Fechar lista de conversas"
             >
@@ -1030,7 +1030,7 @@ export default function PainelClient({
             {/* Acesso ao quadro de funil (Kanban) */}
             <a
               href="/conversations/kanban"
-              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring"
+              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring"
               title="Abrir o funil de atendimento (Kanban)"
               aria-label="Abrir o funil de atendimento (Kanban)"
             >
@@ -1041,14 +1041,14 @@ export default function PainelClient({
 
           {/* Campo de Busca */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-sage-strong" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-ink-muted" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por cliente, telefone ou texto..."
               aria-label="Buscar conversas por cliente, telefone ou texto"
-              className="w-full pl-9 pr-3 py-2 border border-ellevee-stone rounded-md text-sm bg-ellevee-stone-subtle text-ellevee-ink placeholder:text-ellevee-sage-strong focus:outline-none focus:ring-2 focus:ring-ellevee-ink/50 focus:bg-white transition-colors"
+              className="w-full pl-9 pr-3 py-2 border border-ellevee-stone rounded-md text-sm bg-ellevee-stone-subtle text-ellevee-ink placeholder:text-ellevee-ink-muted focus:outline-none focus:ring-2 focus:ring-ellevee-ink/50 focus:bg-white transition-colors"
             />
           </div>
 
@@ -1063,12 +1063,12 @@ export default function PainelClient({
                 className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
                   activeTab === "all"
                     ? "bg-white text-ellevee-ink font-semibold shadow-2xs border border-ellevee-stone ring-1 ring-ellevee-ink/5"
-                    : "text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-white/60"
+                    : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
                 }`}
               >
                 <ListFilter className="h-4 w-4" />
                 {counts.all > 0 && (
-                  <span className="ml-1 text-meta font-mono text-ellevee-sage-strong font-medium hidden sm:inline">
+                  <span className="ml-1 text-meta font-mono text-ellevee-ink-muted font-medium hidden sm:inline">
                     {counts.all}
                   </span>
                 )}
@@ -1082,17 +1082,17 @@ export default function PainelClient({
               title={`Aguardando Atendimento (${counts.waiting})`}
               className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
                 activeTab === "waiting"
-                  ? "bg-white text-amber-900 font-semibold shadow-2xs border border-amber-300 ring-1 ring-amber-400/20"
-                  : "text-ellevee-sage-strong hover:text-amber-800 hover:bg-white/60"
+                  ? "bg-white text-ellevee-warning-strong font-semibold shadow-2xs border border-ellevee-warning/40 ring-1 ring-ellevee-warning/20"
+                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
               }`}
             >
-              <Hourglass className={`h-4 w-4 ${counts.waiting > 0 ? "text-amber-600 animate-pulse" : "text-amber-600/70"}`} />
+              <Hourglass className={`h-4 w-4 ${counts.waiting > 0 ? "text-ellevee-warning animate-pulse" : "text-ellevee-warning/70"}`} />
               {counts.waiting > 0 ? (
-                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-amber-500 text-white flex items-center justify-center">
+                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-warning/100 text-white flex items-center justify-center">
                   {counts.waiting}
                 </span>
               ) : (
-                <span className="ml-1 text-meta font-mono text-ellevee-sage-strong/60 font-medium hidden sm:inline">
+                <span className="ml-1 text-meta font-mono text-ellevee-ink-muted/60 font-medium hidden sm:inline">
                   0
                 </span>
               )}
@@ -1105,13 +1105,13 @@ export default function PainelClient({
               title={`Em Atendimento Humano (${counts.inProgress})`}
               className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
                 activeTab === "in_progress"
-                  ? "bg-white text-emerald-900 font-semibold shadow-2xs border border-emerald-300 ring-1 ring-emerald-400/20"
-                  : "text-ellevee-sage-strong hover:text-emerald-800 hover:bg-white/60"
+                  ? "bg-white text-ellevee-success-strong font-semibold shadow-2xs border border-ellevee-success/40 ring-1 ring-ellevee-success/20"
+                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
               }`}
             >
-              <MessageSquare className="h-4 w-4 text-ellevee-sage-strong" />
+              <MessageSquare className="h-4 w-4 text-ellevee-ink-muted" />
               {counts.inProgress > 0 && (
-                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-emerald-600 text-white flex items-center justify-center">
+                <span className="ml-1 px-1 min-w-[16px] h-4 rounded-full text-meta font-bold bg-ellevee-success text-white flex items-center justify-center">
                   {counts.inProgress}
                 </span>
               )}
@@ -1124,13 +1124,13 @@ export default function PainelClient({
               title={`IA Ativa (${counts.ai})`}
               className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
                 activeTab === "ai"
-                  ? "bg-white text-blue-900 font-semibold shadow-2xs border border-blue-300 ring-1 ring-blue-400/20"
-                  : "text-ellevee-sage-strong hover:text-blue-800 hover:bg-white/60"
+                  ? "bg-white text-ellevee-info-strong font-semibold shadow-2xs border border-ellevee-info/40 ring-1 ring-ellevee-info/20"
+                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
               }`}
             >
-              <Bot className="h-4 w-4 text-blue-600" />
+              <Bot className="h-4 w-4 text-ellevee-info" />
               {counts.ai > 0 && (
-                <span className="ml-1 text-meta font-mono text-blue-700 font-medium hidden sm:inline">
+                <span className="ml-1 text-meta font-mono text-ellevee-info-strong font-medium hidden sm:inline">
                   {counts.ai}
                 </span>
               )}
@@ -1144,12 +1144,12 @@ export default function PainelClient({
               className={`relative flex items-center justify-center py-1.5 rounded-md text-meta transition-all cursor-pointer focus-ring ${
                 activeTab === "closed"
                   ? "bg-white text-ellevee-ink font-semibold shadow-2xs border border-ellevee-stone ring-1 ring-ellevee-ink/10"
-                  : "text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-white/60"
+                  : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-white/60"
               }`}
             >
-              <CheckCircle2 className="h-4 w-4 text-ellevee-sage-strong" />
+              <CheckCircle2 className="h-4 w-4 text-ellevee-ink-muted" />
               {counts.closed > 0 && (
-                <span className="ml-1 text-meta font-mono text-ellevee-sage-strong font-medium hidden sm:inline">
+                <span className="ml-1 text-meta font-mono text-ellevee-ink-muted font-medium hidden sm:inline">
                   {counts.closed}
                 </span>
               )}
@@ -1160,12 +1160,12 @@ export default function PainelClient({
         {/* Lista de Itens */}
         <div className="flex-1 overflow-y-auto scroll-slim p-2 space-y-1">
           {filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-ellevee-sage-strong p-6 text-center space-y-2">
+            <div className="flex flex-col items-center justify-center h-48 text-ellevee-ink-muted p-6 text-center space-y-2">
               <div className="h-12 w-12 rounded-full bg-ellevee-ivory flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-sage-strong/70" />
+                <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-ink-muted/70" />
               </div>
               <p className="text-sm font-medium text-ellevee-ink">Nenhuma conversa encontrada</p>
-              <p className="text-sm text-ellevee-sage-strong max-w-[240px] leading-relaxed">
+              <p className="text-sm text-ellevee-ink-muted max-w-[240px] leading-relaxed">
                 Ajuste a busca ou troque a aba de status para ver outros atendimentos.
               </p>
             </div>
@@ -1192,8 +1192,8 @@ export default function PainelClient({
                     isSelected
                       ? "bg-ellevee-stone-subtle border border-ellevee-stone shadow-2xs ring-1 ring-ellevee-ink/10"
                       : "hover:bg-ellevee-stone-subtle border border-transparent"
-                  } ${isPulsing ? "ring-2 ring-emerald-500/60 bg-emerald-50/40 animate-pulse" : ""} ${
-                    isWaiting ? "border-l-4 border-l-amber-500" : ""
+                  } ${isPulsing ? "ring-2 ring-ellevee-success/60 bg-ellevee-success/10 animate-pulse" : ""} ${
+                    isWaiting ? "border-l-4 border-l-ellevee-warning" : ""
                   }`}
                 >
                   {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
@@ -1219,14 +1219,14 @@ export default function PainelClient({
                         isSelected
                           ? "bg-ellevee-ink text-white"
                           : isWaiting
-                          ? "bg-amber-100 text-amber-900 border border-amber-300"
+                          ? "bg-ellevee-warning/10 text-ellevee-warning-strong border border-ellevee-warning/40"
                           : "bg-ellevee-ivory text-ellevee-ink border border-ellevee-stone"
                       }`}
                     >
                       {initials}
                     </div>
                     {/* Selo verde do WhatsApp estilo ChatPro */}
-                    <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs ring-1 ring-white">
+                    <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-ellevee-success text-white flex items-center justify-center shadow-xs ring-1 ring-white">
                       <WhatsAppIcon className="h-2 w-2" />
                     </div>
                   </div>
@@ -1237,12 +1237,12 @@ export default function PainelClient({
                       <span className="font-semibold text-sm text-ellevee-ink truncate">
                         {customerName}
                       </span>
-                      <span className="text-meta text-ellevee-sage-strong shrink-0 font-mono">
+                      <span className="text-meta text-ellevee-ink-muted shrink-0 font-mono">
                         {timeAgo(conv.last_message_at || conv.created_at)}
                       </span>
                     </div>
 
-                    <p className="text-sm text-ellevee-sage-strong truncate leading-relaxed">
+                    <p className="text-sm text-ellevee-ink-muted truncate leading-relaxed">
                       {conv.last_message_preview || "Nenhuma mensagem recente"}
                     </p>
 
@@ -1250,34 +1250,34 @@ export default function PainelClient({
                     <div className="flex items-center justify-between mt-1 text-meta leading-relaxed">
                       {isWaiting ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          <span className="font-mono font-medium text-amber-900 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
+                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-warning/100 animate-pulse" />
+                          <span className="font-mono font-medium text-ellevee-warning-strong bg-ellevee-warning/10 border border-amber-200 px-1 py-0.2 rounded">
                             esperando há {formatWaitTime(conv.last_message_at || conv.updated_at || conv.created_at)}
                           </span>
                         </div>
                       ) : conv.status === "human" ? (
                         <div className="flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          <span className="text-ellevee-sage-strong font-medium">
+                          <span className="h-1.5 w-1.5 rounded-full bg-ellevee-success" />
+                          <span className="text-ellevee-ink-muted font-medium">
                             {conv.assigned_to === currentUser?.userId ? "Com você" : "Em atendimento"}
                           </span>
                         </div>
                       ) : conv.status === "open" ? (
                         <div className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                          <span className="text-ellevee-sage-strong font-medium">
+                          <span className="text-ellevee-ink-muted font-medium">
                             IA ({conv.agent_name || "Ativa"})
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-ellevee-stone" />
-                          <span className="text-ellevee-sage-strong font-medium">Finalizado</span>
+                          <span className="text-ellevee-ink-muted font-medium">Finalizado</span>
                         </div>
                       )}
 
                       {conv.unread_count > 0 && (
-                        <span className="min-w-[18px] h-4 px-1 rounded-full bg-emerald-500 text-white text-meta font-bold flex items-center justify-center font-mono shadow-xs">
+                        <span className="min-w-[18px] h-4 px-1 rounded-full bg-ellevee-success text-white text-meta font-bold flex items-center justify-center font-mono shadow-xs">
                           {conv.unread_count}
                         </span>
                       )}
@@ -1345,7 +1345,7 @@ export default function PainelClient({
                   >
                     {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs ring-1 ring-white">
+                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-ellevee-success text-white flex items-center justify-center shadow-xs ring-1 ring-white">
                     <WhatsAppIcon className="h-2 w-2" />
                   </div>
                 </div>
@@ -1359,31 +1359,31 @@ export default function PainelClient({
                     >
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
-                    <span title="WhatsApp Oficial" className="text-emerald-500 shrink-0">
+                    <span title="WhatsApp Oficial" className="text-ellevee-success shrink-0">
                       <WhatsAppIcon className="h-3.5 w-3.5" />
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-meta text-ellevee-sage-strong mt-0.5 truncate">
+                  <div className="flex items-center gap-2 text-meta text-ellevee-ink-muted mt-0.5 truncate">
                     {activeConversation.customers?.phone && (
                       <span className="flex items-center gap-1 font-mono text-ellevee-ink/80">
-                        <Phone className="h-3 w-3 text-ellevee-sage-strong" />
+                        <Phone className="h-3 w-3 text-ellevee-ink-muted" />
                         {activeConversation.customers.phone}
                       </span>
                     )}
                     <span>•</span>
                     <span className="truncate">
                       {activeConversation.status === "closed" ? (
-                        <span className="text-ellevee-sage-strong font-medium">Finalizado</span>
+                        <span className="text-ellevee-ink-muted font-medium">Finalizado</span>
                       ) : activeConversation.status === "human" ? (
                         !activeConversation.assigned_to ? (
-                          <span className="text-amber-600 font-medium">Aguardando Atendente</span>
+                          <span className="text-ellevee-warning font-medium">Aguardando Atendente</span>
                         ) : activeConversation.assigned_to === currentUser?.userId ? (
-                          <span className="text-emerald-700 font-semibold">Com Você</span>
+                          <span className="text-ellevee-success-strong font-semibold">Com Você</span>
                         ) : (
-                          <span className="text-ellevee-sage-strong font-medium">Com Operador</span>
+                          <span className="text-ellevee-ink-muted font-medium">Com Operador</span>
                         )
                       ) : (
-                        <span className="text-blue-700 font-medium">IA: {activeConversation.agent_name || "Ativa"}</span>
+                        <span className="text-ellevee-info-strong font-medium">IA: {activeConversation.agent_name || "Ativa"}</span>
                       )}
                     </span>
                   </div>
@@ -1401,7 +1401,7 @@ export default function PainelClient({
                     title="Reativar esta conversa"
                     aria-label="Reativar esta conversa"
                   >
-                    <RotateCcw className="h-3.5 w-3.5 text-ellevee-sage-strong" />
+                    <RotateCcw className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                     <span>{isReopening ? "Reabrindo..." : "Reabrir"}</span>
                   </button>
                 ) : activeConversation.status === "human" ? (
@@ -1411,7 +1411,7 @@ export default function PainelClient({
                       <button
                         onClick={handleTakeover}
                         disabled={isTakingOver}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-semibold bg-ellevee-warning hover:bg-ellevee-warning-strong text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
                         title="Pegar esta conversa que está na fila"
                         aria-label="Assumir conversa que está na fila"
                       >
@@ -1428,13 +1428,13 @@ export default function PainelClient({
                     <button
                       onClick={handleReturnToAI}
                       disabled={isReturningToAI}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                       title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
                     >
                       {isReturningToAI ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <ArrowLeftRight className="h-3.5 w-3.5 text-ellevee-sage-strong" />
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
                       <span>Devolver p/ {activeConversation.agent_name || "IA"}</span>
                     </button>
@@ -1443,14 +1443,14 @@ export default function PainelClient({
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-sage-strong hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                       title="Finalizar atendimento"
                       aria-label="Finalizar atendimento"
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-sage-strong" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
                       <span>Encerrar</span>
                     </button>
@@ -1468,7 +1468,7 @@ export default function PainelClient({
                       {isTakingOver ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <UserCheck className="h-3.5 w-3.5 text-ellevee-sage-strong" />
+                        <UserCheck className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
                       <span>Assumir Conversa</span>
                     </button>
@@ -1476,14 +1476,14 @@ export default function PainelClient({
                     <button
                       onClick={handleCloseConversation}
                       disabled={isClosing}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-sage-strong hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                       title="Finalizar atendimento"
                       aria-label="Finalizar atendimento"
                     >
                       {isClosing ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-sage-strong" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
                       <span>Encerrar</span>
                     </button>
@@ -1496,7 +1496,7 @@ export default function PainelClient({
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap ${
                     isProfileOpen
                       ? "bg-ellevee-ink text-white shadow-2xs"
-                      : "text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-ellevee-stone-subtle"
+                      : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle"
                   }`}
                   title={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
                 >
@@ -1510,17 +1510,17 @@ export default function PainelClient({
             <section className="flex-1 overflow-y-auto scroll-slim p-4 sm:p-6 bg-ellevee-ivory space-y-4">
               <div className="max-w-3xl mx-auto space-y-4">
                 {loadingMessages ? (
-                  <div className="flex flex-col items-center justify-center p-10 text-ellevee-sage-strong space-y-3">
+                  <div className="flex flex-col items-center justify-center p-10 text-ellevee-ink-muted space-y-3">
                     <Loader2 className="h-6 w-6 animate-spin text-ellevee-ink" />
                     <p className="text-meta">Carregando histórico…</p>
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-10 text-center space-y-2">
                     <div className="h-12 w-12 rounded-full bg-white border border-ellevee-stone flex items-center justify-center">
-                      <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-sage-strong" />
+                      <MessageSquare className="h-5 w-5 stroke-1 text-ellevee-ink-muted" />
                     </div>
                     <p className="text-sm font-medium text-ellevee-ink">Nenhuma mensagem registrada</p>
-                    <p className="text-meta text-ellevee-sage-strong max-w-[280px] leading-relaxed">
+                    <p className="text-meta text-ellevee-ink-muted max-w-[280px] leading-relaxed">
                       Esta conversa ainda não possui histórico. Envie a primeira mensagem para começar.
                     </p>
                   </div>
@@ -1530,7 +1530,7 @@ export default function PainelClient({
                     if ((msg as any).sender_type === "__divider__") {
                       return (
                         <div key={msg.id} className="flex justify-center py-1">
-                          <span className="text-meta font-mono uppercase tracking-[0.12em] text-ellevee-sage-strong bg-white border border-ellevee-stone rounded-full px-2.5 py-0.5 shadow-2xs">
+                          <span className="text-meta font-mono uppercase tracking-[0.12em] text-ellevee-ink-muted bg-white border border-ellevee-stone rounded-full px-2.5 py-0.5 shadow-2xs">
                             {msg.content}
                           </span>
                         </div>
@@ -1587,12 +1587,12 @@ export default function PainelClient({
                     if (isCustomer) {
                       return (
                         <div key={msg.id} className="group flex flex-col items-start space-y-1">
-                          <span className="text-meta text-ellevee-sage-strong px-1 font-mono">
+                          <span className="text-meta text-ellevee-ink-muted px-1 font-mono">
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
                           <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                            <div className="flex justify-end items-center gap-1 mt-1 text-meta text-ellevee-sage-strong font-mono opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                            <div className="flex justify-end items-center gap-1 mt-1 text-meta text-ellevee-ink-muted font-mono opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                               <span>{formatTime(msg.created_at)}</span>
                             </div>
                           </div>
@@ -1603,16 +1603,16 @@ export default function PainelClient({
                     // Mensagens de Saída: IA (Deep Ink com acento) ou Atendente Humano (Emerald suave)
                     return (
                       <div key={msg.id} className="group flex flex-col items-end space-y-1">
-                        <span className="text-meta text-ellevee-sage-strong px-1 font-mono flex items-center gap-1">
+                        <span className="text-meta text-ellevee-ink-muted px-1 font-mono flex items-center gap-1">
                           {isAgent ? (
                             <>
-                              <User className="h-2.5 w-2.5 text-emerald-700" />
-                              <span className="text-emerald-700 font-semibold">Atendente Humano</span>
+                              <User className="h-2.5 w-2.5 text-ellevee-success-strong" />
+                              <span className="text-ellevee-success-strong font-semibold">Atendente Humano</span>
                             </>
                           ) : (
                             <>
-                              <Bot className="h-2.5 w-2.5 text-blue-600" />
-                              <span className="text-blue-600 font-semibold">
+                              <Bot className="h-2.5 w-2.5 text-ellevee-info" />
+                              <span className="text-ellevee-info font-semibold">
                                 {activeConversation.agent_name || "Ellevee IA"}
                               </span>
                             </>
@@ -1622,14 +1622,14 @@ export default function PainelClient({
                         <div
                           className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
                             isAgent
-                              ? "msg-bubble-in border-emerald-300 ring-1 ring-emerald-500/20"
+                              ? "msg-bubble-in border-ellevee-success/40 ring-1 ring-ellevee-success/20"
                               : "msg-bubble-out"
                           }`}
                         >
                           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                           <div
                             className={`flex justify-end items-center gap-1.5 mt-1 text-meta font-mono ${
-                              isAgent ? "text-ellevee-sage-strong" : "text-white/70"
+                              isAgent ? "text-ellevee-ink-muted" : "text-white/70"
                             }`}
                           >
                             <span>{formatTime(msg.created_at)}</span>
@@ -1647,12 +1647,12 @@ export default function PainelClient({
             {/* Rodapé: Textarea Ativo OU Banner de Atendimento Encerrado */}
             {activeConversation.status === "closed" ? (
               <footer className="border-t border-ellevee-stone px-6 py-4 bg-white shrink-0 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-ellevee-sage-strong">
-                  <CheckCircle2 className="h-4 w-4 text-ellevee-sage-strong shrink-0" />
+                <div className="flex items-center gap-2 text-ellevee-ink-muted">
+                  <CheckCircle2 className="h-4 w-4 text-ellevee-ink-muted shrink-0" />
                   <span className="text-meta font-semibold text-ellevee-ink">
                     Este atendimento foi finalizado.
                   </span>
-                  <span className="text-meta text-ellevee-sage-strong hidden sm:inline">
+                  <span className="text-meta text-ellevee-ink-muted hidden sm:inline">
                     O histórico está preservado.
                   </span>
                 </div>
@@ -1678,7 +1678,7 @@ export default function PainelClient({
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer focus-ring ${
                         sendMode === "whatsapp"
                           ? "bg-ellevee-ink text-white shadow-2xs"
-                          : "text-ellevee-sage-strong hover:text-ellevee-ink bg-transparent"
+                          : "text-ellevee-ink-muted hover:text-ellevee-ink bg-transparent"
                       }`}
                     >
                       <Send className="h-3 w-3" />
@@ -1692,7 +1692,7 @@ export default function PainelClient({
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer focus-ring ${
                         sendMode === "note"
                           ? "bg-ellevee-note-border text-ellevee-note-strong shadow-2xs border border-ellevee-note-border-strong"
-                          : "text-ellevee-sage-strong hover:text-ellevee-note-strong bg-transparent"
+                          : "text-ellevee-ink-muted hover:text-ellevee-note-strong bg-transparent"
                       }`}
                     >
                       <Lock className="h-3 w-3" />
@@ -1721,7 +1721,7 @@ export default function PainelClient({
                             : "Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
                         }
                         aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
-                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ellevee-ink placeholder:text-ellevee-sage-strong/70 focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
+                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ellevee-ink placeholder:text-ellevee-ink-muted/70 focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
                       />
                     </div>
 
@@ -1785,7 +1785,7 @@ export default function PainelClient({
                 </div>
                 <button
                   onClick={() => setIsProfileOpen(false)}
-                  className="p-1 rounded-md text-ellevee-sage-strong hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-ink/40"
+                  className="p-1 rounded-md text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-ink/40"
                   title="Fechar painel"
                   aria-label="Fechar painel do cliente"
                 >
@@ -1813,11 +1813,11 @@ export default function PainelClient({
                     <h4 className="font-semibold text-meta text-ellevee-ink truncate">
                       {customerForm.name || "Cliente Sem Nome"}
                     </h4>
-                    <p className="text-meta text-ellevee-sage-strong font-mono truncate">
+                    <p className="text-meta text-ellevee-ink-muted font-mono truncate">
                       {customerForm.phone || activeConversation.external_id || "Sem telefone"}
                     </p>
-                    <span className="inline-flex items-center gap-1.5 text-meta text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-medium mt-1">
-                      <WhatsAppIcon className="h-2.5 w-2.5 text-ellevee-sage-strong" />
+                    <span className="inline-flex items-center gap-1.5 text-meta text-ellevee-success-strong bg-ellevee-success/10 px-1.5 py-0.5 rounded border border-ellevee-success/30 font-medium mt-1">
+                      <WhatsAppIcon className="h-2.5 w-2.5 text-ellevee-ink-muted" />
                       WhatsApp
                     </span>
                   </div>
@@ -1826,18 +1826,18 @@ export default function PainelClient({
                 {/* Formulário de Edição de Dados */}
                 <form onSubmit={handleSaveCustomer} className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-meta font-semibold uppercase tracking-wider text-ellevee-sage-strong">
+                    <span className="text-meta font-semibold uppercase tracking-wider text-ellevee-ink-muted">
                       Dados Cadastrais
                     </span>
                     {isLoadingCustomer && (
-                      <Loader2 className="h-3 w-3 animate-spin text-ellevee-sage-strong" />
+                      <Loader2 className="h-3 w-3 animate-spin text-ellevee-ink-muted" />
                     )}
                   </div>
 
                   {/* Nome */}
                   <div className="space-y-1">
                     <label className="text-meta font-medium text-ellevee-ink flex items-center gap-1">
-                      <User className="h-3 w-3 text-ellevee-sage-strong" />
+                      <User className="h-3 w-3 text-ellevee-ink-muted" />
                       Nome Completo
                     </label>
                     <input
@@ -1853,7 +1853,7 @@ export default function PainelClient({
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <label className="text-meta font-medium text-ellevee-ink flex items-center gap-1">
-                        <Phone className="h-3 w-3 text-ellevee-sage-strong" />
+                        <Phone className="h-3 w-3 text-ellevee-ink-muted" />
                         WhatsApp / Telefone
                       </label>
                       {customerForm.phone && (
@@ -1861,7 +1861,7 @@ export default function PainelClient({
                           href={`https://wa.me/${customerForm.phone.replace(/\D/g, "")}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-meta text-emerald-700 hover:underline"
+                          className="text-meta text-ellevee-success-strong hover:underline"
                         >
                           Abrir no WhatsApp
                         </a>
@@ -1879,7 +1879,7 @@ export default function PainelClient({
                   {/* Email */}
                   <div className="space-y-1">
                     <label className="text-meta font-medium text-ellevee-ink flex items-center gap-1">
-                      <Mail className="h-3 w-3 text-ellevee-sage-strong" />
+                      <Mail className="h-3 w-3 text-ellevee-ink-muted" />
                       E-mail
                     </label>
                     <input
@@ -1894,7 +1894,7 @@ export default function PainelClient({
                   {/* Endereço */}
                   <div className="space-y-1">
                     <label className="text-meta font-medium text-ellevee-ink flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-ellevee-sage-strong" />
+                      <MapPin className="h-3 w-3 text-ellevee-ink-muted" />
                       Endereço Completo
                     </label>
                     <textarea
@@ -1909,7 +1909,7 @@ export default function PainelClient({
                   {/* Observações Gerais */}
                   <div className="space-y-1">
                     <label className="text-meta font-medium text-ellevee-ink flex items-center gap-1">
-                      <FileText className="h-3 w-3 text-ellevee-sage-strong" />
+                      <FileText className="h-3 w-3 text-ellevee-ink-muted" />
                       Observações do Cliente
                     </label>
                     <textarea
@@ -1946,7 +1946,7 @@ export default function PainelClient({
 
                 {/* Seção de Notas Internas no Drawer */}
                 <div className="space-y-3">
-                  <div className="flex items-center gap-1.5 text-meta font-semibold uppercase tracking-wider text-ellevee-sage-strong">
+                  <div className="flex items-center gap-1.5 text-meta font-semibold uppercase tracking-wider text-ellevee-ink-muted">
                     <Lock className="h-3.5 w-3.5 text-ellevee-note-accent" />
                     <span>Notas Internas da Equipe</span>
                   </div>
@@ -1984,7 +1984,7 @@ export default function PainelClient({
                   {/* Lista de Notas Recentes na Conversa */}
                   <div className="space-y-2 pt-1 max-h-56 overflow-y-auto">
                     {internalNotes.length === 0 ? (
-                      <p className="text-meta text-ellevee-sage-strong italic text-center py-2">
+                      <p className="text-meta text-ellevee-ink-muted italic text-center py-2">
                         Nenhuma nota interna registrada nesta conversa.
                       </p>
                     ) : (
@@ -2008,10 +2008,10 @@ export default function PainelClient({
           )}
         </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-ellevee-sage-strong space-y-3">
-            <MessageSquare className="h-10 w-10 stroke-1 text-ellevee-sage-strong/50" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-ellevee-ink-muted space-y-3">
+            <MessageSquare className="h-10 w-10 stroke-1 text-ellevee-ink-muted/50" />
             <h3 className="font-display font-semibold text-sm text-ellevee-ink">Nenhuma conversa selecionada</h3>
-            <p className="text-meta max-w-xs text-ellevee-sage-strong">
+            <p className="text-meta max-w-xs text-ellevee-ink-muted">
               Selecione uma conversa na barra lateral para visualizar o histórico de mensagens e monitorar eventos em tempo real.
             </p>
             <button

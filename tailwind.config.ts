@@ -70,6 +70,15 @@ const config = {
           "accent-muted": "#E5F2BF",
           // Variante escura do sage para texto pequeno (contraste AA em fundo claro)
           "sage-strong": "#5A6659",
+          // Tokens semânticos de estado (substituem as paletas padrão do Tailwind)
+          warning: "#B45309",
+          "warning-strong": "#854D0E",
+          success: "#15803D",
+          "success-strong": "#14532D",
+          info: "#1D4ED8",
+          "info-strong": "#1E3A8A",
+          danger: "#B91C1C",
+          "danger-strong": "#7F1D1D",
         },
         // Paleta semântica de notas internas (âmbar quente, contida)
         note: {

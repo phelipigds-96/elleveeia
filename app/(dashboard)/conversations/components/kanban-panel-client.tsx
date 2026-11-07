@@ -95,7 +95,7 @@ export default function KanbanPanelClient({
       {error ? (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-lg border border-ellevee-danger/30 bg-ellevee-danger/10 px-3 py-2 text-sm text-ellevee-danger-strong"
         >
           {error}
         </div>
@@ -145,7 +145,7 @@ export default function KanbanPanelClient({
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-meta text-ellevee-ink-muted">
                       {conv.channel ? (
-                        <span className="rounded bg-ellevee-sage-light px-1.5 py-0.5 font-medium text-ellevee-sage-strong">
+                        <span className="rounded bg-ellevee-sage-light px-1.5 py-0.5 font-medium text-ellevee-ink-muted">
                           {CHANNEL_LABEL[conv.channel] || conv.channel}
                         </span>
                       ) : null}
