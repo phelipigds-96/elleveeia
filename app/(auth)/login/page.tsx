@@ -11,57 +11,111 @@ export default function LoginPage() {
   async function onSubmit(formData: FormData) {
     setIsLoading(true)
     setError(null)
-    
+
     const result = await login(formData)
-    
+
     if (result?.error) {
       setError(result.error)
       setIsLoading(false)
     }
   }
-  return (
-    <div className="relative min-h-screen w-full bg-muted/30">
-      <div className="animated-bg" aria-hidden>
-        <svg className="bg-icon icon-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="2" />
-        </svg>
-        <svg className="bg-icon icon-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="0.5" />
-        </svg>
-        <svg className="bg-icon icon-3" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1" />
-        </svg>
-        <svg className="bg-icon icon-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2C8 6 4 8 2 12c2 4 6 6 10 10s8-6 10-10c-2-4-6-6-10-10z" stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>
 
-      <div className="relative z-10 flex min-h-screen flex-col-reverse items-center justify-center gap-8 p-6 md:flex-row md:items-center">
-        <div className="w-full max-w-md rounded-lg border bg-card p-8 shadow-sm">
-          <div className="space-y-2 text-left">
-            <h1 className="text-2xl font-semibold tracking-tight">Entrar na sua conta</h1>
+  return (
+    <div className="relative min-h-screen w-full bg-background">
+      {/* Coluna da marca — fundo de ícones em movimento suave */}
+      <aside className="login-brand-panel relative hidden overflow-hidden lg:flex lg:w-[52%] lg:flex-col lg:justify-between lg:border-r lg:border-border lg:bg-muted/40 lg:p-12">
+        <div className="animated-bg" aria-hidden>
+          <svg className="bg-icon icon-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="2" />
+          </svg>
+          <svg className="bg-icon icon-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="0.5" />
+          </svg>
+          <svg className="bg-icon icon-3" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1" />
+          </svg>
+          <svg className="bg-icon icon-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C8 6 4 8 2 12c2 4 6 6 10 10s8-6 10-10c-2-4-6-6-10-10z" stroke="currentColor" strokeWidth="1" />
+          </svg>
+          <svg className="bg-icon icon-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8L12 3z" stroke="currentColor" strokeWidth="0.75" />
+          </svg>
+          <svg className="bg-icon icon-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 18V6a2 2 0 012-2h9l5 5v9a2 2 0 01-2 2H6a2 2 0 01-2-2z" stroke="currentColor" strokeWidth="1" />
+            <path d="M15 4v5h5" stroke="currentColor" strokeWidth="1" />
+          </svg>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+            E
+          </span>
+          <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
+        </div>
+
+        <div className="relative z-10 max-w-md space-y-4">
+          <h2 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-foreground">
+            Soluções de IA para o seu negócio
+          </h2>
+          <p className="text-base leading-relaxed text-muted-foreground">
+            Atendimento automatizado, funis de vendas e integrações em um só painel — do primeiro
+            contato ao orçamento enviado.
+          </p>
+          <ul className="flex flex-wrap gap-2 pt-2">
+            {['Conversas', 'Catálogo', 'Funil Kanban', 'Automações'].map((item) => (
+              <li
+                key={item}
+                className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative z-10 text-xs text-muted-foreground">
+          © {new Date().getFullYear()} Ellevee IA. Todos os direitos reservados.
+        </p>
+      </aside>
+
+      {/* Coluna de acesso */}
+      <main className="relative flex min-h-screen w-full flex-col justify-center px-6 py-12 sm:px-10 lg:w-[48%]">
+        <div className="mx-auto w-full max-w-md">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+              E
+            </span>
+            <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="font-display text-3xl font-semibold tracking-tight">Entrar na sua conta</h1>
             <p className="text-sm text-muted-foreground">
               Use seu e-mail e senha para acessar o painel Ellevee IA
             </p>
           </div>
 
           {error && (
-            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive font-medium text-center">
+            <div
+              role="alert"
+              className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+            >
               {error}
             </div>
           )}
 
-          <form action={onSubmit} className="mt-4 space-y-4">
+          <form action={onSubmit} className="mt-6 space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium leading-none" htmlFor="email">
                 E-mail
               </label>
               <input
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 id="email"
                 name="email"
                 placeholder="seu@email.com"
                 type="email"
+                autoComplete="email"
                 required
                 disabled={isLoading}
               />
@@ -71,16 +125,17 @@ export default function LoginPage() {
                 Senha
               </label>
               <input
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 disabled={isLoading}
               />
             </div>
             <button
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
+              className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
               type="submit"
               disabled={isLoading}
             >
@@ -88,21 +143,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-4 text-center text-sm text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-muted-foreground">
             Não tem uma conta?{' '}
-            <Link href="/signup" className="underline underline-offset-4 hover:text-primary">
+            <Link href="/signup" className="font-medium underline underline-offset-4 hover:text-primary">
               Cadastre-se
             </Link>
           </div>
         </div>
-
-        <div className="flex w-full max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
-          <div className="rounded-lg p-6">
-            <h2 className="text-4xl font-extrabold tracking-tight">Ellevee IA</h2>
-            <p className="text-sm text-muted-foreground">Soluções de IA para seu negócio</p>
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   )
 }
