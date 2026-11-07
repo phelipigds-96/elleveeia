@@ -12,6 +12,8 @@ type Stage = {
   is_active: boolean
 }
 
+type CustomerRef = { name: string | null; phone: string | null }
+
 type Conversation = {
   id: string
   customer_id: string | null
@@ -19,7 +21,7 @@ type Conversation = {
   status: string | null
   workflow_stage_id: string | null
   created_at: string | null
-  customers: { name: string | null; phone: string | null } | null
+  customers: CustomerRef[] | CustomerRef | null
 }
 
 const UNSTAGED_KEY = "__unstaged__"
@@ -52,8 +54,18 @@ export default function KanbanPanelClient({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const customerName = (conv: Conversation) =>
-    conv.customers?.name || conv.customers?.phone || "Conversa sem cliente"
+  // Normaliza o join de customers, que pode voltar como array ou objeto.
+  const customerRef = (conv: Conversation): CustomerRef | null => {
+    const raw = conv.customers
+    if (!raw) return null
+    if (Array.isArray(raw)) return raw[0] ?? null
+    return raw
+  }
+
+  const customerName = (conv: Conversation) => {
+    const ref = customerRef(conv)
+    return ref?.name || ref?.phone || "Conversa sem cliente"
+  }
 
   const cardsByStage = useMemo(() => {
     const map: Record<string, Conversation[]> = {}

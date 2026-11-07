@@ -12,6 +12,8 @@ type StageRow = {
   is_active: boolean
 }
 
+type CustomerRef = { name: string | null; phone: string | null }
+
 type ConversationRow = {
   id: string
   customer_id: string | null
@@ -19,7 +21,9 @@ type ConversationRow = {
   status: string | null
   workflow_stage_id: string | null
   created_at: string | null
-  customers: { name: string | null; phone: string | null } | null
+  // O join pode voltar como array (to-one não resolvido) ou objeto, dependendo
+  // do driver. Aceitamos as duas formas e normalizamos no componente.
+  customers: CustomerRef[] | CustomerRef | null
 }
 
 export default async function ConversationsKanbanPage() {
@@ -74,7 +78,11 @@ export default async function ConversationsKanbanPage() {
 
   const workflows = (workflowsRes.data || []) as any[]
   const stages = (stagesRes.data || []) as StageRow[]
-  const conversations = (conversationsRes.data || []) as ConversationRow[]
+  const conversations = ((conversationsRes.data || []) as unknown as ConversationRow[])
+
+  if (conversationsRes.error) {
+    console.error('[kanban] Falha ao carregar conversas:', conversationsRes.error)
+  }
 
   const defaultWorkflow =
     workflows.find((w) => w.is_default && w.is_active) ||
