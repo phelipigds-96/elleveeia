@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCompanyWorkflows } from '@/lib/services/workflows/workflows'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 import { WorkflowSettingsClient } from './components/workflow-settings-client'
 
 export const dynamic = 'force-dynamic'
 
 export default async function WorkflowsSettingsPage() {
+  await requireCompanyAdmin()
   const supabase = createClient()
   const { data: userData } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user?.id).single()

@@ -6,12 +6,16 @@ import { ActivityChart } from '@/components/dashboard/activity-chart'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { IntegrationStatus } from '@/components/dashboard/integration-status'
 import { PeriodSelector } from '@/components/dashboard/period-selector'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 
 interface DashboardPageProps {
   searchParams: { period?: string }
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  // Barreira de proteção: atendentes são redirecionados automaticamente para o chat
+  await requireCompanyAdmin()
+
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   

@@ -1,6 +1,8 @@
 import { Search } from 'lucide-react'
+import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 
-export default function CustomersPage() {
+export default async function CustomersPage() {
+  await requireCompanyAdmin()
   return (
     <div className="space-y-6">
       <div>

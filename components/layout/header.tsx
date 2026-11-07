@@ -1,8 +1,12 @@
-import { User, LogOut, Search, Building2 } from 'lucide-react'
+import { User, LogOut, Search, Building2, Headphones } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { logout } from '@/app/(auth)/actions'
 
-export async function Header() {
+interface HeaderProps {
+  userRole?: string
+}
+
+export async function Header({ userRole = 'admin' }: HeaderProps) {
   const supabase = createClient()
   let profile = null
   let company = null
@@ -25,17 +29,23 @@ export async function Header() {
     // Modo preview
   }
 
-  const displayName = profile?.full_name || 'Operador'
+  const isAttendant = (profile?.role || userRole) === 'attendant' || (profile?.role || userRole) === 'user'
+  const isOwner = (profile?.role || userRole) === 'owner'
+  const displayName = profile?.full_name || (isAttendant ? 'Atendente' : 'Administrador')
   const companyName = company?.name || 'Ellevee IA'
-  const monogram = displayName.slice(0, 1).toUpperCase() || 'P'
+  const monogram = displayName.slice(0, 1).toUpperCase() || 'O'
 
   return (
     <header className="h-16 border-b border-ellevee-stone bg-white/90 backdrop-blur-md px-6 flex items-center justify-between z-10 shrink-0">
       {/* Esquerda: Breadcrumb corporativo */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-semibold text-ellevee-ink">Plataforma</span>
+        <span className="font-semibold text-ellevee-ink">
+          {isAttendant ? 'Atendimento' : 'Plataforma'}
+        </span>
         <span className="text-ellevee-stone font-mono">/</span>
-        <span className="text-ellevee-sage font-medium">Atendimento Omnichannel</span>
+        <span className="text-ellevee-sage font-medium">
+          {isAttendant ? 'Chat de Conversas' : 'Atendimento Omnichannel'}
+        </span>
       </div>
 
       {/* Direita: Organização ativa, Perfil e Logout */}
@@ -50,15 +60,21 @@ export async function Header() {
 
         {/* Perfil com Monograma */}
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-full bg-ellevee-ink text-white flex items-center justify-center font-display font-semibold text-xs shrink-0 shadow-2xs">
+          <div className={`h-7 w-7 rounded-full flex items-center justify-center font-display font-semibold text-xs shrink-0 shadow-2xs ${
+            isAttendant 
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+              : 'bg-ellevee-ink text-white'
+          }`}>
             {monogram}
           </div>
           <div className="flex flex-col text-left hidden sm:flex">
             <span className="text-xs font-semibold text-ellevee-ink leading-tight">
               {displayName}
             </span>
-            <span className="text-[10px] text-ellevee-sage leading-tight">
-              Operador
+            <span className={`text-[10px] leading-tight font-medium ${
+              isAttendant ? 'text-emerald-700 font-semibold' : 'text-ellevee-sage'
+            }`}>
+              {isAttendant ? 'Atendente' : isOwner ? 'Proprietário' : 'Administrador'}
             </span>
           </div>
         </div>
