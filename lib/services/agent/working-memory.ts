@@ -332,20 +332,7 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
         next.discoveredProducts = existingList.slice(-15)
       }
 
-      // Identificar o produto em foco no diálogo (leading product)
-      const leadingProduct = 
-        res.data.product ?? 
-        (Array.isArray(res.data.products) && res.data.products.length > 0 ? res.data.products[0] : null) ??
-        (Array.isArray(res.data.matches) && res.data.matches.length > 0 ? res.data.matches[0] : null)
 
-      if (leadingProduct && typeof leadingProduct.id === 'string' && leadingProduct.id.trim() !== '' && typeof leadingProduct.name === 'string') {
-        const newId = leadingProduct.id.trim()
-        if (next.activeProduct && next.activeProduct.id !== newId) {
-          delete next.activePrice
-          delete next.activeQuantity
-        }
-        next.activeProduct = { id: newId, name: leadingProduct.name.trim() }
-      }
 
       const isConfirmedMatch = 
         res.data.strategy === 'specific_product' ||
