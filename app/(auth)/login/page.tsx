@@ -23,7 +23,11 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen w-full bg-background">
       {/* Coluna da marca — fundo de ícones em movimento suave */}
-      <aside className="login-brand-panel relative hidden overflow-hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:border-r lg:border-border lg:bg-muted/40 lg:p-12">
+      <aside className="login-brand-panel relative hidden overflow-hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:border-r lg:border-border lg:p-12">
+        <div className="brand-blob brand-blob-1" aria-hidden />
+        <div className="brand-blob brand-blob-2" aria-hidden />
+        <div className="brand-blob brand-blob-3" aria-hidden />
+
         <div className="animated-bg" aria-hidden>
           <svg className="bg-icon icon-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="2" />
@@ -47,17 +51,21 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ellevee-ink text-sm font-bold text-ellevee-white shadow-sm">
             E
           </span>
           <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
         </div>
 
         <div className="relative z-10 max-w-md space-y-4">
-          <h2 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-foreground">
+          <span className="inline-flex items-center gap-2 rounded-full border border-ellevee-sage/30 bg-ellevee-sage-light px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ellevee-sage-strong">
+            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
+            Plataforma de IA conversacional
+          </span>
+          <h2 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-ellevee-ink">
             Soluções de IA para o seu negócio
           </h2>
-          <p className="text-base leading-relaxed text-muted-foreground">
+          <p className="text-base leading-relaxed text-ellevee-ink-muted">
             Atendimento automatizado, funis de vendas e integrações em um só painel — do primeiro
             contato ao orçamento enviado.
           </p>
@@ -65,7 +73,7 @@ export default function LoginPage() {
             {['Conversas', 'Catálogo', 'Funil Kanban', 'Automações'].map((item) => (
               <li
                 key={item}
-                className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm"
+                className="rounded-full border border-ellevee-stone bg-ellevee-white/80 px-3 py-1 text-xs font-medium text-ellevee-ink-muted shadow-sm backdrop-blur-sm"
               >
                 {item}
               </li>
@@ -73,7 +81,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="relative z-10 text-xs text-muted-foreground">
+        <p className="relative z-10 text-xs text-ellevee-sage-strong">
           © {new Date().getFullYear()} Ellevee IA. Todos os direitos reservados.
         </p>
       </aside>
@@ -82,15 +90,15 @@ export default function LoginPage() {
       <main className="relative flex min-h-screen w-full flex-1 flex-col justify-center px-6 py-12 sm:px-10 lg:w-1/2">
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ellevee-ink text-sm font-bold text-ellevee-white shadow-sm">
               E
             </span>
             <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
           </div>
 
           <div className="space-y-2">
-            <h1 className="font-display text-3xl font-semibold tracking-tight">Entrar na sua conta</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-ellevee-ink">Entrar na sua conta</h1>
+            <p className="text-sm text-ellevee-ink-muted">
               Use seu e-mail e senha para acessar o painel Ellevee IA
             </p>
           </div>
@@ -135,7 +143,7 @@ export default function LoginPage() {
               />
             </div>
             <button
-              className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md bg-ellevee-ink px-4 py-2 text-sm font-semibold text-ellevee-white transition-colors hover:bg-ellevee-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-sage focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
               type="submit"
               disabled={isLoading}
             >
@@ -143,9 +151,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-ellevee-ink-muted">
             Não tem uma conta?{' '}
-            <Link href="/signup" className="font-medium underline underline-offset-4 hover:text-primary">
+            <Link href="/signup" className="font-semibold text-ellevee-sage-strong underline underline-offset-4 hover:text-ellevee-ink">
               Cadastre-se
             </Link>
           </div>
