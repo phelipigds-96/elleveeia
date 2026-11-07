@@ -78,7 +78,8 @@ export function formatWorkingMemoryPrompt(workingMemory: WorkingMemory | null | 
       const priceStr = p.unitPrice ? ` | Preço: R$ ${p.unitPrice.toFixed(2)}` : ''
       prompt += `- ${p.name} | ID: ${p.id}${priceStr}\n`
     }
-    prompt += `ATENÇÃO: Ao calcular preço, consultar preço ou gerar orçamento para algum dos produtos acima, use OBRIGATORIAMENTE o ID indicado. NUNCA invente outros IDs.\n`
+    prompt += `ATENÇÃO: A lista acima é APENAS o histórico de opções recentemente visualizadas nesta conversa, NÃO É O CATÁLOGO COMPLETO DA LOJA.\n`
+    prompt += `A loja possui milhares de produtos. Para qualquer novo produto ou marca perguntado pelo cliente (ex: "tem trakinas?", "tem nutella?"), VOCÊ DEVE OBRIGATORIAMENTE consultar o catálogo via consultar_produto_comercial. NUNCA diga que não localizou sem antes pesquisar na ferramenta!\n`
   }
 
   return prompt
@@ -195,7 +196,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- Use o catálogo importado da Sumel como fonte oficial de identificação.\n`
   systemPrompt += `- Não invente produtos, marcas, códigos ou preços.\n`
   systemPrompt += `- Quando houver ambiguidade de marcas ou modelos, apresente as opções disponíveis e peça esclarecimento ao cliente.\n`
-  systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou' ao não encontrar um produto. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano.\n\n`
+  systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou'. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano apenas SE a ferramenta consultar_produto_comercial tiver sido executada e retornado not_found.\n\n`
 
   systemPrompt += `2. CARRINHO DE NEGOCIAÇÃO:\n`
   systemPrompt += `- Uma consulta simples não adiciona automaticamente um produto ao carrinho.\n`

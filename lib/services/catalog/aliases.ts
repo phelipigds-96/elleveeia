@@ -1,7 +1,16 @@
 export const STOP_WORDS = new Set([
-  'de', 'da', 'do', 'para', 'com', 'o', 'a', 'os', 'as', 'em', 'um', 'uma', 
-  'quanto', 'esta', 'ta', 'tem', 'gostaria', 'queria', 'saber', 'preco', 'valor', 'custa', 'qual', 'e', 'que',
-  'voce', 'voces', 'vc', 'vcs', 'temos', 'ola', 'oi', 'favor'
+  'de', 'da', 'do', 'das', 'dos', 'para', 'pra', 'pro', 'pras', 'pros',
+  'com', 'sem', 'o', 'a', 'os', 'as', 'em', 'um', 'uma', 'uns', 'umas',
+  'quanto', 'quantos', 'quanta', 'quantas', 'esta', 'ta', 'estao', 'tao',
+  'tem', 'temos', 'teria', 'teriam', 'tinha', 'tinham',
+  'tu', 'voce', 'voces', 'vc', 'vcs', 'te', 'ti', 'ele', 'ela',
+  'gostaria', 'queria', 'saber', 'preco', 'precos', 'valor', 'valores', 'custa', 'custam',
+  'qual', 'quais', 'e', 'que', 'se',
+  'ola', 'oi', 'oii', 'oiii', 'opa', 'eae', 'bom', 'boa', 'dia', 'tarde', 'noite',
+  'favor', 'por', 'acaso', 'gentileza',
+  'ai', 'aqui', 'la', 'ainda', 'tambem',
+  'algum', 'alguma', 'alguns', 'algumas',
+  'amigo', 'amiga', 'moco', 'moca', 'veja', 'olha'
 ])
 
 export const MULTI_WORD_TOKENS = [
