@@ -4,6 +4,23 @@ import {
   getOrCreateDefaultWorkflow,
   type WorkflowServiceOptions,
 } from '@/lib/services/workflows/workflows'
+import {
+  WORKFLOW_TEMPLATES,
+  getWorkflowTemplate,
+  type TemplateHandledBy,
+  type TemplateStageType,
+  type WorkflowTemplate,
+  type WorkflowTemplateStage,
+} from '@/lib/services/workflows/template-catalog'
+
+export {
+  WORKFLOW_TEMPLATES,
+  getWorkflowTemplate,
+  type TemplateHandledBy,
+  type TemplateStageType,
+  type WorkflowTemplate,
+  type WorkflowTemplateStage,
+} from '@/lib/services/workflows/template-catalog'
 
 /**
  * Marco 1 — Biblioteca de Templates de Funil por Segmento.
@@ -18,26 +35,7 @@ import {
  * `handled_by` e `color` são atributos descritivos e não alteram esse contrato.
  */
 
-export type TemplateStageType = 'initial' | 'in_progress' | 'final'
-export type TemplateHandledBy = 'ai' | 'human' | 'waiting'
-
-export interface WorkflowTemplateStage {
-  name: string
-  stage_type: TemplateStageType
-  handled_by: TemplateHandledBy
-  color: string
-  description?: string
-}
-
-export interface WorkflowTemplate {
-  key: string
-  label: string
-  segment: string
-  description: string
-  stages: WorkflowTemplateStage[]
-}
-
-export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplate> = {
+export interface ApplyWorkflowTemplateParams {
   retail_food: {
     key: 'retail_food',
     label: 'Varejo & Confeitaria',

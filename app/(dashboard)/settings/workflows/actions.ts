@@ -9,6 +9,7 @@ import {
   moveConversationStage,
   getOrCreateDefaultWorkflow
 } from '@/lib/services/workflows/workflows'
+import { applyWorkflowTemplate } from '@/lib/services/workflows/templates'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -45,6 +46,25 @@ export async function createDefaultWorkflowAction() {
   revalidatePath('/conversations')
   
   return result.workflow
+}
+
+/**
+ * Aplica um template de funil por segmento ao workflow padrão da empresa.
+ * O tenant é sempre resolvido no servidor a partir da sessão; o cliente
+ * apenas informa a chave do template.
+ */
+export async function applyWorkflowTemplateAction(templateKey: string) {
+  if (!templateKey || typeof templateKey !== 'string' || templateKey.trim().length === 0) {
+    throw new Error('Selecione um template de funil.')
+  }
+
+  const result = await applyWorkflowTemplate({ templateKey: templateKey.trim() })
+
+  revalidatePath('/settings/workflows')
+  revalidatePath('/conversations')
+  revalidatePath('/conversations/kanban')
+
+  return result
 }
 
 export async function createWorkflowStageAction(

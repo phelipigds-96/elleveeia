@@ -1,14 +1,40 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Plus, GripVertical, Settings2, Trash2, Loader2 } from 'lucide-react'
-import { createDefaultWorkflowAction, createWorkflowStageAction, updateWorkflowStageAction, deleteWorkflowStageAction } from '../actions'
+import { Plus, GripVertical, Settings2, Trash2, Loader2, LayoutTemplate } from 'lucide-react'
+import { createDefaultWorkflowAction, createWorkflowStageAction, updateWorkflowStageAction, deleteWorkflowStageAction, applyWorkflowTemplateAction } from '../actions'
+import { WORKFLOW_TEMPLATES } from '@/lib/services/workflows/templates'
 import { useRouter } from 'next/navigation'
+
+const HANDLED_BY_LABEL: Record<string, string> = {
+  ai: 'IA',
+  human: 'Humano',
+  waiting: 'Aguardando',
+}
 
 export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initialWorkflows: any[], companyId: string }) {
   const router = useRouter()
   const [workflows, setWorkflows] = useState(initialWorkflows)
   const [isPending, startTransition] = useTransition()
+  const [templateKey, setTemplateKey] = useState<string>('retail_food')
+  const [templateError, setTemplateError] = useState<string | null>(null)
+  const [templateApplied, setTemplateApplied] = useState<string | null>(null)
+
+  const handleApplyTemplate = () => {
+    setTemplateError(null)
+    setTemplateApplied(null)
+    startTransition(async () => {
+      try {
+        const result = await applyWorkflowTemplateAction(templateKey)
+        setTemplateApplied(
+          `Funil "${result.workflowName}" configurado: ${result.created} etapa(s) criada(s), ${result.updated} atualizada(s), ${result.removed} desativada(s).`
+        )
+        router.refresh()
+      } catch (error: any) {
+        setTemplateError(error?.message || 'Não foi possível aplicar o template de funil.')
+      }
+    })
+  }
 
   const handleCreateDefault = () => {
     startTransition(async () => {
@@ -82,6 +108,45 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
 
   return (
     <div className={`space-y-6 ${isPending ? 'opacity-70 pointer-events-none' : ''}`}>
+      <div className="border rounded-xl p-4 bg-muted/10 space-y-3">
+        <div className="flex items-center gap-2">
+          <LayoutTemplate className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-medium">Modelo de funil por segmento</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Aplica um modelo pronto de etapas ao funil padrão da sua empresa. Etapas que saem do modelo são desativadas
+          e as conversas nelas voltam para a etapa inicial. Nada é alterado em outras empresas.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={templateKey}
+            onChange={(e) => setTemplateKey(e.target.value)}
+            aria-label="Modelo de funil por segmento"
+            className="text-xs rounded-md border border-input bg-background px-2 py-1.5 shadow-sm focus:outline-none"
+          >
+            {Object.values(WORKFLOW_TEMPLATES).map((tpl) => (
+              <option key={tpl.key} value={tpl.key}>
+                {tpl.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleApplyTemplate}
+            disabled={isPending}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-md text-xs font-medium shadow-sm flex items-center disabled:opacity-50"
+          >
+            {isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <LayoutTemplate className="h-3.5 w-3.5 mr-2" />}
+            Aplicar modelo
+          </button>
+        </div>
+        {templateError ? (
+          <p role="alert" className="text-xs text-destructive">{templateError}</p>
+        ) : null}
+        {templateApplied ? (
+          <p className="text-xs text-muted-foreground">{templateApplied}</p>
+        ) : null}
+      </div>
+
       <div className="flex items-center justify-between border-b pb-4">
         <div className="flex items-start gap-3">
           <div>
@@ -114,7 +179,7 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
             </div>
             
             <div className="flex-1 grid grid-cols-12 gap-4 items-center">
-              <div className="col-span-4">
+              <div className="col-span-3">
                 <input 
                   type="text" 
                   defaultValue={stage.name}
@@ -124,7 +189,7 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
                   className="bg-transparent border-0 font-medium text-sm focus:ring-0 p-0 w-full"
                 />
               </div>
-              <div className="col-span-5">
+              <div className="col-span-4">
                 <input 
                   type="text" 
                   placeholder="Descrição opcional..."
@@ -135,7 +200,31 @@ export function WorkflowSettingsClient({ initialWorkflows, companyId }: { initia
                   className="bg-transparent border-0 text-sm text-muted-foreground focus:ring-0 p-0 w-full"
                 />
               </div>
-              <div className="col-span-3">
+              <div className="col-span-2">
+                <select 
+                  defaultValue={stage.handled_by || 'human'}
+                  onChange={(e) => handleUpdateStage(stage.id, 'handled_by', e.target.value)}
+                  aria-label="Responsável pela etapa"
+                  className="text-xs rounded-md border border-input bg-transparent px-2 py-1.5 shadow-sm focus:outline-none w-full"
+                >
+                  <option value="ai">{HANDLED_BY_LABEL.ai}</option>
+                  <option value="human">{HANDLED_BY_LABEL.human}</option>
+                  <option value="waiting">{HANDLED_BY_LABEL.waiting}</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <input
+                  type="color"
+                  defaultValue={stage.color || '#64748b'}
+                  onBlur={(e) => {
+                    const value = e.target.value.toLowerCase()
+                    if (value !== (stage.color || '#64748b')) handleUpdateStage(stage.id, 'color', value)
+                  }}
+                  aria-label="Cor da etapa"
+                  className="h-8 w-10 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
+                />
+              </div>
+              <div className="col-span-1">
                 <select 
                   defaultValue={stage.stage_type}
                   onChange={(e) => handleUpdateStage(stage.id, 'stage_type', e.target.value)}
