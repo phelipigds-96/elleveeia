@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { moveConversationToStageAction } from "../kanban/actions"
+import { getConversationsList } from "../actions"
 
 type Stage = {
   id: string
@@ -25,6 +26,13 @@ type Conversation = {
 }
 
 const UNSTAGED_KEY = "__unstaged__"
+
+const STATUS_LABEL: Record<string, string> = {
+  open: "Em aberto",
+  human: "Com atendente",
+  closed: "Encerrada",
+}
+
 
 const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -84,11 +92,51 @@ export default function KanbanPanelClient({
 
   const unstaged = cardsByStage[UNSTAGED_KEY] || []
 
+  // Sincronização com a lista de conversas: quando o status operacional muda
+  // na tela de mensagens, o funil reflete a nova etapa sem recarregar a página.
+  useEffect(() => {
+    let isMounted = true
+
+    const poll = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return
+      try {
+        const list = await getConversationsList()
+        if (!isMounted || !list || list.length === 0) return
+        setItems((current) => {
+          let changed = false
+          const next = current.map((conv) => {
+            const fresh = list.find((c) => c.id === conv.id)
+            if (!fresh) return conv
+            const stageId = fresh.workflow_stage_id || null
+            if (fresh.status === conv.status && stageId === conv.workflow_stage_id) return conv
+            changed = true
+            return { ...conv, status: fresh.status, workflow_stage_id: stageId }
+          })
+          return changed ? next : current
+        })
+      } catch {
+        // silencioso
+      }
+    }, 8000)
+
+    return () => {
+      isMounted = false
+      clearInterval(poll)
+    }
+  }, [])
+
   const moveTo = (conversationId: string, stageId: string) => {
     if (!conversationId || !stageId) return
     const previous = items
+    const stage = stages.find((s) => s.id === stageId)
+    // Atualiza também o status operacional, para que o cartão reflita
+    // o mesmo estado exibido na lista de conversas.
+    const nextStatus =
+      stage?.stage_type === "final" ? "closed" : stage?.stage_type === "in_progress" ? "human" : "open"
     setItems((current) =>
-      current.map((c) => (c.id === conversationId ? { ...c, workflow_stage_id: stageId } : c))
+      current.map((c) =>
+        c.id === conversationId ? { ...c, workflow_stage_id: stageId, status: nextStatus } : c
+      )
     )
     setPendingStage((p) => ({ ...p, [conversationId]: true }))
     setError(null)
@@ -170,7 +218,7 @@ export default function KanbanPanelClient({
                           {CHANNEL_LABEL[conv.channel] || conv.channel}
                         </span>
                       ) : null}
-                      {conv.status ? <span>{conv.status}</span> : null}
+                      {conv.status ? <span>{STATUS_LABEL[conv.status] || conv.status}</span> : null}
                       {conv.created_at ? <span>{formatTime(conv.created_at)}</span> : null}
                     </div>
                     <label className="mt-2 block">
@@ -235,7 +283,7 @@ export default function KanbanPanelClient({
                         {CHANNEL_LABEL[conv.channel] || conv.channel}
                       </span>
                     ) : null}
-                    {conv.status ? <span>{conv.status}</span> : null}
+                    {conv.status ? <span>{STATUS_LABEL[conv.status] || conv.status}</span> : null}
                     {conv.created_at ? <span>{formatTime(conv.created_at)}</span> : null}
                   </div>
                 </article>

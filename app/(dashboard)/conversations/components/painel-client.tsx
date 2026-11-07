@@ -450,6 +450,8 @@ export default function PainelClient({
                 !p ||
                 p.status !== u.status ||
                 p.unread_count !== u.unread_count ||
+                p.workflow_stage_id !== u.workflow_stage_id ||
+                p.workflow_stage_name !== u.workflow_stage_name ||
                 p.customers?.avatar_url !== u.customers?.avatar_url
               )
             })
@@ -1290,6 +1292,16 @@ export default function PainelClient({
                         </span>
                       )}
                     </div>
+
+                    {/* Etapa do funil (mesma informação do Kanban) */}
+                    {conv.workflow_stage_name ? (
+                      <span
+                        title={`Etapa no funil: ${conv.workflow_stage_name}`}
+                        className="mt-1 inline-flex items-center gap-1 rounded bg-ellevee-stone-subtle px-1.5 py-0.5 font-mono text-meta text-ellevee-ink-muted border border-ellevee-stone"
+                      >
+                        {conv.workflow_stage_name}
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               )

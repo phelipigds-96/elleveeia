@@ -606,7 +606,7 @@ export async function moveConversationStage(
   options?: WorkflowServiceOptions
 ) {
   const supabase = getSupabaseClient(options)
-  const { companyId, role } = await getAuthContext(supabase)
+  const { companyId, role, userId } = await getAuthContext(supabase)
 
   // RBAC: atendentes, admins e owners têm permissão operacional no Kanban
   requireMovePermission(role)
@@ -625,7 +625,7 @@ export async function moveConversationStage(
   // 1. Consultar a conversa usando id e company_id
   const { data: conversation, error: convError } = await supabase
     .from('conversations')
-    .select('id, company_id, workflow_id, workflow_stage_id')
+    .select('id, company_id, workflow_id, workflow_stage_id, assigned_to')
     .eq('id', conversationId)
     .eq('company_id', companyId)
     .maybeSingle()
@@ -637,7 +637,7 @@ export async function moveConversationStage(
   // 2. Consultar a etapa informada usando id e company_id
   const { data: stage, error: stageError } = await supabase
     .from('workflow_stages')
-    .select('id, company_id, workflow_id, is_active')
+    .select('id, company_id, workflow_id, is_active, stage_type')
     .eq('id', stageId)
     .eq('company_id', companyId)
     .maybeSingle()
@@ -655,15 +655,98 @@ export async function moveConversationStage(
     throw new Error('Etapa de outro workflow é rejeitada.')
   }
 
-  // 4. Executar a atualização mantendo workflow_id e workflow_stage_id coerentes
+  // 4. Sincronizar o status operacional da conversa com o tipo da etapa.
+  //    O funil (workflow_stage_id) e a lista de conversas (status/assigned_to)
+  //    passam a refletir o mesmo estado, independentemente da tela de origem.
+  const now = new Date().toISOString()
+  const statusPayload: Record<string, any> = {}
+
+  if (stage.stage_type === 'final') {
+    statusPayload.status = 'closed'
+    statusPayload.closed_at = now
+  } else if (stage.stage_type === 'in_progress') {
+    statusPayload.status = 'human'
+    statusPayload.assigned_to = conversation.assigned_to || userId
+    statusPayload.closed_at = null
+  } else {
+    // Etapa inicial: conversa na fila, ainda sem atendente responsável
+    // (atendimento conduzido pela IA até que um operador assuma).
+    statusPayload.status = 'open'
+    statusPayload.assigned_to = null
+    statusPayload.closed_at = null
+  }
+
+  // 5. Executar a atualização mantendo workflow_id e workflow_stage_id coerentes
   const { error: updateError } = await supabase
     .from('conversations')
     .update({
       workflow_id: stage.workflow_id,
-      workflow_stage_id: stage.id
+      workflow_stage_id: stage.id,
+      ...statusPayload,
+      updated_at: now,
     })
     .eq('id', conversationId)
     .eq('company_id', companyId)
 
   if (updateError) throw new Error(updateError.message)
+}
+
+/**
+ * Move a conversa para a primeira etapa ativa do tipo informado
+ * (initial | in_progress | final) do seu workflow atual.
+ *
+ * Usado pela lista de conversas para manter o funil alinhado quando o
+ * status operacional muda por fora do Kanban (assumir, devolver para IA,
+ * encerrar ou reabrir atendimento).
+ */
+export async function moveConversationToStageType(
+  conversationId: string,
+  stageType: 'initial' | 'in_progress' | 'final',
+  options?: WorkflowServiceOptions
+) {
+  const supabase = getSupabaseClient(options)
+  const { companyId } = await getAuthContext(supabase)
+
+  if (!isValidUuid(conversationId)) {
+    throw new Error('Conversa não encontrada.')
+  }
+
+  const { data: conversation, error: convError } = await supabase
+    .from('conversations')
+    .select('id, workflow_id')
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (convError || !conversation) {
+    throw new Error('Conversa não encontrada.')
+  }
+
+  let stageQuery = supabase
+    .from('workflow_stages')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('stage_type', stageType)
+    .eq('is_active', true)
+
+  if (conversation.workflow_id) {
+    stageQuery = stageQuery.eq('workflow_id', conversation.workflow_id)
+  }
+
+  const { data: stages, error: stageError } = await stageQuery
+    .order('position', { ascending: true })
+    .limit(1)
+
+  if (stageError) {
+    throw new Error(stageError.message)
+  }
+
+  const stage = stages && stages[0]
+  if (!stage) {
+    // Empresa sem etapa do tipo pedido: mantém apenas o status operacional.
+    return null
+  }
+
+  await moveConversationStage(conversationId, stage.id, options)
+  return stage.id
 }

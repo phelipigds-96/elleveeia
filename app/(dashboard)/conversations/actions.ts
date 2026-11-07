@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
 import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
+import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
 
 export interface CustomerData {
   id?: string
@@ -24,6 +25,9 @@ export interface ConversationData {
   channel?: string | null
   status: "open" | "closed" | "human" | string
   assigned_to?: string | null
+  workflow_id?: string | null
+  workflow_stage_id?: string | null
+  workflow_stage_name?: string | null
   started_at?: string | null
   last_message_at: string
   closed_at?: string | null
@@ -151,6 +155,8 @@ export async function getConversationsList(): Promise<ConversationData[]> {
           channel,
           status,
           assigned_to,
+          workflow_id,
+          workflow_stage_id,
           started_at,
           last_message_at,
           closed_at,
@@ -160,6 +166,10 @@ export async function getConversationsList(): Promise<ConversationData[]> {
           external_id,
           agent_id,
           agents (
+            id,
+            name
+          ),
+          workflow_stages (
             id,
             name
           ),
@@ -221,6 +231,7 @@ export async function getConversationsList(): Promise<ConversationData[]> {
       const preview = previewMap.get(c.id) || (c.channel ? `Atendimento via ${c.channel}` : "Nova conversa iniciada")
       const agentObj = Array.isArray(c.agents) ? c.agents[0] : c.agents
       const agentName = agentObj?.name || defaultAgentName
+      const stageObj = Array.isArray(c.workflow_stages) ? c.workflow_stages[0] : c.workflow_stages
 
       return {
         id: c.id,
@@ -229,6 +240,9 @@ export async function getConversationsList(): Promise<ConversationData[]> {
         channel: c.channel || "whatsapp",
         status: c.status || "open",
         assigned_to: c.assigned_to,
+        workflow_id: c.workflow_id || null,
+        workflow_stage_id: c.workflow_stage_id || null,
+        workflow_stage_name: stageObj?.name || null,
         started_at: c.started_at,
         last_message_at: c.last_message_at || c.created_at,
         closed_at: c.closed_at,
@@ -277,6 +291,24 @@ export async function getConversationMessages(
   } catch (error) {
     console.error("[Conversations] Exceção em getConversationMessages:", error)
     return []
+  }
+}
+
+/**
+ * Mantém a etapa do funil (workflow_stages) coerente com o status operacional
+ * da conversa. Falhas não bloqueiam a ação principal: o status já foi salvo.
+ */
+async function syncWorkflowStage(
+  conversationId: string,
+  stageType: "initial" | "in_progress" | "final"
+) {
+  try {
+    await moveConversationToStageType(conversationId, stageType)
+  } catch (error: any) {
+    console.error(
+      "[Conversations] Falha ao sincronizar etapa do funil:",
+      error?.message || error
+    )
   }
 }
 
@@ -483,7 +515,10 @@ export async function takeoverConversationAction(
       }
     }
 
-    // 2. Gravar evento de sistema indicando o transbordo para o operador humano
+    // 2. Sincronizar o funil (etapa) com o novo status operacional
+    await syncWorkflowStage(conversationId, "in_progress")
+
+    // 3. Gravar evento de sistema indicando o transbordo para o operador humano
     await adminClient.from("messages").insert({
       company_id: companyId,
       conversation_id: conversationId,
@@ -565,7 +600,10 @@ export async function returnToAIAction(
       return { success: false, error: `Falha ao devolver conversa: ${updErr.message}` }
     }
 
-    // 3. Gravar evento de sistema na timeline
+    // 3. Sincronizar o funil (etapa) com o novo status operacional
+    await syncWorkflowStage(conversationId, "initial")
+
+    // 4. Gravar evento de sistema na timeline
     await adminClient.from("messages").insert({
       company_id: companyId,
       conversation_id: conversationId,
@@ -626,7 +664,10 @@ export async function closeConversationAction(
       return { success: false, error: `Falha ao encerrar conversa: ${updErr.message}` }
     }
 
-    // 2. Gravar evento de sistema na timeline
+    // 3. Sincronizar o funil (etapa) com o novo status operacional
+    await syncWorkflowStage(conversationId, "final")
+
+    // 4. Gravar evento de sistema na timeline
     await adminClient.from("messages").insert({
       company_id: companyId,
       conversation_id: conversationId,
@@ -688,7 +729,10 @@ export async function reopenConversationAction(
       return { success: false, error: `Falha ao reabrir conversa: ${updErr.message}` }
     }
 
-    // 2. Gravar evento de sistema na timeline
+    // 3. Sincronizar o funil (etapa) com o novo status operacional
+    await syncWorkflowStage(conversationId, "in_progress")
+
+    // 4. Gravar evento de sistema na timeline
     await adminClient.from("messages").insert({
       company_id: companyId,
       conversation_id: conversationId,
