@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 import { Bot, User, Clock } from "lucide-react"
 import { moveConversationToStageAction } from "../kanban/actions"
 import { getConversationsList } from "../actions"
+import { StatusChip, resolveStatusView } from "@/components/conversations/conversation-status"
 
 type Stage = {
   id: string
@@ -29,13 +30,6 @@ type Conversation = {
 }
 
 const UNSTAGED_KEY = "__unstaged__"
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Em aberto",
-  human: "Com atendente",
-  closed: "Encerrada",
-}
-
 
 const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -198,17 +192,17 @@ export default function KanbanPanelClient({
                     {stage.name}
                   </h2>
                   {stage.handled_by === 'ai' && (
-                    <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200 flex-shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded border border-ellevee-info/40 bg-ellevee-info/10 px-1.5 py-0.5 text-[10px] font-medium text-ellevee-info-strong flex-shrink-0">
                       <Bot className="h-3 w-3" /> IA
                     </span>
                   )}
                   {stage.handled_by === 'waiting' && (
-                    <span className="inline-flex items-center gap-1 rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 border border-purple-200 flex-shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded border border-ellevee-warning/40 bg-ellevee-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-ellevee-warning-strong flex-shrink-0">
                       <Clock className="h-3 w-3" /> Espera
                     </span>
                   )}
                   {stage.handled_by === 'human' && (
-                    <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200 flex-shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded border border-ellevee-stone bg-ellevee-stone-subtle px-1.5 py-0.5 text-[10px] font-medium text-ellevee-ink-muted flex-shrink-0">
                       <User className="h-3 w-3" /> Humano
                     </span>
                   )}
@@ -245,7 +239,11 @@ export default function KanbanPanelClient({
                           {CHANNEL_LABEL[conv.channel] || conv.channel}
                         </span>
                       ) : null}
-                      {conv.status ? <span>{STATUS_LABEL[conv.status] || conv.status}</span> : null}
+                      {conv.status ? (
+                        <StatusChip
+                          view={resolveStatusView(conv.status, conv.status === "human")}
+                        />
+                      ) : null}
                       {conv.created_at ? <span>{formatTime(conv.created_at)}</span> : null}
                     </div>
                     <label className="mt-2 block">
@@ -310,7 +308,11 @@ export default function KanbanPanelClient({
                         {CHANNEL_LABEL[conv.channel] || conv.channel}
                       </span>
                     ) : null}
-                    {conv.status ? <span>{STATUS_LABEL[conv.status] || conv.status}</span> : null}
+                    {conv.status ? (
+                      <StatusChip
+                        view={resolveStatusView(conv.status, conv.status === "human")}
+                      />
+                    ) : null}
                     {conv.created_at ? <span>{formatTime(conv.created_at)}</span> : null}
                   </div>
                 </article>
