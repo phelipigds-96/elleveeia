@@ -197,8 +197,8 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
     const statusUI: "Ativo" | "Suspenso" =
       c.status === "suspended" ? "Suspenso" : "Ativo"
 
-    const providers = limits?.allowed_llm_providers || ["gemini"]
-    let providerUI: "openai" | "gemini" | "hybrid" = "gemini"
+    const providers = limits?.allowed_llm_providers || ["openai"]
+    let providerUI: "openai" | "gemini" | "hybrid" = "openai"
     if (providers.includes("openai") && providers.includes("gemini")) {
       providerUI = "hybrid"
     } else if (providers.includes("openai")) {
@@ -451,7 +451,7 @@ export async function createCompanyAction(
       plan === "Trial" ? 1 : plan === "Starter" ? 2 : plan === "Pro" ? 5 : 15
 
     const allowedProviders =
-      aiProvider === "hybrid" ? ["openai", "gemini"] : [aiProvider]
+      aiProvider === "hybrid" ? ["openai", "gemini"] : [aiProvider || "openai"]
 
     const { error: limitsInsertErr } = await adminClient
       .from("company_limits")
@@ -725,7 +725,7 @@ export async function updateCompanyPlanAction(
           max_agents: defaultQuotas.agents,
           max_monthly_quotes: 1000,
           max_catalog_items: 50000,
-          allowed_llm_providers: ["gemini"],
+          allowed_llm_providers: ["openai"],
         })
     }
 

@@ -104,6 +104,8 @@ export function humanizeAuditAction(action: string): {
   switch (action) {
     case 'company.created':
       return { label: 'Cadastro', badgeVariant: 'default' }
+    case 'plan.updated':
+      return { label: 'Planos', badgeVariant: 'default' }
     case 'company.plan_changed':
       return { label: 'Plano', badgeVariant: 'default' }
     case 'company.limits_changed':
@@ -133,6 +135,9 @@ export function humanizeAuditDetails(action: string, payload: any, reason?: stri
     if (action === 'company.created') {
       const templateStr = payload.workflow_template ? ` • Funil: ${payload.workflow_template}` : ''
       return `Organização provisionada no plano ${payload.plan_tier || 'Pro'}${templateStr}`
+    }
+    if (action === 'plan.updated') {
+      return `Plano ${payload.plan_name || payload.plan_key || ''} atualizado: ${payload.changes_summary || 'parâmetros e cotas ajustados'}`
     }
     if (action === 'company.plan_changed') {
       return `Plano alterado para ${payload.plan_tier || payload.new_plan || 'Pro'}`
