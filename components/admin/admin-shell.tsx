@@ -49,7 +49,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     title: "GESTÃO",
     items: [
       { name: "Empresas", href: "/companies", icon: Building2 },
-      { name: "Planos e limites", href: "#", icon: Layers, disabled: true, badge: "Em breve" },
+      { name: "Planos e limites", href: "/plans", icon: Layers },
       { name: "Agentes", href: "#", icon: Bot, disabled: true, badge: "Em breve" },
       { name: "Provedores", href: "#", icon: Cpu, disabled: true, badge: "Em breve" },
     ],
@@ -69,6 +69,9 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   // Dynamic breadcrumb calculation
   const getBreadcrumb = () => {
+    if (pathname.startsWith("/plans")) {
+      return { section: "Gestão", page: "Planos e Limites" }
+    }
     if (pathname.startsWith("/companies")) {
       return { section: "Gestão", page: "Empresas" }
     }
