@@ -1301,3 +1301,157 @@ export async function getImpersonateStatus(): Promise<{
     return { isImpersonating: false }
   }
 }
+
+export interface AdminCompanyUser {
+  id: string
+  fullName: string
+  email: string
+  role: "owner" | "admin" | "attendant" | "user" | string
+  createdAt: string
+}
+
+/**
+ * SuperAdmin: Consulta usuários de uma organização específica
+ */
+export async function getCompanyUsersAction(companyId: string): Promise<AdminCompanyUser[]> {
+  const adminClient = createAdminClient()
+  const { data: profiles, error } = await adminClient
+    .from("profiles")
+    .select("id, full_name, email, role, created_at")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true })
+
+  if (error || !profiles) {
+    console.error("[SuperAdmin] Erro ao listar membros da empresa:", error)
+    return []
+  }
+
+  return profiles.map((p) => ({
+    id: p.id,
+    fullName: p.full_name || "Sem nome",
+    email: p.email || "",
+    role: p.role || "user",
+    createdAt: p.created_at ? p.created_at.split("T")[0] : "",
+  }))
+}
+
+/**
+ * SuperAdmin: Cria um atendente ou administrador para uma empresa específica
+ */
+export async function createCompanyAttendantAction(input: {
+  companyId: string
+  fullName: string
+  email: string
+  password?: string
+  role: "attendant" | "admin"
+}): Promise<ActionResult<{ id: string; fullName: string; email: string; password: string; role: string }>> {
+  try {
+    const { companyId, fullName, email } = input
+    const role = input.role === "admin" ? "admin" : "attendant"
+
+    if (!companyId) return { success: false, error: "ID da empresa obrigatório." }
+    if (!fullName || fullName.trim().length < 2) return { success: false, error: "Nome inválido." }
+    if (!email || !email.includes("@")) return { success: false, error: "E-mail inválido." }
+
+    const cleanEmail = email.trim().toLowerCase()
+    const password =
+      input.password && input.password.trim().length >= 6
+        ? input.password.trim()
+        : `@Atend${Math.floor(100000 + Math.random() * 900000)}`
+
+    const adminClient = createAdminClient()
+
+    const { data: authUser, error: authErr } = await adminClient.auth.admin.createUser({
+      email: cleanEmail,
+      password,
+      email_confirm: true,
+      app_metadata: {
+        skip_tenant_trigger: true,
+        company_id: companyId,
+        created_via: "superadmin_users_dialog",
+      },
+      user_metadata: {
+        full_name: fullName.trim(),
+        company_id: companyId,
+      },
+    })
+
+    if (authErr || !authUser?.user) {
+      return { success: false, error: `Falha ao criar credenciais no Auth: ${authErr?.message}` }
+    }
+
+    const userId = authUser.user.id
+
+    const { error: profErr } = await adminClient.from("profiles").upsert(
+      {
+        id: userId,
+        company_id: companyId,
+        full_name: fullName.trim(),
+        email: cleanEmail,
+        role,
+      },
+      { onConflict: "id" }
+    )
+
+    if (profErr) {
+      return { success: false, error: `Falha ao vincular perfil: ${profErr.message}` }
+    }
+
+    // Limpeza defensiva
+    try {
+      const firstName = fullName.trim().split(" ")[0]
+      const { data: ghostCompanies } = await adminClient
+        .from("companies")
+        .select("id")
+        .neq("id", companyId)
+        .ilike("name", `Empresa de ${firstName}%`)
+
+      if (ghostCompanies && ghostCompanies.length > 0) {
+        for (const ghost of ghostCompanies) {
+          const { count } = await adminClient
+            .from("profiles")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", ghost.id)
+
+          if (!count || count === 0) {
+            await adminClient.from("companies").delete().eq("id", ghost.id)
+          }
+        }
+      }
+    } catch {
+      // silencioso
+    }
+
+    revalidatePath("/companies")
+    return {
+      success: true,
+      data: {
+        id: userId,
+        fullName: fullName.trim(),
+        email: cleanEmail,
+        password,
+        role,
+      },
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro desconhecido" }
+  }
+}
+
+/**
+ * SuperAdmin: Remove um usuário da empresa
+ */
+export async function deleteCompanyAttendantAction(
+  companyId: string,
+  userId: string
+): Promise<ActionResult> {
+  try {
+    const adminClient = createAdminClient()
+    await adminClient.from("profiles").delete().eq("id", userId).eq("company_id", companyId)
+    await adminClient.auth.admin.deleteUser(userId)
+    revalidatePath("/companies")
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao deletar usuário" }
+  }
+}
