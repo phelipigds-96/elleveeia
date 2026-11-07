@@ -5,6 +5,7 @@ import { runAgentEngine } from '@/lib/services/agent/engine'
 import { sendOutboundMessage } from '@/lib/services/n8n-internal'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 import { prepareOutboundMessage } from '@/lib/services/outbound-internal'
+import { assignDefaultWorkflowStages } from '@/lib/services/workflows/conversation-workflow'
 export type ProcessWebhookResult = 
   | { success: true; duplicate: true; event_id: string; conversation_id?: undefined; message_id?: undefined }
   | { success: true; duplicate: false; event_id: string; conversation_id: string; message_id: string }
@@ -107,7 +108,7 @@ export async function processWebhookEvent(
     let convStatus = 'open'
     
     let convQuery = supabase.from('conversations')
-      .select('id, status')
+      .select('id, status, workflow_id, workflow_stage_id')
       .eq('company_id', companyId)
       
     if (payload.conversation?.external_id) {
@@ -129,6 +130,12 @@ export async function processWebhookEvent(
       if (convStatus === 'closed' && payload.message.sender_type === 'customer') {
          convStatus = 'open'
       }
+
+      // Backfill do funil: conversas antigas criadas antes da atribuição automática
+      // entram na primeira etapa do workflow padrão assim que recebem uma mensagem.
+      if (!existingConv.workflow_stage_id) {
+        await assignDefaultWorkflowStages(supabase, companyId, conversationId)
+      }
     } else {
       const { data: newConv, error: cvErr } = await supabase.from('conversations').insert({
         company_id: companyId,
@@ -140,6 +147,9 @@ export async function processWebhookEvent(
       
       if (cvErr) throw new Error('Falha ao criar conversa: ' + cvErr.message)
       conversationId = newConv.id
+
+      // Entrada no funil: toda conversa nova nasce na primeira etapa do workflow padrão
+      await assignDefaultWorkflowStages(supabase, companyId, conversationId)
     }
 
     // 4. Inserção Idempotente da Mensagem + Atualização Atômica de unread_count e last_message_at

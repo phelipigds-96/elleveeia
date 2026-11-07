@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * Assigns the company's default workflow (and its first stage) to a conversation.
- * Safe: derives companyId from authenticated session, never from the caller.
+ * Atribui o workflow padrão (e sua primeira etapa) a uma conversa.
+ * Safe: deriva companyId da sessão autenticada, nunca do chamador.
  */
 export async function assignDefaultWorkflowToConversation(conversationId: string) {
   const supabase = createClient()
@@ -19,19 +19,37 @@ export async function assignDefaultWorkflowToConversation(conversationId: string
   const companyId = profile?.company_id
   if (!companyId) return
 
-  // Find the default active workflow for this company
-  const { data: workflow } = await supabase
+  await assignDefaultWorkflowStages(supabase, companyId, conversationId)
+}
+
+/**
+ * Variante server-side que recebe o client e o companyId explicitamente.
+ * Usada por fluxos que já possuem um client administrativo (ex.: processamento de webhook),
+ * onde não há sessão de usuário disponível.
+ *
+ * Mantém workflow_id e workflow_stage_id sempre coerentes (o trigger de integridade
+ * multi-tenant do banco rejeita workflow_id sem etapa e etapa de outro workflow).
+ */
+export async function assignDefaultWorkflowStages(
+  client: any,
+  companyId: string,
+  conversationId: string
+): Promise<boolean> {
+  if (!client || !companyId || !conversationId) return false
+
+  // Workflow padrão ativo da empresa
+  const { data: workflow } = await client
     .from('workflows')
     .select('id')
     .eq('company_id', companyId)
     .eq('is_default', true)
     .eq('is_active', true)
-    .single()
+    .maybeSingle()
 
-  if (!workflow) return
+  if (!workflow) return false
 
-  // Find the first stage (lowest position) of that workflow
-  const { data: stages } = await supabase
+  // Primeira etapa ativa do workflow (menor position)
+  const { data: stages } = await client
     .from('workflow_stages')
     .select('id')
     .eq('workflow_id', workflow.id)
@@ -41,8 +59,9 @@ export async function assignDefaultWorkflowToConversation(conversationId: string
     .limit(1)
 
   const firstStageId = stages && stages.length > 0 ? stages[0].id : null
+  if (!firstStageId) return false
 
-  await supabase
+  const { error } = await client
     .from('conversations')
     .update({
       workflow_id: workflow.id,
@@ -50,4 +69,11 @@ export async function assignDefaultWorkflowToConversation(conversationId: string
     })
     .eq('id', conversationId)
     .eq('company_id', companyId)
+
+  if (error) {
+    console.error('[assignDefaultWorkflowStages] Falha ao atribuir etapa inicial:', error)
+    return false
+  }
+
+  return true
 }
