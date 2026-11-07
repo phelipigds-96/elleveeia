@@ -14,7 +14,8 @@ import {
   Bot,
   X,
   Kanban,
-  Loader2
+  Loader2,
+  Users
 } from "lucide-react"
 import { impersonateCompanyAction } from "@/app/(admin)/companies/actions"
 import { Badge } from "@/components/ui/badge"
@@ -45,6 +46,7 @@ import CompanyLimitsDialog from "./company-limits-dialog"
 import CompanyPlanDialog from "./company-plan-dialog"
 import CompanyStatusDialog from "./company-status-dialog"
 import CompanyWorkflowDialog from "./company-workflow-dialog"
+import CompanyUsersDialog from "./company-users-dialog"
 import { toast } from "@/components/ui/toast"
 
 export default function CompaniesTable({
@@ -64,6 +66,7 @@ export default function CompaniesTable({
   const [activeCompanyForPlan, setActiveCompanyForPlan] = useState<CompanyMock | null>(null)
   const [activeCompanyForStatus, setActiveCompanyForStatus] = useState<CompanyMock | null>(null)
   const [activeCompanyForWorkflow, setActiveCompanyForWorkflow] = useState<CompanyMock | null>(null)
+  const [activeCompanyForUsers, setActiveCompanyForUsers] = useState<CompanyMock | null>(null)
 
   // Filtros ativos?
   const hasActiveFilters = searchTerm !== "" || planFilter !== "ALL" || statusFilter !== "ALL" || providerFilter !== "ALL"
@@ -371,6 +374,10 @@ export default function CompaniesTable({
                             <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
                             Configurar Funil (Kanban)
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setActiveCompanyForUsers(company)}>
+                            <Users className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            Gerenciar Equipe (Atendentes)
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             disabled={impersonatingId === company.id}
                             onClick={() => handleImpersonate(company)}
@@ -463,6 +470,12 @@ export default function CompaniesTable({
         company={activeCompanyForWorkflow}
         open={!!activeCompanyForWorkflow}
         onClose={() => setActiveCompanyForWorkflow(null)}
+      />
+
+      <CompanyUsersDialog
+        company={activeCompanyForUsers}
+        open={!!activeCompanyForUsers}
+        onClose={() => setActiveCompanyForUsers(null)}
       />
     </div>
   )
