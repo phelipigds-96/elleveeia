@@ -4,6 +4,8 @@ import { CompanyForm } from './components/company-form'
 import { TeamManagement } from '@/components/settings/team-management'
 import { getCompanyMembersAction } from './actions'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SettingsPage() {
   // Barreira de proteção: apenas Admin ou Owner da empresa pode acessar Configurações
   const currentProfile = await requireCompanyAdmin()
