@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { validateWebhookPayload, validateWebhookStatusPayload } from '@/lib/validations/webhook'
+import { processInboundAudio } from '@/lib/services/audio-transcription'
 import { processWebhookEvent, handleAutonomousCycle, updateMessageDeliveryStatus, type AutonomousCycleResult } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
@@ -107,6 +108,46 @@ export async function POST(request: Request) {
       })
       console.log(`[Webhook Status req:${requestId}] company:${companyId} event:${body.event_id} status:${body.status} updated:${statusRes.updated} - ${Date.now() - startTime}ms`)
       return NextResponse.json(statusRes, { status: 200 })
+    }
+
+        // 2.1 Tratamento Automático de Áudio Inbound (Upload para Supabase Storage + Transcrição STT)
+    if (
+      body?.message?.message_type === 'audio' ||
+      body?.metadata?.media_type === 'audio' ||
+      body?.metadata?.base64 ||
+      body?.message?.base64
+    ) {
+      const audioResult = await processInboundAudio({
+        companyId,
+        eventId: body.event_id || `audio-${Date.now()}`,
+        base64: body.metadata?.base64 || body.message?.base64,
+        mediaUrl: body.metadata?.media_url || body.message?.media_url,
+        currentContent: body.message?.content
+      })
+
+      if (audioResult.mediaUrl) {
+        body.metadata = body.metadata || {}
+        body.metadata.media_url = audioResult.mediaUrl
+        body.metadata.media_type = 'audio'
+        if (body.message) {
+          body.message.message_type = 'audio'
+        }
+      }
+
+      if (audioResult.transcription) {
+        if (body.message) {
+          body.message.content = audioResult.transcription
+        }
+        body.metadata = body.metadata || {}
+        body.metadata.transcription = audioResult.transcription
+      } else if (!body.message?.content || body.message.content.trim() === '') {
+        if (body.message) {
+          body.message.content = '[Mensagem de Voz]'
+        }
+      }
+
+      if (body.metadata?.base64) delete body.metadata.base64
+      if (body.message?.base64) delete body.message.base64
     }
 
     if (!validateWebhookPayload(body)) {
