@@ -1765,8 +1765,8 @@ export default function PainelClient({
                     const isCustomer = msg.sender_type === "customer"
                     const isSystem = msg.sender_type === "system" || msg.message_type === "event"
                     const isInternalNote = msg.message_type === "internal_note" || msg.metadata?.is_internal
-                    const isAgent = msg.sender_type === "agent" || msg.sender_type === "human"
-                    const isIA = msg.sender_type === "ia" || msg.sender_type === "bot"
+                    const isHuman = msg.sender_type === "human" || Boolean(msg.sender_id)
+                    const isIA = !isHuman && (msg.sender_type === "agent" || msg.sender_type === "ia" || msg.sender_type === "bot" || Boolean(msg.metadata?.agent_id))
 
                     // Mensagem de Evento do Sistema (Handoff / Devolução / Encerramento)
                     if (isSystem) {
@@ -1829,7 +1829,7 @@ export default function PainelClient({
                     return (
                       <div key={msg.id} className="group flex flex-col items-end space-y-1">
                         <span className="text-meta text-ellevee-ink-muted px-1 font-mono flex items-center gap-1">
-                          {isAgent ? (
+                          {isHuman ? (
                             <>
                               <User className="h-2.5 w-2.5 text-ellevee-success-strong" />
                               <span className="text-ellevee-success-strong font-semibold">Atendente Humano</span>
@@ -1846,7 +1846,7 @@ export default function PainelClient({
 
                         <div
                           className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
-                            isAgent
+                            isHuman
                               ? "msg-bubble-in border-ellevee-success/40 ring-1 ring-ellevee-success/20"
                               : "msg-bubble-out"
                           }`}
@@ -1854,7 +1854,7 @@ export default function PainelClient({
                           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                           <div
                             className={`flex justify-end items-center gap-1.5 mt-1 text-meta font-mono ${
-                              isAgent ? "text-ellevee-ink-muted" : "text-white/70"
+                              isHuman ? "text-ellevee-ink-muted" : "text-white/70"
                             }`}
                           >
                             <span>{formatTime(msg.created_at)}</span>
