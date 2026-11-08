@@ -1,56 +1,78 @@
 import { createAdminClient } from '@/lib/supabase/service'
 
-export interface ProcessInboundAudioParams {
+export interface ProcessInboundMediaParams {
   companyId: string
   eventId: string
+  mediaType?: 'audio' | 'image' | 'document' | string
   base64?: string
   mediaUrl?: string
   currentContent?: string
 }
 
-export interface ProcessInboundAudioResult {
+export interface ProcessInboundMediaResult {
   mediaUrl?: string
   transcription?: string
+  mediaType?: string
 }
 
 /**
- * Processa áudio recebido via webhook (Evolution API / n8n):
- * 1. Salva o áudio no bucket chat-media do Supabase Storage gerando URL pública.
- * 2. Transcreve o áudio para texto via OpenAI Whisper ou Google Gemini para o Agente de IA responder.
+ * Processa qualquer mídia recebida via webhook (Evolution API / n8n):
+ * 1. Imagem: Salva no Supabase Storage (`chat-media`) e gera URL pública.
+ * 2. Áudio: Salva no Storage e transcreve para texto via OpenAI Whisper / Google Gemini.
+ * 3. Documento: Salva no Storage gerando link de download.
  */
-export async function processInboundAudio(
-  params: ProcessInboundAudioParams
-): Promise<ProcessInboundAudioResult> {
+export async function processInboundMedia(
+  params: ProcessInboundMediaParams
+): Promise<ProcessInboundMediaResult> {
   let mediaUrl = params.mediaUrl
+  let mediaType = params.mediaType || 'audio'
   let transcription =
-    params.currentContent && params.currentContent !== '[Mensagem de Voz]'
+    params.currentContent &&
+    params.currentContent !== '[Mensagem de Voz]' &&
+    params.currentContent !== '[Imagem]'
       ? params.currentContent
       : undefined
 
-  if (!params.base64 && mediaUrl && transcription) {
-    return { mediaUrl, transcription }
+  if (!params.base64 && mediaUrl) {
+    return { mediaUrl, transcription, mediaType }
   }
 
   const cleanBase64 = params.base64
-    ? params.base64.replace(/^data:audio\/[a-zA-Z0-9.-]+;base64,/, '').trim()
+    ? params.base64.replace(/^data:(image|audio|application)\/[a-zA-Z0-9.-]+;base64,/, '').trim()
     : null
 
   if (!cleanBase64) {
-    return { mediaUrl, transcription }
+    return { mediaUrl, transcription, mediaType }
   }
 
   const buffer = Buffer.from(cleanBase64, 'base64')
+  const safeEventId = params.eventId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const adminClient = createAdminClient()
 
-  // 1. Upload do áudio para o bucket público chat-media
+  // 1. Determina extensão e tipo MIME
+  let contentType = 'audio/ogg'
+  let fileExt = 'ogg'
+
+  if (mediaType === 'image' || mediaType === 'imageMessage') {
+    contentType = 'image/jpeg'
+    fileExt = 'jpg'
+    mediaType = 'image'
+  } else if (mediaType === 'document' || mediaType === 'documentMessage') {
+    contentType = 'application/pdf'
+    fileExt = 'pdf'
+    mediaType = 'document'
+  } else {
+    mediaType = 'audio'
+  }
+
+  // 2. Upload para o bucket público chat-media
   try {
-    const adminClient = createAdminClient()
-    const safeEventId = params.eventId.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const filePath = `${params.companyId}/inbound-${Date.now()}-${safeEventId.slice(-10)}.ogg`
+    const filePath = `${params.companyId}/inbound-${Date.now()}-${safeEventId.slice(-10)}.${fileExt}`
 
     const { error: uploadErr } = await adminClient.storage
       .from('chat-media')
       .upload(filePath, buffer, {
-        contentType: 'audio/ogg',
+        contentType,
         upsert: true,
       })
 
@@ -60,15 +82,31 @@ export async function processInboundAudio(
         .getPublicUrl(filePath)
       mediaUrl = publicUrl
     } else {
-      console.error('[InboundAudio] Erro ao salvar no storage:', uploadErr.message)
+      console.error('[InboundMedia] Erro ao salvar no storage:', uploadErr.message)
     }
   } catch (storageErr: any) {
-    console.error('[InboundAudio] Exceção ao salvar áudio no storage:', storageErr.message)
+    console.error('[InboundMedia] Exceção ao salvar mídia no storage:', storageErr.message)
   }
 
-  // 2. Transcrição automática (se ainda não fornecida pelo n8n)
-  if (!transcription) {
-    // 2.1 Tentativa A: OpenAI Whisper
+  // 3. Se for Imagem e não houver legenda, define placeholder
+  if (mediaType === 'image') {
+    if (!transcription || transcription.trim() === '') {
+      transcription = '[Imagem]'
+    }
+    return { mediaUrl, transcription, mediaType }
+  }
+
+  // 4. Se for Documento e não houver legenda, define placeholder
+  if (mediaType === 'document') {
+    if (!transcription || transcription.trim() === '') {
+      transcription = '[Documento]'
+    }
+    return { mediaUrl, transcription, mediaType }
+  }
+
+  // 5. Se for Áudio e ainda não há transcrição, transcrever via OpenAI Whisper
+  if (mediaType === 'audio' && !transcription) {
+    // 5.1 Tentativa A: OpenAI Whisper
     if (process.env.OPENAI_API_KEY) {
       try {
         const formData = new FormData()
@@ -92,14 +130,14 @@ export async function processInboundAudio(
           }
         } else {
           const errText = await whisperRes.text().catch(() => '')
-          console.warn('[InboundAudio] Falha Whisper OpenAI:', whisperRes.status, errText)
+          console.warn('[InboundMedia] Falha Whisper OpenAI:', whisperRes.status, errText)
         }
       } catch (whisperErr: any) {
-        console.error('[InboundAudio] Erro Whisper:', whisperErr?.message || whisperErr)
+        console.error('[InboundMedia] Erro Whisper:', whisperErr?.message || whisperErr)
       }
     }
 
-    // 2.2 Tentativa B: Google Gemini (se Whisper não estiver disponível ou falhar)
+    // 5.2 Tentativa B: Google Gemini
     if (!transcription && process.env.GEMINI_API_KEY) {
       try {
         const { GoogleGenAI } = await import('@google/genai')
@@ -129,10 +167,17 @@ export async function processInboundAudio(
           transcription = response.text.trim()
         }
       } catch (geminiErr: any) {
-        console.error('[InboundAudio] Erro Gemini Transcribe:', geminiErr?.message || geminiErr)
+        console.error('[InboundMedia] Erro Gemini Transcribe:', geminiErr?.message || geminiErr)
       }
+    }
+
+    if (!transcription || transcription.trim() === '') {
+      transcription = '[Mensagem de Voz]'
     }
   }
 
-  return { mediaUrl, transcription }
+  return { mediaUrl, transcription, mediaType }
 }
+
+// Compatibilidade reversa com o import anterior
+export const processInboundAudio = processInboundMedia
