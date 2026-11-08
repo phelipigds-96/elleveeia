@@ -176,20 +176,34 @@ export async function deletePlatformWorkflowTemplateAction(
     const adminClient = createAdminClient()
 
     // 1. Verifica se é um modelo nativo de sistema
-    const { data: existing } = await adminClient
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(templateKeyOrId)
+    let existingQuery = adminClient
       .from("platform_workflow_templates")
       .select("id, key, is_system")
-      .or(`id.eq.${templateKeyOrId},key.eq.${templateKeyOrId}`)
-      .maybeSingle()
+
+    if (isUuid) {
+      existingQuery = existingQuery.eq("id", templateKeyOrId)
+    } else {
+      existingQuery = existingQuery.eq("key", templateKeyOrId)
+    }
+
+    const { data: existing } = await existingQuery.maybeSingle()
 
     if (existing?.is_system) {
       return { success: false, error: "Modelos nativos do sistema não podem ser excluídos." }
     }
 
-    const { error } = await adminClient
+    let deleteQuery = adminClient
       .from("platform_workflow_templates")
       .delete()
-      .or(`id.eq.${templateKeyOrId},key.eq.${templateKeyOrId}`)
+
+    if (isUuid) {
+      deleteQuery = deleteQuery.eq("id", templateKeyOrId)
+    } else {
+      deleteQuery = deleteQuery.eq("key", templateKeyOrId)
+    }
+
+    const { error } = await deleteQuery
 
     if (error) throw error
 
