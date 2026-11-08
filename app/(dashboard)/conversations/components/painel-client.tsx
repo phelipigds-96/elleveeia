@@ -1229,13 +1229,16 @@ export default function PainelClient({
                 .toUpperCase() || "CL"
 
               const isWaiting = conv.status === "human" && !conv.assigned_to
+              // No mobile o WhatsApp Web faz a lista em duas linhas compactas:
+              // nome + hora na primeira e prévia + contador na segunda.
+              // Etapa e status ficam em uma linha terciária de apoio.
 
               return (
                 <button
                   key={conv.id}
                   onClick={() => handleSelectConversation(conv.id)}
                   aria-current={isSelected ? "true" : undefined}
-                  className={`conv-item focus-ring w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all relative cursor-pointer ${
+                  className={`conv-item focus-ring w-full text-left flex items-start gap-3 px-3 py-2.5 sm:p-3 rounded-lg transition-all relative cursor-pointer ${
                     isSelected
                       ? "bg-ellevee-stone-subtle border border-ellevee-stone shadow-2xs ring-1 ring-ellevee-ink/10"
                       : "hover:bg-ellevee-stone-subtle border border-transparent"
@@ -1280,7 +1283,7 @@ export default function PainelClient({
 
                   {/* Informações da Conversa */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span className="font-semibold text-sm text-ellevee-ink truncate">
                         {customerName}
                       </span>
@@ -1289,12 +1292,38 @@ export default function PainelClient({
                       </span>
                     </div>
 
-                    <p className="text-sm text-ellevee-ink-muted truncate leading-relaxed">
-                      {conv.last_message_preview || "Nenhuma mensagem recente"}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-ellevee-ink-muted truncate leading-relaxed min-w-0">
+                        {conv.last_message_preview || "Nenhuma mensagem recente"}
+                      </p>
 
-                    {/* Status da Fila / Atendente / Espera */}
-                    <div className="flex items-center justify-between mt-1 text-meta leading-relaxed">
+                      {conv.unread_count > 0 && (
+                        <span className="min-w-[18px] h-4 px-1 rounded-full bg-ellevee-success text-white text-meta font-bold flex items-center justify-center font-mono shrink-0">
+                          {conv.unread_count}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Etapa do funil (mesma informação do Kanban) — FASE 3:
+                        ponto com a cor da etapa + rótulo legível. */}
+                    {conv.workflow_stage_name ? (
+                      <span
+                        title={`Etapa no funil: ${conv.workflow_stage_name}`}
+                        className="mt-1 inline-flex items-center gap-1.5 max-w-full rounded sm:bg-ellevee-stone-subtle sm:px-1.5 sm:py-0.5 text-meta text-ellevee-ink-muted sm:border sm:border-ellevee-stone"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="h-1.5 w-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: stageColorOf(conv) }}
+                        />
+                        {/* No mobile fica apenas o ponto colorido (estilo WhatsApp);
+                            o nome da etapa aparece a partir de `sm`. */}
+                        <span className="truncate hidden sm:inline">{conv.workflow_stage_name}</span>
+                      </span>
+                    ) : null}
+
+                    {/* FASE 3: selo de status compacto */}
+                    <div className="mt-1 text-meta leading-relaxed flex items-center gap-1.5 min-w-0">
                       <StatusChip
                         view={resolveStatusView(conv.status, !!conv.assigned_to)}
                         detail={
@@ -1311,29 +1340,7 @@ export default function PainelClient({
                             : undefined
                         }
                       />
-
-                      {conv.unread_count > 0 && (
-                        <span className="min-w-[18px] h-4 px-1 rounded-full bg-ellevee-success text-white text-meta font-bold flex items-center justify-center font-mono shadow-xs">
-                          {conv.unread_count}
-                        </span>
-                      )}
                     </div>
-
-                    {/* Etapa do funil (mesma informação do Kanban) — FASE 3:
-                        ponto com a cor da etapa + rótulo legível. */}
-                    {conv.workflow_stage_name ? (
-                      <span
-                        title={`Etapa no funil: ${conv.workflow_stage_name}`}
-                        className="mt-1 inline-flex items-center gap-1.5 max-w-full rounded bg-ellevee-stone-subtle px-1.5 py-0.5 text-meta text-ellevee-ink-muted border border-ellevee-stone"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="h-1.5 w-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: stageColorOf(conv) }}
-                        />
-                        <span className="truncate">{conv.workflow_stage_name}</span>
-                      </span>
-                    ) : null}
                   </div>
                 </button>
               )
@@ -1422,12 +1429,12 @@ export default function PainelClient({
                   </div>
                   <div className="flex items-center gap-2 text-meta text-ellevee-ink-muted mt-0.5 truncate">
                     {activeConversation.customers?.phone && (
-                      <span className="flex items-center gap-1 font-mono text-ellevee-ink/80">
+                      <span className="hidden sm:flex items-center gap-1 font-mono text-ellevee-ink/80">
                         <Phone className="h-3 w-3 text-ellevee-ink-muted" />
                         {activeConversation.customers.phone}
                       </span>
                     )}
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <span className="truncate">
                       <StatusChip
                         view={resolveStatusView(
@@ -1466,7 +1473,8 @@ export default function PainelClient({
                 </div>
               </div>
 
-              {/* Lado Direito: Ações em Linha Reta Minimalistas Estilo ChatPro */}
+              {/* Lado Direito: Ações em Linha Reta Minimalistas Estilo ChatPro
+                  No mobile ficam compactas (ícones) ou dentro do menu “⋯”. */}
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 {/* 1. Conversa Finalizada -> Reabrir */}
                 {activeConversation.status === "closed" ? (
@@ -1505,7 +1513,7 @@ export default function PainelClient({
                     <button
                       onClick={handleReturnToAI}
                       disabled={isReturningToAI}
-                      className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                       title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
                     >
                       {isReturningToAI ? (
@@ -1513,7 +1521,8 @@ export default function PainelClient({
                       ) : (
                         <ArrowLeftRight className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
-                      <span>Devolver p/ {activeConversation.agent_name || "IA"}</span>
+                      {/* No mobile fica apenas o ícone (estilo WhatsApp Web). */}
+                      <span className="hidden sm:inline">Devolver p/ {activeConversation.agent_name || "IA"}</span>
                     </button>
 
                     {/* Botão Encerrar (ChatPro: ✓ finalizar) — FASE 4:
@@ -1889,18 +1898,18 @@ export default function PainelClient({
                 </button>
               </footer>
             ) : (
-              <footer className="border-t border-ellevee-stone px-4 py-3 bg-white shrink-0">
-                <div className="max-w-3xl mx-auto space-y-2">
+              <footer className="border-t border-ellevee-stone px-3 sm:px-4 py-2 sm:py-3 bg-white shrink-0">
+                <div className="max-w-3xl mx-auto space-y-1.5 sm:space-y-2">
                   {/* Abas de Modo: Mensagem WhatsApp vs Nota Interna
                       No mobile vira um controle compacto (segmentado) acima
                       do campo, com rotulos curtos. */}
-                  <div className="flex items-center gap-1.5 text-meta w-fit p-0.5 rounded-lg bg-ellevee-stone-subtle border border-ellevee-stone">
+                  <div className="flex w-full sm:w-fit items-center gap-1.5 text-meta p-0.5 rounded-lg bg-ellevee-stone-subtle border border-ellevee-stone">
                     <button
                       type="button"
                       onClick={() => setSendMode("whatsapp")}
                       aria-pressed={sendMode === "whatsapp"}
                       title="Enviar mensagem pelo WhatsApp ao cliente"
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
+                      className={`flex-1 sm:flex-none items-center justify-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
                         sendMode === "whatsapp"
                           ? "bg-ellevee-ink text-white shadow-2xs"
                           : "text-ellevee-ink-muted hover:text-ellevee-ink bg-transparent"
@@ -1916,7 +1925,7 @@ export default function PainelClient({
                       onClick={() => setSendMode("note")}
                       aria-pressed={sendMode === "note"}
                       title="Registrar nota interna visivel apenas para a equipe"
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
+                      className={`flex-1 sm:flex-none items-center justify-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
                         sendMode === "note"
                           ? "bg-ellevee-note-border text-ellevee-note-strong shadow-2xs border border-ellevee-note-border-strong"
                           : "text-ellevee-ink-muted hover:text-ellevee-note-strong bg-transparent"
@@ -1949,7 +1958,7 @@ export default function PainelClient({
                             : "Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
                         }
                         aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
-                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ellevee-ink placeholder:text-ellevee-ink-muted/70 focus:outline-none min-h-[44px] max-h-32 disabled:opacity-50"
+                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ellevee-ink placeholder:text-ellevee-ink-muted/70 focus:outline-none min-h-[44px] max-h-[128px] disabled:opacity-50 overflow-y-auto scroll-slim"
                       />
                     </div>
 
