@@ -84,14 +84,35 @@ export async function sendToGateway(
     const apiKey = process.env.EVOLUTION_API_KEY || ''
     const instance = process.env.EVOLUTION_INSTANCE_NAME || 'default'
 
-    let targetUrl = rawUrl.trim()
-    if (!targetUrl.includes('/message/sendText')) {
-      targetUrl = `${targetUrl.replace(/\/+$/, '')}/message/sendText/${instance}`
-    }
+    const mediaUrl = row.payload?.media_url
+    const mediaType = row.payload?.media_type || 'image'
+    const fileName = row.payload?.file_name || 'arquivo'
 
-    const payload = {
+    let targetUrl = rawUrl.trim()
+    let payload: any = {
       number: recipient,
       text: content
+    }
+
+    if (mediaUrl) {
+      if (mediaType === 'audio') {
+        targetUrl = `${targetUrl.replace(/\/+$/, '')}/message/sendWhatsAppAudio/${instance}`
+        payload = {
+          number: recipient,
+          audio: mediaUrl
+        }
+      } else {
+        targetUrl = `${targetUrl.replace(/\/+$/, '')}/message/sendMedia/${instance}`
+        payload = {
+          number: recipient,
+          mediatype: mediaType === 'document' ? 'document' : 'image',
+          media: mediaUrl,
+          caption: content,
+          fileName: fileName
+        }
+      }
+    } else if (!targetUrl.includes('/message/sendText')) {
+      targetUrl = `${targetUrl.replace(/\/+$/, '')}/message/sendText/${instance}`
     }
 
     const headers: Record<string, string> = {
@@ -166,6 +187,9 @@ export async function sendToGateway(
         recipient: recipient,
         number: recipient,
         text: content,
+        media_url: row.payload?.media_url || null,
+        media_type: row.payload?.media_type || null,
+        file_name: row.payload?.file_name || null,
         customer: {
           phone: recipient,
           name: row.payload?.customer?.name || 'Cliente'
@@ -175,10 +199,15 @@ export async function sendToGateway(
           content: content,
           text: content,
           sender_type: 'agent',
-          message_type: 'text',
+          message_type: row.payload?.media_type || 'text',
+          media_url: row.payload?.media_url || null,
           created_at: row.created_at
         },
-        metadata: row.payload?.metadata || {}
+        metadata: {
+          ...(row.payload?.metadata || {}),
+          media_url: row.payload?.media_url || null,
+          media_type: row.payload?.media_type || null
+        }
       }
 
       const controller = new AbortController()
