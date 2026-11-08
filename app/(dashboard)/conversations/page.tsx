@@ -1,6 +1,8 @@
 import PainelClient from "./components/painel-client"
 import { getConversationsList, getConversationMessages, getAgentProfileContext } from "./actions"
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: "Atendimento Omnichannel | Ellevee IA",
   description: "Painel de atendimento e conversas em tempo real via Supabase Realtime",

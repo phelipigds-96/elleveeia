@@ -5,6 +5,9 @@ import { getImpersonateStatus } from '@/app/(admin)/companies/actions'
 import { ImpersonateBanner } from '@/components/admin/impersonate-banner'
 import { getCurrentUserProfile } from '@/lib/services/auth/guard'
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 export default async function DashboardLayout({
   children,
 }: {

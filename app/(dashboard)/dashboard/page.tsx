@@ -8,6 +8,8 @@ import { IntegrationStatus } from '@/components/dashboard/integration-status'
 import { PeriodSelector } from '@/components/dashboard/period-selector'
 import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 
+export const dynamic = 'force-dynamic'
+
 interface DashboardPageProps {
   searchParams: { period?: string }
 }
