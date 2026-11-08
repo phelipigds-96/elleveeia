@@ -43,7 +43,8 @@ import {
   Paperclip,
   Mic,
   Tag,
-  Calendar
+  Calendar,
+  Trash2
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -66,7 +67,9 @@ import {
   reopenConversationAction,
   getCustomerDetailsAction,
   updateCustomerProfileAction,
-  createInternalNoteAction
+  createInternalNoteAction,
+  uploadChatMediaAction,
+  sendMediaMessageAction
 } from "../actions"
 import {
   StatusChip,
@@ -141,6 +144,111 @@ function WhatsAppIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   )
 }
 
+
+function formatRecordingTime(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}:${s < 10 ? "0" : ""}${s}`
+}
+
+function MessageMedia({
+  msg,
+  isCustomer = false,
+}: {
+  msg: MessageData
+  isCustomer?: boolean
+}) {
+  const mediaUrl =
+    msg.metadata?.media_url ||
+    (msg as any).media_url ||
+    (msg.message_type !== "text" && msg.content?.startsWith("http") ? msg.content : null)
+
+  const mediaType =
+    msg.metadata?.media_type ||
+    msg.message_type ||
+    (mediaUrl?.match(/\.(png|jpe?g|webp|gif)/i)
+      ? "image"
+      : mediaUrl?.match(/\.(mp3|ogg|wav|m4a|webm)/i)
+      ? "audio"
+      : mediaUrl?.match(/\.(pdf|docx?|xlsx?)/i)
+      ? "document"
+      : null)
+
+  if (!mediaUrl && !mediaType) return null
+
+  const fileName = msg.metadata?.file_name || (msg as any).file_name || "arquivo"
+
+  if (mediaType === "image" || (mediaUrl && /\.(png|jpe?g|webp|gif)/i.test(mediaUrl))) {
+    return (
+      <div className="my-1.5 overflow-hidden rounded-lg">
+        <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="block group/img">
+          <img
+            src={mediaUrl}
+            alt={fileName || "Imagem"}
+            className="max-h-72 w-auto max-w-full rounded-lg object-cover transition-transform hover:scale-[1.01]"
+            loading="lazy"
+          />
+        </a>
+      </div>
+    )
+  }
+
+  if (mediaType === "audio" || (mediaUrl && /\.(mp3|ogg|wav|m4a|webm)/i.test(mediaUrl))) {
+    return (
+      <div className={`my-1.5 p-2 rounded-xl flex items-center gap-2 ${
+        isCustomer ? "bg-black/5" : "bg-black/10"
+      }`}>
+        <audio controls src={mediaUrl} className="w-full h-8 max-w-[280px]" preload="metadata" />
+      </div>
+    )
+  }
+
+  if (mediaType === "document" || mediaUrl) {
+    return (
+      <a
+        href={mediaUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`my-1.5 p-2.5 rounded-lg flex items-center gap-3 transition-colors ${
+          isCustomer ? "bg-black/5 hover:bg-black/10 text-gray-800" : "bg-white/20 hover:bg-white/30 text-white"
+        }`}
+      >
+        <FileText className="h-6 w-6 text-red-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold truncate">{fileName}</p>
+          <p className="text-[10px] opacity-75">Documento • Clique para abrir</p>
+        </div>
+      </a>
+    )
+  }
+
+  return null
+}
+
+function getDisplayContent(msg: MessageData): string | null {
+  const content = msg.content || ""
+  const mediaUrl = msg.metadata?.media_url || (msg as any).media_url
+
+  if (mediaUrl && content.trim() === mediaUrl.trim()) return null
+
+  if (
+    (mediaUrl || msg.message_type === "image" || msg.message_type === "audio" || msg.message_type === "document") &&
+    (content.trim() === "[Imagem]" ||
+      content.trim() === "[Mensagem de Voz]" ||
+      content.trim().startsWith("[Documento]") ||
+      content.endsWith("[Imagem]") ||
+      content.endsWith("[Mensagem de Voz]"))
+  ) {
+    const cleaned = content.replace(/\[(Imagem|Mensagem de Voz|Documento.*?)\]/g, "").trim()
+    if (!cleaned || /^(\*Atendente[^*]*:\*|\s)*$/.test(cleaned)) {
+      return null
+    }
+    return cleaned
+  }
+
+  return content
+}
+
 export default function PainelClient({
   initialConversations,
   initialMessages,
@@ -164,6 +272,20 @@ export default function PainelClient({
   
   // 3. Estados de envio de mensagem e Ações de Ciclo de Vida (Fase 1)
   const [inputContent, setInputContent] = useState("")
+  // Anexo de Mídia (Melhoria 2)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null)
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+
+  // Gravação de Áudio no Navegador (Melhoria 4)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
   const [sendMode, setSendMode] = useState<"whatsapp" | "note">("whatsapp")
   const [isSending, setIsSending] = useState(false)
   const [isSendingInternalNote, setIsSendingInternalNote] = useState(false)
@@ -238,6 +360,13 @@ export default function PainelClient({
   // Efeito inicial para rolar até o final da conversa
   useEffect(() => {
     scrollToBottom(false)
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      }
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl)
+    }
   }, [])
 
   // Sincroniza formulário de cliente ao selecionar conversa com fallback resiliente
@@ -596,6 +725,333 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // MELHORIA 2: GESTÃO DE ANEXOS DE MÍDIA (Imagem, Áudio, Documento)
+  // =========================================================================
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Arquivo muito grande", "O tamanho máximo permitido é de 20MB.")
+      return
+    }
+
+    if (filePreviewUrl) {
+      URL.revokeObjectURL(filePreviewUrl)
+    }
+
+    setSelectedFile(file)
+    if (file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file)
+      setFilePreviewUrl(url)
+    } else {
+      setFilePreviewUrl(null)
+    }
+
+    e.target.value = ""
+  }
+
+  const handleClearSelectedFile = () => {
+    if (filePreviewUrl) {
+      URL.revokeObjectURL(filePreviewUrl)
+    }
+    setSelectedFile(null)
+    setFilePreviewUrl(null)
+  }
+
+  const handleSendAttachedFile = async () => {
+    if (!selectedId || !selectedFile || isUploadingMedia) return
+
+    setIsUploadingMedia(true)
+    const caption = inputContent.trim()
+    const attendantName = (currentUser?.userName || "Atendente").split(/\s+/)[0] || "Atendente"
+    const tempId = `temp-media-${Date.now()}`
+    const clientMessageId = crypto.randomUUID()
+
+    const mediaType: "image" | "audio" | "document" = selectedFile.type.startsWith("image/")
+      ? "image"
+      : selectedFile.type.startsWith("audio/")
+      ? "audio"
+      : "document"
+
+    const optimisticMsg: MessageData = {
+      id: tempId,
+      conversation_id: selectedId,
+      sender_type: "agent",
+      sender_id: currentUser?.userId || null,
+      content: caption
+        ? `*Atendente ${attendantName}:*\n${caption}`
+        : `*Atendente ${attendantName}:*\n[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Mensagem de Voz" : "Documento"}]`,
+      message_type: mediaType,
+      metadata: {
+        delivery_status: "pending",
+        client_message_id: clientMessageId,
+        operator_name: attendantName,
+        media_url: filePreviewUrl || undefined,
+        file_name: selectedFile.name,
+        media_type: mediaType,
+      },
+      created_at: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, optimisticMsg])
+    const fileToSend = selectedFile
+    handleClearSelectedFile()
+    setInputContent("")
+    scrollToBottom(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", fileToSend)
+      const uploadRes = await uploadChatMediaAction(formData)
+
+      if (!uploadRes.success || !uploadRes.url) {
+        throw new Error(uploadRes.error || "Falha no upload do arquivo.")
+      }
+
+      const sendRes = await sendMediaMessageAction({
+        conversationId: selectedId,
+        mediaUrl: uploadRes.url,
+        mediaType,
+        fileName: fileToSend.name,
+        caption: caption || undefined,
+        clientMessageId,
+      })
+
+      if (sendRes.success) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: sendRes.messageId || m.id,
+                  metadata: {
+                    ...m.metadata,
+                    delivery_status: "sent",
+                    media_url: uploadRes.url,
+                  },
+                }
+              : m
+          )
+        )
+      } else {
+        toast.error("Falha no Envio", sendRes.error || "Não foi possível enviar a mídia.")
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? { ...m, metadata: { ...m.metadata, delivery_status: "failed" } }
+              : m
+          )
+        )
+      }
+    } catch (err: any) {
+      console.error("[Chat] Falha no envio de mídia:", err)
+      toast.error("Erro no Envio", err.message || "Erro ao processar arquivo.")
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? { ...m, metadata: { ...m.metadata, delivery_status: "failed" } }
+            : m
+        )
+      )
+    } finally {
+      setIsUploadingMedia(false)
+      textareaRef.current?.focus()
+    }
+  }
+
+  // =========================================================================
+  // MELHORIA 4: GRAVAÇÃO E ENVIO DE ÁUDIO NO NAVEGADOR
+  // =========================================================================
+  const handleStartRecording = async () => {
+    if (isRecording || isUploadingAudio || !selectedId) return
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      toast.error("Microfone não suportado", "Seu navegador não possui suporte para gravação de áudio.")
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+
+      let mimeType = "audio/webm;codecs=opus"
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+          mimeType = "audio/ogg;codecs=opus"
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4"
+        } else {
+          mimeType = ""
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.start(200)
+      setIsRecording(true)
+      setRecordingSeconds(0)
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1)
+      }, 1000)
+    } catch (err: any) {
+      console.error("[AudioRecord] Erro ao acessar microfone:", err)
+      toast.error("Permissão de Microfone", "Não foi possível acessar seu microfone. Verifique as permissões.")
+    }
+  }
+
+  const handleCancelRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop()
+      } catch {}
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      mediaStreamRef.current = null
+    }
+
+    audioChunksRef.current = []
+    setIsRecording(false)
+    setRecordingSeconds(0)
+  }
+
+  const handleStopAndSendRecording = async () => {
+    if (!mediaRecorderRef.current || !selectedId || isUploadingAudio) return
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+
+    const recorder = mediaRecorderRef.current
+    const stream = mediaStreamRef.current
+    setIsRecording(false)
+    setIsUploadingAudio(true)
+
+    const stopPromise = new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || "audio/webm"
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
+        resolve(audioBlob)
+      }
+    })
+
+    if (recorder.state !== "inactive") {
+      recorder.stop()
+    }
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop())
+      mediaStreamRef.current = null
+    }
+
+    try {
+      const audioBlob = await stopPromise
+      if (audioBlob.size < 400) {
+        toast.info("Áudio muito curto", "Gravação descartada por ter duração insuficiente.")
+        setIsUploadingAudio(false)
+        setRecordingSeconds(0)
+        return
+      }
+
+      const extension = recorder.mimeType.includes("ogg") ? "ogg" : recorder.mimeType.includes("mp4") ? "m4a" : "webm"
+      const audioFileName = `audio-${Date.now()}.${extension}`
+      const audioFile = new File([audioBlob], audioFileName, { type: audioBlob.type || "audio/webm" })
+
+      const attendantName = (currentUser?.userName || "Atendente").split(/\s+/)[0] || "Atendente"
+      const tempId = `temp-audio-${Date.now()}`
+      const clientMessageId = crypto.randomUUID()
+      const localAudioUrl = URL.createObjectURL(audioBlob)
+
+      const optimisticMsg: MessageData = {
+        id: tempId,
+        conversation_id: selectedId,
+        sender_type: "agent",
+        sender_id: currentUser?.userId || null,
+        content: `*Atendente ${attendantName}:*\n[Mensagem de Voz]`,
+        message_type: "audio",
+        metadata: {
+          delivery_status: "pending",
+          client_message_id: clientMessageId,
+          operator_name: attendantName,
+          media_url: localAudioUrl,
+          file_name: audioFileName,
+          media_type: "audio",
+        },
+        created_at: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, optimisticMsg])
+      scrollToBottom(true)
+
+      const formData = new FormData()
+      formData.append("file", audioFile)
+      const uploadRes = await uploadChatMediaAction(formData)
+
+      if (!uploadRes.success || !uploadRes.url) {
+        throw new Error(uploadRes.error || "Falha ao fazer upload da gravação de áudio.")
+      }
+
+      const sendRes = await sendMediaMessageAction({
+        conversationId: selectedId,
+        mediaUrl: uploadRes.url,
+        mediaType: "audio",
+        fileName: audioFileName,
+        clientMessageId,
+      })
+
+      if (sendRes.success) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: sendRes.messageId || m.id,
+                  metadata: {
+                    ...m.metadata,
+                    delivery_status: "sent",
+                    media_url: uploadRes.url,
+                  },
+                }
+              : m
+          )
+        )
+      } else {
+        toast.error("Falha no Envio de Áudio", sendRes.error || "Não foi possível enviar o áudio.")
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? { ...m, metadata: { ...m.metadata, delivery_status: "failed" } }
+              : m
+          )
+        )
+      }
+    } catch (err: any) {
+      console.error("[AudioRecord] Erro ao processar gravação:", err)
+      toast.error("Erro no Áudio", err.message || "Falha ao gravar ou enviar áudio.")
+    } finally {
+      setIsUploadingAudio(false)
+      setRecordingSeconds(0)
+    }
+  }
+
+  // =========================================================================
   // FASE 2: CRIAÇÃO DE NOTA INTERNA (Não enviada ao WhatsApp)
   // =========================================================================
   const handleCreateInternalNote = async (customContent?: string) => {
@@ -691,19 +1147,25 @@ export default function PainelClient({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (sendMode === "note") {
+    if (selectedFile) {
+      handleSendAttachedFile()
+    } else if (sendMode === "note") {
       handleCreateInternalNote()
-    } else {
+    } else if (inputContent.trim()) {
       handleSendMessage(e)
+    } else if (isRecording) {
+      handleStopAndSendRecording()
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      if (sendMode === "note") {
+      if (selectedFile) {
+        handleSendAttachedFile()
+      } else if (sendMode === "note") {
         handleCreateInternalNote()
-      } else {
+      } else if (inputContent.trim()) {
         handleSendMessage()
       }
     }
@@ -1633,7 +2095,10 @@ export default function PainelClient({
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
                           <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
-                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            <MessageMedia msg={msg} isCustomer={true} />
+                            {getDisplayContent(msg) && (
+                              <p className="whitespace-pre-wrap leading-relaxed">{getDisplayContent(msg)}</p>
+                            )}
                             <div className="flex justify-end items-center gap-1 mt-1 text-meta text-ellevee-ink-muted font-mono opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                               <span>{formatTime(msg.created_at)}</span>
                             </div>
@@ -1668,7 +2133,10 @@ export default function PainelClient({
                               : "msg-bubble-out"
                           }`}
                         >
-                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          <MessageMedia msg={msg} isCustomer={false} />
+                          {getDisplayContent(msg) && (
+                            <p className="whitespace-pre-wrap leading-relaxed">{getDisplayContent(msg)}</p>
+                          )}
                           <div
                             className={`flex justify-end items-center gap-1.5 mt-1 text-meta font-mono ${
                               isHuman ? "text-ellevee-ink-muted" : "text-white/70"
@@ -1737,60 +2205,156 @@ export default function PainelClient({
                       </button>
                     </div>
 
-                    <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
-                      {/* Botão Emoji */}
-                      <button
-                        type="button"
-                        className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0"
-                        title="Inserir emoji"
-                      >
-                        <Smile className="h-5 w-5" />
-                      </button>
+                    {/* Input Oculto de Arquivo */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                      onChange={handleFileSelect}
+                    />
 
-                      {/* Botão Anexo */}
-                      <button
-                        type="button"
-                        className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0"
-                        title="Anexar arquivo ou imagem"
-                      >
-                        <Paperclip className="h-5 w-5" />
-                      </button>
-
-                      {/* Input de Mensagem */}
-                      <div className="flex-1 relative">
-                        <textarea
-                          ref={textareaRef}
-                          rows={1}
-                          value={inputContent}
-                          onChange={(e) => handleInputContentChange(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          disabled={isSending || isSendingInternalNote}
-                          placeholder={sendMode === "note" ? "Escreva uma nota interna privada..." : "Mensagem"}
-                          aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
-                          className={`w-full resize-none bg-white rounded-lg px-4 py-2 text-sm text-[#111827] placeholder:text-[#8696a0] focus:outline-none min-h-[38px] max-h-[100px] disabled:opacity-50 overflow-y-auto scroll-slim shadow-2xs transition-all ${
-                            sendMode === "note" ? "border border-amber-300 bg-amber-50/50" : "border-none"
-                          }`}
-                        />
+                    {/* Barra de Pré-visualização de Anexo Selecionado */}
+                    {selectedFile && (
+                      <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-[#e9ecef] shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {filePreviewUrl ? (
+                            <img
+                              src={filePreviewUrl}
+                              alt="Pré-visualização"
+                              className="h-10 w-10 object-cover rounded-md border border-gray-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-md bg-[#005d4b]/10 text-[#005d4b] flex items-center justify-center shrink-0">
+                              <Paperclip className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[#111827] truncate max-w-xs">{selectedFile.name}</p>
+                            <p className="text-[10px] text-[#54656f] font-mono">{(selectedFile.size / 1024).toFixed(0)} KB</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearSelectedFile}
+                          className="p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-full transition-colors"
+                          title="Remover anexo"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
+                    )}
 
-                      {/* Botão Envio / Gravação Circular Verde Teal */}
-                      <button
-                        type="submit"
-                        disabled={(!inputContent.trim()) || isSending || isSendingInternalNote}
-                        className={`h-10 w-10 rounded-full flex items-center justify-center text-white shadow-xs transition-transform active:scale-95 shrink-0 ${
-                          sendMode === "note" ? "bg-amber-600 hover:bg-amber-700" : "bg-[#005d4b] hover:bg-[#004738]"
-                        } disabled:opacity-40 disabled:cursor-not-allowed`}
-                        title="Enviar mensagem"
-                      >
-                        {isSending || isSendingInternalNote ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : inputContent.trim() ? (
-                          <Send className="h-4 w-4" />
+                    {/* Modo de Gravação de Áudio Ativo */}
+                    {isRecording ? (
+                      <div className="flex items-center justify-between gap-3 w-full bg-white px-4 py-2 rounded-lg border border-red-200 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                          <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
+                          <span className="text-xs font-semibold text-red-600 font-mono">{formatRecordingTime(recordingSeconds)}</span>
+                          <span className="text-xs text-[#54656f] italic hidden sm:inline">Gravando mensagem de voz...</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelRecording}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                            title="Descartar gravação"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStopAndSendRecording}
+                            disabled={isUploadingAudio}
+                            className="h-9 w-9 rounded-full bg-[#005d4b] hover:bg-[#004738] text-white flex items-center justify-center shadow-xs transition-transform active:scale-95 disabled:opacity-50"
+                            title="Enviar áudio gravado"
+                          >
+                            {isUploadingAudio ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
+                        {/* Botão Emoji */}
+                        <button
+                          type="button"
+                          className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0"
+                          title="Inserir emoji"
+                        >
+                          <Smile className="h-5 w-5" />
+                        </button>
+
+                        {/* Botão Anexo */}
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio}
+                          className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0 disabled:opacity-40"
+                          title="Anexar arquivo ou imagem"
+                        >
+                          <Paperclip className="h-5 w-5" />
+                        </button>
+
+                        {/* Input de Mensagem */}
+                        <div className="flex-1 relative">
+                          <textarea
+                            ref={textareaRef}
+                            rows={1}
+                            value={inputContent}
+                            onChange={(e) => handleInputContentChange(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            disabled={isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio}
+                            placeholder={
+                              selectedFile
+                                ? "Adicionar legenda (opcional)..."
+                                : sendMode === "note"
+                                ? "Escreva uma nota interna privada..."
+                                : "Mensagem"
+                            }
+                            aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
+                            className={`w-full resize-none bg-white rounded-lg px-4 py-2 text-sm text-[#111827] placeholder:text-[#8696a0] focus:outline-none min-h-[38px] max-h-[100px] disabled:opacity-50 overflow-y-auto scroll-slim shadow-2xs transition-all ${
+                              sendMode === "note" ? "border border-amber-300 bg-amber-50/50" : "border-none"
+                            }`}
+                          />
+                        </div>
+
+                        {/* Botão Envio / Gravação Circular Verde Teal */}
+                        {selectedFile || inputContent.trim() ? (
+                          <button
+                            type="submit"
+                            disabled={isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio}
+                            className={`h-10 w-10 rounded-full flex items-center justify-center text-white shadow-xs transition-transform active:scale-95 shrink-0 ${
+                              sendMode === "note" ? "bg-amber-600 hover:bg-amber-700" : "bg-[#005d4b] hover:bg-[#004738]"
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                            title={selectedFile ? "Enviar anexo" : "Enviar mensagem"}
+                          >
+                            {isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                          </button>
                         ) : (
-                          <Mic className="h-4 w-4" />
+                          <button
+                            type="button"
+                            onClick={handleStartRecording}
+                            disabled={isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio}
+                            className="h-10 w-10 rounded-full flex items-center justify-center text-white bg-[#005d4b] hover:bg-[#004738] shadow-xs transition-transform active:scale-95 shrink-0 disabled:opacity-40"
+                            title="Gravar mensagem de voz"
+                          >
+                            {isUploadingAudio ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Mic className="h-4 w-4" />
+                            )}
+                          </button>
                         )}
-                      </button>
-                    </form>
+                      </form>
+                    )}
                   </div>
                 </footer>
             )}

@@ -978,3 +978,225 @@ export async function createInternalNoteAction(params: {
     return { success: false, error: err.message || "Erro interno ao salvar nota interna." }
   }
 }
+
+export interface UploadMediaResult {
+  success: boolean
+  url?: string
+  fileName?: string
+  fileType?: string
+  fileSize?: number
+  error?: string
+}
+
+/**
+ * Faz upload de arquivo/mídia (imagem, áudio, PDF) para o bucket chat-media do Supabase Storage
+ */
+export async function uploadChatMediaAction(formData: FormData): Promise<UploadMediaResult> {
+  try {
+    const { companyId } = await getAuthenticatedAgentContext()
+    
+    const file = formData.get("file") as File
+    if (!file) {
+      return { success: false, error: "Nenhum arquivo enviado." }
+    }
+
+    // Limite defensivo de 20MB
+    const MAX_SIZE = 20 * 1024 * 1024
+    if (file.size > MAX_SIZE) {
+      return { success: false, error: "O arquivo excede o limite máximo de 20MB." }
+    }
+
+    const adminClient = createAdminClient()
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+    const filePath = `${companyId}/${Date.now()}-${sanitizedName}`
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    const { error: uploadErr } = await adminClient.storage
+      .from("chat-media")
+      .upload(filePath, buffer, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      })
+
+    if (uploadErr) {
+      console.error("[ChatMedia] Erro no upload para Supabase Storage:", uploadErr)
+      return { success: false, error: uploadErr.message || "Falha ao armazenar arquivo." }
+    }
+
+    const { data: { publicUrl } } = adminClient.storage
+      .from("chat-media")
+      .getPublicUrl(filePath)
+
+    return {
+      success: true,
+      url: publicUrl,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+    }
+  } catch (err: any) {
+    console.error("[ChatMedia] Exceção em uploadChatMediaAction:", err)
+    return { success: false, error: err.message || "Erro interno ao processar mídia." }
+  }
+}
+
+/**
+ * Envia uma mensagem com anexo de mídia (imagem, áudio gravado, documento) para o cliente no WhatsApp
+ */
+export async function sendMediaMessageAction(params: {
+  conversationId: string
+  mediaUrl: string
+  mediaType: "image" | "audio" | "document"
+  fileName?: string
+  caption?: string
+  clientMessageId?: string
+}): Promise<SendMessageResult> {
+  try {
+    const { conversationId, mediaUrl, mediaType, fileName, caption, clientMessageId } = params
+
+    if (!conversationId || !mediaUrl) {
+      return { success: false, error: "Dados incompletos para envio de mídia." }
+    }
+
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+        const adminClient = createAdminClient()
+
+    // 1. Obter conversa
+    const { data: conv, error: convErr } = await adminClient
+      .from("conversations")
+      .select("id, company_id, channel, customers(name, phone)")
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+      .single()
+
+    if (convErr || !conv) {
+      return { success: false, error: "Conversa não localizada ou não autorizada." }
+    }
+
+    const safeIdempotencyKey = clientMessageId?.trim()
+      ? `manual-media-${conversationId}-${clientMessageId.trim()}`
+      : `manual-media-${conversationId}-${crypto.randomUUID()}`
+
+    const customerPhone = (conv.customers as any)?.phone || null
+    const customerName = (conv.customers as any)?.name || "Cliente"
+    const attendantName = (userName?.trim() || "Atendente").split(/\s+/)[0] || "Atendente"
+
+    // Conteúdo textual de apoio / legenda
+    const defaultPlaceholder =
+      mediaType === "image"
+        ? "[Imagem]"
+        : mediaType === "audio"
+        ? "[Mensagem de Voz]"
+        : `[Documento] ${fileName || "arquivo"}`
+
+    const cleanCaption = caption?.trim() || defaultPlaceholder
+    const prefix = `*Atendente ${attendantName}:*\n`
+    const outboundContent = cleanCaption.startsWith("*Atendente")
+      ? cleanCaption
+      : `${prefix}${cleanCaption}`
+
+    // 2. Gravar na tabela messages
+    const { data: createdMsg, error: msgInsertErr } = await adminClient
+      .from("messages")
+      .insert({
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: "agent",
+        sender_id: userId,
+        content: outboundContent,
+        message_type: mediaType,
+        metadata: {
+          delivery_status: "pending",
+          client_message_id: clientMessageId || null,
+          operator_name: attendantName,
+          media_url: mediaUrl,
+          file_name: fileName || null,
+          media_type: mediaType,
+        },
+      })
+      .select()
+      .single()
+
+    if (msgInsertErr || !createdMsg) {
+      return {
+        success: false,
+        error: `Falha ao gravar mensagem de mídia: ${msgInsertErr?.message || "Erro"}`,
+      }
+    }
+
+    // 3. Registrar na outbox com payload de mídia
+    const outboxPayload = {
+      event_id: safeIdempotencyKey,
+      event_type: "message.send",
+      channel: conv.channel || "whatsapp",
+      conversation_id: conversationId,
+      recipient: customerPhone,
+      number: customerPhone,
+      text: outboundContent,
+      media_url: mediaUrl,
+      media_type: mediaType,
+      file_name: fileName || null,
+      customer: {
+        name: customerName,
+        phone: customerPhone,
+      },
+      message: {
+        id: createdMsg.id,
+        content: outboundContent,
+        text: outboundContent,
+        sender_type: "agent",
+        sender_id: userId,
+        message_type: mediaType,
+        media_url: mediaUrl,
+        created_at: createdMsg.created_at,
+      },
+    }
+
+    const { data: createdOutbox, error: outboxInsertErr } = await adminClient
+      .from("message_outbox")
+      .insert({
+        company_id: companyId,
+        conversation_id: conversationId,
+        message_id: createdMsg.id,
+        idempotency_key: safeIdempotencyKey,
+        channel: conv.channel || "whatsapp",
+        recipient: customerPhone,
+        payload: outboxPayload,
+        status: "pending",
+        attempts: 0,
+      })
+      .select("id")
+      .single()
+
+    if (createdOutbox?.id) {
+      try {
+        await dispatchOutboxMessage(createdOutbox.id, { adminClient })
+      } catch (dispErr: any) {
+        console.error("[ChatMedia] Falha no despacho da outbox:", dispErr?.message || dispErr)
+      }
+    }
+
+    await adminClient
+      .from("conversations")
+      .update({
+        last_message_at: createdMsg.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId)
+
+    revalidatePath("/conversations")
+
+    return {
+      success: true,
+      duplicate: false,
+      messageId: createdMsg.id,
+      data: createdMsg,
+    }
+  } catch (error: any) {
+    console.error("[ChatMedia] Exceção em sendMediaMessageAction:", error)
+    return {
+      success: false,
+      error: `Erro ao enviar mídia: ${error.message || "Erro desconhecido"}`,
+    }
+  }
+}
