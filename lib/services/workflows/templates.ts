@@ -279,11 +279,18 @@ export async function applyWorkflowTemplate(
   if (!template) {
     try {
       const adminClient = params.options?.adminClient || createAdminClient()
-      const { data: dbTmpl } = await adminClient
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.templateKey)
+      let query = adminClient
         .from('platform_workflow_templates')
         .select('*')
-        .or(`key.eq.${params.templateKey},id.eq.${params.templateKey}`)
-        .maybeSingle()
+
+      if (isUuid) {
+        query = query.eq('id', params.templateKey)
+      } else {
+        query = query.eq('key', params.templateKey)
+      }
+
+      const { data: dbTmpl } = await query.maybeSingle()
 
       if (dbTmpl && Array.isArray(dbTmpl.stages)) {
         template = {

@@ -69,37 +69,12 @@ async function getAuditActor(): Promise<{ id: string; email: string }> {
  * Consulta a lista real de empresas no Supabase com limites, contagem de mensagens e dados de contato
  */
 export async function getCompaniesList(): Promise<CompanyMock[]> {
-  const adminClient = createAdminClient()
+  try {
+    const adminClient = createAdminClient()
 
-  // 1. Tenta consultar empresas com colunas de cnpj e contact_email
-  let rows: any[] = []
-  const { data: rowsWithCols, error: compErr } = await adminClient
-    .from("companies")
-    .select(`
-      id,
-      name,
-      slug,
-      status,
-      plan_tier,
-      created_at,
-      updated_at,
-      cnpj,
-      contact_email,
-      company_limits (
-        max_agents,
-        max_monthly_messages,
-        max_monthly_quotes,
-        max_catalog_items,
-        allowed_llm_providers
-      )
-    `)
-    .order("created_at", { ascending: false })
-
-  if (!compErr && rowsWithCols) {
-    rows = rowsWithCols
-  } else {
-    // Fallback caso as colunas novas ainda não tenham sido migradas no Supabase
-    const { data: fallbackRows, error: fallbackErr } = await adminClient
+    // 1. Tenta consultar empresas com colunas de cnpj e contact_email
+    let rows: any[] = []
+    const { data: rowsWithCols, error: compErr } = await adminClient
       .from("companies")
       .select(`
         id,
@@ -109,6 +84,8 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         plan_tier,
         created_at,
         updated_at,
+        cnpj,
+        contact_email,
         company_limits (
           max_agents,
           max_monthly_messages,
@@ -119,12 +96,37 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       `)
       .order("created_at", { ascending: false })
 
-    if (fallbackErr) {
-      console.error("[SuperAdmin] Erro ao listar empresas do banco:", fallbackErr.message)
-      throw new Error(`Falha ao consultar empresas no banco: ${fallbackErr.message}`)
+    if (!compErr && rowsWithCols) {
+      rows = rowsWithCols
+    } else {
+      // Fallback caso as colunas novas ainda não tenham sido migradas no Supabase
+      const { data: fallbackRows, error: fallbackErr } = await adminClient
+        .from("companies")
+        .select(`
+          id,
+          name,
+          slug,
+          status,
+          plan_tier,
+          created_at,
+          updated_at,
+          company_limits (
+            max_agents,
+            max_monthly_messages,
+            max_monthly_quotes,
+            max_catalog_items,
+            allowed_llm_providers
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      if (fallbackErr) {
+        console.error("[SuperAdmin] Erro ao listar empresas do banco:", fallbackErr.message)
+        rows = []
+      } else {
+        rows = fallbackRows || []
+      }
     }
-    rows = fallbackRows || []
-  }
 
   // 2. Consulta quantidade real de mensagens por tenant para cálculo de consumo
   const { data: messagesData } = await adminClient
@@ -258,6 +260,10 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
   })
 
   return companies
+} catch (err: any) {
+  console.error("[SuperAdmin] Falha em getCompaniesList:", err?.message)
+  return []
+}
 }
 
 /**
@@ -505,11 +511,18 @@ export async function createCompanyAction(
       if (workflowTemplateKey && workflowTemplateKey !== "none") {
         let template: any = WORKFLOW_TEMPLATES[workflowTemplateKey]
         if (!template) {
-          const { data: dbTmpl } = await adminClient
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workflowTemplateKey)
+          let query = adminClient
             .from("platform_workflow_templates")
             .select("key, label, stages")
-            .or(`key.eq.${workflowTemplateKey},id.eq.${workflowTemplateKey}`)
-            .maybeSingle()
+
+          if (isUuid) {
+            query = query.eq("id", workflowTemplateKey)
+          } else {
+            query = query.eq("key", workflowTemplateKey)
+          }
+
+          const { data: dbTmpl } = await query.maybeSingle()
 
           if (dbTmpl && Array.isArray(dbTmpl.stages)) {
             template = {
@@ -1080,11 +1093,18 @@ export async function applyCompanyWorkflowTemplateAction(params: {
     let template: any = WORKFLOW_TEMPLATES[templateKey]
     if (!template) {
       // Buscar no banco de dados caso seja um template dinâmico/customizado
-      const { data: dbTmpl } = await adminClient
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(templateKey)
+      let query = adminClient
         .from("platform_workflow_templates")
         .select("key, label, stages")
-        .or(`key.eq.${templateKey},id.eq.${templateKey}`)
-        .maybeSingle()
+
+      if (isUuid) {
+        query = query.eq("id", templateKey)
+      } else {
+        query = query.eq("key", templateKey)
+      }
+
+      const { data: dbTmpl } = await query.maybeSingle()
 
       if (dbTmpl && Array.isArray(dbTmpl.stages)) {
         template = {

@@ -201,7 +201,7 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
       .select('id, name, slug, status, plan_tier, created_at'),
     adminClient
       .from('messages')
-      .select('id, created_at, status'),
+      .select('id, created_at'),
     adminClient
       .from('conversations')
       .select('id, status'),

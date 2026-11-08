@@ -283,7 +283,7 @@ export default function CompanyWorkflowDialog({
             </DialogTitle>
             <DialogDescription className="text-xs text-ellevee-sage">
               Personalize as etapas operacionais, cores e responsabilidade da IA para{" "}
-              <strong className="text-ellevee-ink">{company.name}</strong> (@{company.slug})
+              <strong className="text-ellevee-ink">{company?.name || "Empresa"}</strong> (@{company?.slug || ""})
             </DialogDescription>
           </div>
         </div>
