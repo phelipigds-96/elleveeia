@@ -33,7 +33,17 @@ import {
   ChevronDown,
   LayoutGrid,
   ArrowLeft,
-  MoreVertical
+  MoreVertical,
+  SquarePen,
+  Edit,
+  Edit2,
+  Eye,
+  SlidersHorizontal,
+  Smile,
+  Paperclip,
+  Mic,
+  Tag,
+  Calendar
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -1070,7 +1080,7 @@ export default function PainelClient({
 
   return (
     <div
-      className="flex flex-1 min-h-0 h-full w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative"
+      className="flex flex-1 min-h-0 h-full w-full bg-[#efeae2] text-ellevee-ink overflow-hidden font-sans relative"
     >
       {/* =====================================================================
           SIDEBAR: LISTA DE CONVERSAS (Quiet Luxury / Deep Ink)
@@ -1078,118 +1088,99 @@ export default function PainelClient({
           nenhuma conversa esta selecionada.
       ====================================================================== */}
       <aside
-        className={`${hasSelection ? "hidden lg:flex" : "flex"} w-full lg:w-80 xl:w-96 border-r border-ellevee-stone bg-white flex-col shrink-0 h-full z-40 lg:static`}
+        className={`${hasSelection ? "hidden lg:flex" : "flex"} w-full lg:w-80 xl:w-96 border-r border-[#e9ecef] bg-white flex-col shrink-0 h-full z-40 lg:static`}
       >
-        {/* Cabeçalho de Busca e Filtros */}
-        <div className="p-3 border-b border-ellevee-stone space-y-2.5">
-          <div className="flex items-center gap-1.5">
-            <h1 className="font-display font-bold text-sm tracking-tight text-ellevee-ink flex items-center gap-1.5 mr-auto">
-              <span>Atendimento</span>
-              <span className="text-meta font-mono font-medium px-1.5 py-0.2 rounded bg-ellevee-stone-subtle text-ellevee-ink-muted border border-ellevee-stone">
-                {conversations.length}
-              </span>
-            </h1>
-
-            {/* Perfil do usuário atual */}
-            {currentUser && (
-              <span className="hidden sm:inline text-meta font-mono px-2 py-0.5 rounded bg-ellevee-stone-subtle text-ellevee-ink border border-ellevee-stone capitalize">
-                {currentUser.role === "master" || currentUser.role === "admin" ? "Master" : "Atendente"}
-              </span>
-            )}
-
-            {/* Acesso ao quadro de funil (Kanban) */}
+        {/* Cabeçalho de Busca e Ações Estilo WhatsApp / CRM */}
+        <div className="p-2.5 px-3 border-b border-[#e9ecef] space-y-2 bg-white">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
+              title="Nova conversa / contato"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8696a0]" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar contato"
+                aria-label="Buscar contato"
+                className="w-full pl-8 pr-3 py-1.5 bg-[#f0f2f5] rounded-lg text-xs sm:text-sm text-[#111827] placeholder:text-[#8696a0] focus:outline-none focus:bg-white focus:ring-1 focus:ring-[#005d4b]"
+              />
+            </div>
+            <button
+              type="button"
+              className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
+              title="Alternar visualização"
+            >
+              <Eye className="h-4 w-4" />
+            </button>
             <Link
               href="/conversations/kanban"
-              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring shrink-0"
-              title="Abrir o funil de atendimento (Kanban)"
-              aria-label="Abrir o funil de atendimento (Kanban)"
+              className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
+              title="Abrir Funil Kanban"
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Funil</span>
+              <SlidersHorizontal className="h-4 w-4" />
             </Link>
           </div>
 
-          {/* Campo de Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-ink-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por cliente, telefone ou texto..."
-              aria-label="Buscar conversas por cliente, telefone ou texto"
-              className="w-full pl-9 pr-3 py-2 border border-ellevee-stone rounded-md text-sm bg-ellevee-stone-subtle text-ellevee-ink placeholder:text-ellevee-ink-muted focus:outline-none focus:ring-2 focus:ring-ellevee-ink/50 focus:bg-white transition-colors"
-            />
-          </div>
+          {/* Abas Superiores de Fila por Ícones (Idêntico ao layout de referência) */}
+          <div className="flex items-center justify-between border-t border-[#f0f2f5] pt-1.5 px-2">
+            {/* 1. Todas as conversas */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
+                activeTab === "all" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
+              }`}
+              title={`Todas as conversas (${counts.all})`}
+            >
+              <ListFilter className="h-4 w-4" />
+            </button>
 
-          {/* Faixa de filtros por status: em telas pequenas rola na horizontal
-              (uma linha só) em vez de quebrar em varias linhas. */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scroll-slim pb-1 -mb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {isMasterOrAdmin && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("all")}
-                aria-pressed={activeTab === "all"}
-                title={`Todas as conversas (${counts.all})`}
-                className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border ${
-                  activeTab === "all"
-                    ? "bg-ellevee-ink text-white border-ellevee-ink font-semibold"
-                    : "bg-white text-ellevee-ink-muted border-ellevee-stone hover:text-ellevee-ink hover:border-ellevee-ink/30"
-                }`}
-              >
-                <ListFilter className="h-3.5 w-3.5" />
-                <span>Todas</span>
-                <span className="font-mono opacity-70">{counts.all}</span>
-              </button>
-            )}
+            {/* 2. Aguardando na Fila (com badge numérico verde) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("waiting")}
+              className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
+                activeTab === "waiting" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
+              }`}
+              title={`Aguardando atendimento (${counts.waiting})`}
+            >
+              <Hourglass className="h-4 w-4" />
+              {counts.waiting > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-[#25d366] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {counts.waiting}
+                </span>
+              )}
+            </button>
 
-            {(
-              [
-                { key: "waiting", label: "Aguardando", count: counts.waiting, tone: "warning" },
-                { key: "in_progress", label: "Em atendimento", count: counts.inProgress, tone: "success" },
-                { key: "ai", label: "IA", count: counts.ai, tone: "info" },
-                { key: "closed", label: "Finalizados", count: counts.closed, tone: "neutral" },
-              ] as const
-            ).map((tab) => {
-              const isActive = activeTab === tab.key
-              const toneClass =
-                tab.tone === "warning"
-                  ? "text-ellevee-warning-strong"
-                  : tab.tone === "success"
-                  ? "text-ellevee-success-strong"
-                  : tab.tone === "info"
-                  ? "text-ellevee-info-strong"
-                  : "text-ellevee-ink-muted"
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  aria-pressed={isActive}
-                  title={`${tab.label} (${tab.count})`}
-                  className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border shrink-0 whitespace-nowrap ${
-                    isActive
-                      ? `bg-white ${toneClass} font-semibold border-ellevee-ink/20 shadow-2xs`
-                      : "bg-white text-ellevee-ink-muted border-ellevee-stone hover:text-ellevee-ink hover:border-ellevee-ink/30"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      tab.tone === "warning"
-                        ? "bg-ellevee-warning"
-                        : tab.tone === "success"
-                        ? "bg-ellevee-success"
-                        : tab.tone === "info"
-                        ? "bg-ellevee-info"
-                        : "bg-ellevee-stone"
-                    } ${tab.key === "waiting" && tab.count > 0 ? "animate-pulse" : ""}`}
-                    aria-hidden="true"
-                  />
-                  <span className="whitespace-nowrap">{tab.label}</span>
-                  <span className="font-mono opacity-70">{tab.count}</span>
-                </button>
-              )
-            })}
+            {/* 3. Em atendimento */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("in_progress")}
+              className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
+                activeTab === "in_progress" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
+              }`}
+              title={`Em atendimento (${counts.inProgress})`}
+            >
+              <MessageSquare className="h-4 w-4" />
+            </button>
+
+            {/* 4. Atendimento com IA */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("ai")}
+              className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
+                activeTab === "ai" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
+              }`}
+              title={`Atendimento IA ativa (${counts.ai})`}
+            >
+              <User className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
@@ -1467,261 +1458,87 @@ export default function PainelClient({
                 </div>
               </div>
 
-              {/* Lado Direito: Ações em Linha Reta Minimalistas Estilo ChatPro
-                  No mobile ficam compactas (ícones) ou dentro do menu “⋯”. */}
+              {/* Lado Direito: Ações Rápidas no Padrão do Layout (transferir, etiquetas, agendar, finalizar) */}
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {/* 1. Conversa Finalizada -> Reabrir */}
+                {/* 1. Botão Transferir */}
+                <button
+                  type="button"
+                  onClick={activeConversation.status === "human" ? handleReturnToAI : handleTakeover}
+                  disabled={isReturningToAI || isTakingOver}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
+                  title={activeConversation.status === "human" ? "Devolver para a IA" : "Assumir atendimento"}
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">transferir</span>
+                </button>
+
+                {/* 2. Botão Etiquetas / Funil */}
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
+                  title="Etiquetas e Etapa do Funil"
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">
+                    {activeConversation.workflow_stage_name || "etiquetas"}
+                  </span>
+                </button>
+
+                {/* 3. Botão Agendar */}
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
+                  title="Agendar follow-up ou notas"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">agendar</span>
+                </button>
+
+                {/* 4. Botão Finalizar */}
                 {activeConversation.status === "closed" ? (
                   <button
+                    type="button"
                     onClick={handleReopenConversation}
                     disabled={isReopening}
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle border border-ellevee-stone transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
-                    title="Reativar esta conversa"
-                    aria-label="Reativar esta conversa"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#005d4b] hover:bg-[#005d4b]/10 transition-colors"
+                    title="Reabrir conversa"
                   >
-                    <RotateCcw className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                    <span className="hidden sm:inline">{isReopening ? "Reabrindo..." : "Reabrir"}</span>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>reabrir</span>
                   </button>
-                ) : activeConversation.status === "human" ? (
-                  /* 2. Conversa em Atendimento Humano */
-                  <>
-                    {!activeConversation.assigned_to && (
-                      <button
-                        onClick={handleTakeover}
-                        disabled={isTakingOver}
-                        className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-semibold bg-ellevee-warning hover:bg-ellevee-warning-strong text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                        title="Pegar esta conversa que está na fila"
-                        aria-label="Assumir conversa que está na fila"
-                      >
-                        {isTakingOver ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <UserCheck className="h-3.5 w-3.5" />
-                        )}
-                        <span className="hidden sm:inline">Pegar para Mim</span>
-                      </button>
-                    )}
-
-                    {/* Botão Devolver para IA (ChatPro: ⇄ transferir)
-                        No mobile fica dentro do menu “⋯”. */}
-                    <button
-                      onClick={handleReturnToAI}
-                      disabled={isReturningToAI}
-                      className="hidden sm:inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
-                      title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
-                    >
-                      {isReturningToAI ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <ArrowLeftRight className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                      )}
-                      {/* No mobile fica apenas o ícone (estilo WhatsApp Web). */}
-                      <span className="hidden sm:inline">Devolver p/ {activeConversation.agent_name || "IA"}</span>
-                    </button>
-
-                    {/* Botão Encerrar (ChatPro: ✓ finalizar) — FASE 4:
-                        confirmação em dois passos para evitar encerramento acidental. */}
-                    <button
-                      onClick={requestClose}
-                      disabled={isClosing}
-                      className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
-                        confirmClose
-                          ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
-                          : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
-                      }`}
-                      title={
-                        confirmClose
-                          ? "Clique novamente para confirmar o encerramento"
-                          : "Finalizar atendimento"
-                      }
-                      aria-label={
-                        confirmClose
-                          ? "Confirmar encerramento do atendimento"
-                          : "Finalizar atendimento"
-                      }
-                    >
-                      {isClosing ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : confirmClose ? (
-                        <AlertCircle className="h-3.5 w-3.5 text-white" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                      )}
-                      <span>
-                        {isClosing
-                          ? "Encerrando..."
-                          : confirmClose
-                          ? "Confirmar"
-                          : "Encerrar"}
-                      </span>
-                    </button>
-                  </>
                 ) : (
-                  /* 3. Conversa com IA Ativa */
-                  <>
-                    <button
-                      onClick={handleTakeover}
-                      disabled={isTakingOver}
-                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-60 whitespace-nowrap focus-ring"
-                      title="Pausar a IA e assumir o atendimento humano"
-                      aria-label="Pausar a IA e assumir o atendimento humano"
-                    >
-                      {isTakingOver ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <UserCheck className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                      )}
-                      <span className="hidden sm:inline">Assumir Conversa</span>
-                    </button>
-
-                    <button
-                      onClick={requestClose}
-                      disabled={isClosing}
-                      className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
-                        confirmClose
-                          ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
-                          : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
-                      }`}
-                      title={
-                        confirmClose
-                          ? "Clique novamente para confirmar o encerramento"
-                          : "Finalizar atendimento"
-                      }
-                      aria-label={
-                        confirmClose
-                          ? "Confirmar encerramento do atendimento"
-                          : "Finalizar atendimento"
-                      }
-                    >
-                      {isClosing ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : confirmClose ? (
-                        <AlertCircle className="h-3.5 w-3.5 text-white" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                      )}
-                      <span>
-                        {isClosing
-                          ? "Encerrando..."
-                          : confirmClose
-                          ? "Confirmar"
-                          : "Encerrar"}
-                      </span>
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={requestClose}
+                    disabled={isClosing}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      confirmClose
+                        ? "bg-red-600 text-white hover:bg-red-700 shadow-xs"
+                        : "text-[#54656f] hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200"
+                    }`}
+                    title="Finalizar atendimento"
+                  >
+                    {isClosing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : confirmClose ? (
+                      <AlertCircle className="h-3.5 w-3.5 text-white" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#54656f]" />
+                    )}
+                    <span>{confirmClose ? "confirmar?" : "finalizar"}</span>
+                  </button>
                 )}
 
-                {/* Menu “⋯” — ações secundárias em telas estreitas */}
-                <DropdownMenu
-                  trigger={
-                    <span
-                      className="inline-flex items-center justify-center h-8 w-8 rounded-md text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors focus-ring"
-                      title="Mais ações do atendimento"
-                      aria-label="Mais ações do atendimento"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </span>
-                  }
-                >
-                  <DropdownMenuLabel>Ações do Atendimento</DropdownMenuLabel>
-
-                  {activeConversation.status === "closed" && (
-                    <DropdownMenuItem onClick={handleReopenConversation} disabled={isReopening}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        {isReopening ? "Reabrindo..." : "Reabrir atendimento"}
-                      </span>
-                    </DropdownMenuItem>
-                  )}
-
-                  {activeConversation.status !== "human" && (
-                    <DropdownMenuItem onClick={handleTakeover} disabled={isTakingOver}>
-                      <span className="inline-flex items-center gap-1.5">
-                        {isTakingOver ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <UserCheck className="h-3.5 w-3.5" />
-                        )}
-                        Assumir atendimento
-                      </span>
-                    </DropdownMenuItem>
-                  )}
-
-                  {activeConversation.status === "human" && !activeConversation.assigned_to && (
-                    <DropdownMenuItem onClick={handleTakeover} disabled={isTakingOver}>
-                      <span className="inline-flex items-center gap-1.5">
-                        {isTakingOver ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <UserCheck className="h-3.5 w-3.5" />
-                        )}
-                        Pegar para Mim
-                      </span>
-                    </DropdownMenuItem>
-                  )}
-
-                  {activeConversation.status === "human" && (
-                    <DropdownMenuItem onClick={handleReturnToAI} disabled={isReturningToAI}>
-                      <span className="inline-flex items-center gap-1.5">
-                        {isReturningToAI ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <ArrowLeftRight className="h-3.5 w-3.5" />
-                        )}
-                        Devolver p/ {activeConversation.agent_name || "IA"}
-                      </span>
-                    </DropdownMenuItem>
-                  )}
-
-                  <DropdownMenuItem onClick={() => setIsProfileOpen((prev) => !prev)}>
-                    <span className="inline-flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      {isProfileOpen ? "Ocultar perfil" : "Perfil do Cliente"}
-                    </span>
-                  </DropdownMenuItem>
-
-                  {activeConversation.status !== "closed" && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => (confirmClose ? handleCloseConversation() : requestClose())}
-                        disabled={isClosing}
-                        destructive={!confirmClose}
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          {isClosing ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : confirmClose ? (
-                            <AlertCircle className="h-3.5 w-3.5" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                          {isClosing
-                            ? "Encerrando..."
-                            : confirmClose
-                            ? "Confirmar encerramento"
-                            : "Encerrar atendimento"}
-                        </span>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenu>
-
-                {/* Botão Perfil (ChatPro: 👤 perfil) */}
+                {/* 5. Menu Mais Opções (⋮) */}
                 <button
-                  onClick={() => setIsProfileOpen((prev) => !prev)}
-                  aria-expanded={isProfileOpen}
-                  aria-controls="painel-perfil-cliente"
-                  className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap focus-ring ${
-                    isProfileOpen
-                      ? "bg-ellevee-ink text-white shadow-2xs"
-                      : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle"
-                  }`}
-                  title={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
-                  aria-label={isProfileOpen ? "Ocultar perfil do cliente" : "Ver perfil e notas do cliente"}
+                  type="button"
+                  onClick={() => setIsProfileOpen((v) => !v)}
+                  className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
+                  title="Mais opções do contato"
                 >
-                  <User className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Perfil</span>
+                  <MoreVertical className="h-4 w-4" />
                 </button>
               </div>
             </header>
@@ -1892,114 +1709,90 @@ export default function PainelClient({
                 </button>
               </footer>
             ) : (
-              <footer className="border-t border-ellevee-stone px-3 sm:px-4 py-2 sm:py-3 bg-white shrink-0">
-                <div className="max-w-3xl mx-auto space-y-1.5 sm:space-y-2">
-                  {/* Abas de Modo: Mensagem WhatsApp vs Nota Interna
-                      No mobile vira um controle compacto (segmentado) acima
-                      do campo, com rotulos curtos. */}
-                  <div className="flex w-full sm:w-fit items-center gap-1.5 text-meta p-0.5 rounded-lg bg-ellevee-stone-subtle border border-ellevee-stone">
-                    <button
-                      type="button"
-                      onClick={() => setSendMode("whatsapp")}
-                      aria-pressed={sendMode === "whatsapp"}
-                      title="Enviar mensagem pelo WhatsApp ao cliente"
-                      className={`flex-1 sm:flex-none items-center justify-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
-                        sendMode === "whatsapp"
-                          ? "bg-ellevee-ink text-white shadow-2xs"
-                          : "text-ellevee-ink-muted hover:text-ellevee-ink bg-transparent"
-                      }`}
-                    >
-                      <Send className="h-3 w-3" />
-                      <span className="hidden sm:inline">Mensagem WhatsApp</span>
-                      <span className="sm:hidden">Mensagem</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSendMode("note")}
-                      aria-pressed={sendMode === "note"}
-                      title="Registrar nota interna visivel apenas para a equipe"
-                      className={`flex-1 sm:flex-none items-center justify-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
-                        sendMode === "note"
-                          ? "bg-ellevee-note-border text-ellevee-note-strong shadow-2xs border border-ellevee-note-border-strong"
-                          : "text-ellevee-ink-muted hover:text-ellevee-note-strong bg-transparent"
-                      }`}
-                    >
-                      <Lock className="h-3 w-3" />
-                      <span className="hidden sm:inline">Nota Interna (Equipe)</span>
-                      <span className="sm:hidden">Nota</span>
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleFormSubmit} className="flex items-end gap-2.5">
-                    <div
-                      className={`flex-1 relative rounded-lg border transition-all ${
-                        sendMode === "note"
-                          ? "border-ellevee-note-border-strong bg-ellevee-note-bg focus-within:bg-ellevee-note-bg focus-within:border-ellevee-note-focus focus-within:ring-1 focus-within:ring-ellevee-note-focus"
-                          : "border-ellevee-stone bg-ellevee-stone-subtle focus-within:bg-white focus-within:border-ellevee-ink focus-within:ring-1 focus-within:ring-ellevee-ink"
-                      }`}
-                    >
-                      <textarea
-                        ref={textareaRef}
-                        rows={sendMode === "note" ? 2 : 1}
-                        value={inputContent}
-                        onChange={(e) => handleInputContentChange(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        disabled={isSending || isSendingInternalNote}
-                        placeholder={
+              <footer className="p-2 sm:p-2.5 px-3 sm:px-4 bg-[#f0f2f5] border-t border-[#e9ecef] shrink-0">
+                  <div className="max-w-4xl mx-auto space-y-1.5">
+                    {/* Modo: Mensagem WhatsApp vs Nota Interna */}
+                    <div className="flex items-center gap-2 px-1">
+                      <button
+                        type="button"
+                        onClick={() => setSendMode("whatsapp")}
+                        className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition-colors ${
+                          sendMode === "whatsapp"
+                            ? "bg-[#005d4b] text-white"
+                            : "bg-white text-[#54656f] hover:text-[#111827] border border-[#e9ecef]"
+                        }`}
+                      >
+                        Mensagem WhatsApp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSendMode("note")}
+                        className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition-colors ${
                           sendMode === "note"
-                            ? "Adicione uma nota interna sobre este atendimento (visível apenas para sua equipe)..."
-                            : "Digite uma mensagem como operador humano... (Enter para enviar, Shift+Enter para nova linha)"
-                        }
-                        aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
-                        className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ellevee-ink placeholder:text-ellevee-ink-muted/70 focus:outline-none min-h-[44px] max-h-[128px] disabled:opacity-50 overflow-y-auto scroll-slim"
-                      />
+                            ? "bg-amber-600 text-white"
+                            : "bg-white text-[#54656f] hover:text-[#111827] border border-[#e9ecef]"
+                        }`}
+                      >
+                        Nota Interna
+                      </button>
                     </div>
 
-                    {sendMode === "note" ? (
+                    <form onSubmit={handleFormSubmit} className="flex items-center gap-2">
+                      {/* Botão Emoji */}
+                      <button
+                        type="button"
+                        className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0"
+                        title="Inserir emoji"
+                      >
+                        <Smile className="h-5 w-5" />
+                      </button>
+
+                      {/* Botão Anexo */}
+                      <button
+                        type="button"
+                        className="p-2 text-[#54656f] hover:text-[#111827] hover:bg-black/5 rounded-full transition-colors shrink-0"
+                        title="Anexar arquivo ou imagem"
+                      >
+                        <Paperclip className="h-5 w-5" />
+                      </button>
+
+                      {/* Input de Mensagem */}
+                      <div className="flex-1 relative">
+                        <textarea
+                          ref={textareaRef}
+                          rows={1}
+                          value={inputContent}
+                          onChange={(e) => handleInputContentChange(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          disabled={isSending || isSendingInternalNote}
+                          placeholder={sendMode === "note" ? "Escreva uma nota interna privada..." : "Mensagem"}
+                          aria-label={sendMode === "note" ? "Escrever nota interna" : "Escrever mensagem para o cliente"}
+                          className={`w-full resize-none bg-white rounded-lg px-4 py-2 text-sm text-[#111827] placeholder:text-[#8696a0] focus:outline-none min-h-[38px] max-h-[100px] disabled:opacity-50 overflow-y-auto scroll-slim shadow-2xs transition-all ${
+                            sendMode === "note" ? "border border-amber-300 bg-amber-50/50" : "border-none"
+                          }`}
+                        />
+                      </div>
+
+                      {/* Botão Envio / Gravação Circular Verde Teal */}
                       <button
                         type="submit"
-                        disabled={isSendingInternalNote || !inputContent.trim()}
-                        className="h-11 px-4 rounded-lg bg-ellevee-note-accent hover:bg-ellevee-note-strong text-white transition-colors flex items-center justify-center gap-1.5 font-semibold text-meta focus-ring disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-2xs cursor-pointer font-sans"
-                        title="Salvar nota interna nesta conversa"
-                        aria-label="Salvar nota interna nesta conversa"
+                        disabled={(!inputContent.trim()) || isSending || isSendingInternalNote}
+                        className={`h-10 w-10 rounded-full flex items-center justify-center text-white shadow-xs transition-transform active:scale-95 shrink-0 ${
+                          sendMode === "note" ? "bg-amber-600 hover:bg-amber-700" : "bg-[#005d4b] hover:bg-[#004738]"
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                        title="Enviar mensagem"
                       >
-                        {isSendingInternalNote ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-white" />
-                            <span className="hidden sm:inline">Salvando...</span>
-                          </>
+                        {isSending || isSendingInternalNote ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : inputContent.trim() ? (
+                          <Send className="h-4 w-4" />
                         ) : (
-                          <>
-                            <Lock className="h-4 w-4" />
-                            <span className="hidden sm:inline">Salvar Nota</span>
-                          </>
+                          <Mic className="h-4 w-4" />
                         )}
                       </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        disabled={isSending || !inputContent.trim()}
-                        className="h-11 px-4 rounded-lg bg-ellevee-ink hover:bg-black text-white transition-colors flex items-center justify-center gap-1.5 font-semibold text-meta disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-2xs cursor-pointer font-sans focus-ring"
-                        title="Enviar mensagem para o cliente (Outbox idempotente)"
-                        aria-label="Enviar mensagem para o cliente"
-                      >
-                        {isSending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-ellevee-accent" />
-                            <span className="hidden sm:inline">Enviando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="h-4 w-4" />
-                            <span className="hidden sm:inline">Enviar</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </form>
-                </div>
-              </footer>
+                    </form>
+                  </div>
+                </footer>
             )}
           </div>
 
