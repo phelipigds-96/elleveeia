@@ -231,8 +231,9 @@ function getDisplayContent(msg: MessageData): string | null {
 
   if (mediaUrl && content.trim() === mediaUrl.trim()) return null
 
+  // Só suprime o texto se a mídia foi realmente carregada (mediaUrl existe)
   if (
-    (mediaUrl || msg.message_type === "image" || msg.message_type === "audio" || msg.message_type === "document") &&
+    Boolean(mediaUrl) &&
     (content.trim() === "[Imagem]" ||
       content.trim() === "[Mensagem de Voz]" ||
       content.trim().startsWith("[Documento]") ||
