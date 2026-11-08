@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { validateWebhookPayload, validateWebhookStatusPayload } from '@/lib/validations/webhook'
-import { processInboundAudio } from '@/lib/services/audio-transcription'
+import { processInboundMedia } from '@/lib/services/audio-transcription'
 import { processWebhookEvent, handleAutonomousCycle, updateMessageDeliveryStatus, type AutonomousCycleResult } from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
@@ -110,39 +110,44 @@ export async function POST(request: Request) {
       return NextResponse.json(statusRes, { status: 200 })
     }
 
-        // 2.1 Tratamento Automático de Áudio Inbound (Upload para Supabase Storage + Transcrição STT)
+    // 2.1 Tratamento Automático de Mídia Inbound (Áudio, Imagem, Documento)
     if (
       body?.message?.message_type === 'audio' ||
+      body?.message?.message_type === 'image' ||
+      body?.message?.message_type === 'document' ||
       body?.metadata?.media_type === 'audio' ||
+      body?.metadata?.media_type === 'image' ||
+      body?.metadata?.media_type === 'document' ||
       body?.metadata?.base64 ||
       body?.message?.base64
     ) {
-      const audioResult = await processInboundAudio({
+      const mediaResult = await processInboundMedia({
         companyId,
-        eventId: body.event_id || `audio-${Date.now()}`,
+        eventId: body.event_id || `media-${Date.now()}`,
+        mediaType: body.message?.message_type || body.metadata?.media_type || 'audio',
         base64: body.metadata?.base64 || body.message?.base64,
         mediaUrl: body.metadata?.media_url || body.message?.media_url,
         currentContent: body.message?.content
       })
 
-      if (audioResult.mediaUrl) {
+      if (mediaResult.mediaUrl) {
         body.metadata = body.metadata || {}
-        body.metadata.media_url = audioResult.mediaUrl
-        body.metadata.media_type = 'audio'
+        body.metadata.media_url = mediaResult.mediaUrl
+        body.metadata.media_type = mediaResult.mediaType || 'audio'
         if (body.message) {
-          body.message.message_type = 'audio'
+          body.message.message_type = mediaResult.mediaType || 'audio'
         }
       }
 
-      if (audioResult.transcription) {
+      if (mediaResult.transcription) {
         if (body.message) {
-          body.message.content = audioResult.transcription
+          body.message.content = mediaResult.transcription
         }
         body.metadata = body.metadata || {}
-        body.metadata.transcription = audioResult.transcription
+        body.metadata.transcription = mediaResult.transcription
       } else if (!body.message?.content || body.message.content.trim() === '') {
         if (body.message) {
-          body.message.content = '[Mensagem de Voz]'
+          body.message.content = mediaResult.mediaType === 'image' ? '[Imagem]' : '[Mensagem de Voz]'
         }
       }
 

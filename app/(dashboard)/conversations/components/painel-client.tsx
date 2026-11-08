@@ -44,7 +44,9 @@ import {
   Mic,
   Tag,
   Calendar,
-  Trash2
+  Trash2,
+  Play,
+  Pause
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -151,6 +153,105 @@ function formatRecordingTime(secs: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`
 }
 
+
+function WhatsAppAudioPlayer({ src, isCustomer }: { src: string; isCustomer?: boolean }) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const onLoadedMetadata = () => {
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setDuration(audio.duration)
+      }
+    }
+
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime)
+    }
+
+    const onEnded = () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+    }
+
+    audio.addEventListener("loadedmetadata", onLoadedMetadata)
+    audio.addEventListener("timeupdate", onTimeUpdate)
+    audio.addEventListener("ended", onEnded)
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata)
+      audio.removeEventListener("timeupdate", onTimeUpdate)
+      audio.removeEventListener("ended", onEnded)
+    }
+  }, [src])
+
+  const togglePlay = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (isPlaying) {
+      audio.pause()
+      setIsPlaying(false)
+    } else {
+      audio.play().then(() => setIsPlaying(true)).catch((e) => {
+        console.error("Audio playback error:", e)
+      })
+    }
+  }
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = Number(e.target.value)
+    setCurrentTime(time)
+    if (audioRef.current) {
+      audioRef.current.currentTime = time
+    }
+  }
+
+  const formatSecs = (sec: number) => {
+    if (isNaN(sec) || !isFinite(sec)) return "0:00"
+    const m = Math.floor(sec / 60)
+    const s = Math.floor(sec % 60)
+    return `${m}:${s < 10 ? "0" : ""}${s}`
+  }
+
+  return (
+    <div className="flex items-center gap-3 py-1.5 px-1 w-full min-w-[240px] max-w-[280px]">
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="h-9 w-9 rounded-full bg-[#005d4b] hover:bg-[#004738] text-white flex items-center justify-center shrink-0 shadow-xs transition-transform active:scale-95"
+        title={isPlaying ? "Pausar áudio" : "Reproduzir áudio"}
+      >
+        {isPlaying ? (
+          <Pause className="h-4 w-4 fill-white text-white" />
+        ) : (
+          <Play className="h-4 w-4 fill-white text-white ml-0.5" />
+        )}
+      </button>
+
+      <div className="flex-1 flex flex-col justify-center min-w-0">
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSeek}
+          className="w-full h-1.5 bg-gray-300 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-[#005d4b]"
+        />
+        <div className="flex justify-between items-center text-[10px] text-[#54656f] font-mono mt-1 font-medium">
+          <span>{formatSecs(currentTime)}</span>
+          <span>{duration > 0 ? formatSecs(duration) : "--:--"}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MessageMedia({
   msg,
   isCustomer = false,
@@ -195,10 +296,10 @@ function MessageMedia({
 
   if (mediaType === "audio" || (mediaUrl && /\.(mp3|ogg|wav|m4a|webm)/i.test(mediaUrl))) {
     return (
-      <div className={`my-1.5 p-2 rounded-xl flex items-center gap-2 ${
-        isCustomer ? "bg-black/5" : "bg-black/10"
+      <div className={`my-1 rounded-xl ${
+        isCustomer ? "bg-black/5" : "bg-black/5"
       }`}>
-        <audio controls src={mediaUrl} className="w-full h-8 max-w-[280px]" preload="metadata" />
+        <WhatsAppAudioPlayer src={mediaUrl} isCustomer={isCustomer} />
       </div>
     )
   }
@@ -2095,7 +2196,9 @@ export default function PainelClient({
                           <span className="text-meta text-ellevee-ink-muted px-1 font-mono">
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
-                          <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
+                          <div className={`max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md ${
+                            msg.message_type === "audio" || msg.metadata?.media_type === "audio" ? "min-w-[270px]" : ""
+                          }`}>
                             <MessageMedia msg={msg} isCustomer={true} />
                             {getDisplayContent(msg) && (
                               <p className="whitespace-pre-wrap leading-relaxed">{getDisplayContent(msg)}</p>
@@ -2129,6 +2232,8 @@ export default function PainelClient({
 
                         <div
                           className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
+                            msg.message_type === "audio" || msg.metadata?.media_type === "audio" ? "min-w-[270px]" : ""
+                          } ${
                             isHuman
                               ? "msg-bubble-in border-ellevee-success/40 ring-1 ring-ellevee-success/20"
                               : "msg-bubble-out"
