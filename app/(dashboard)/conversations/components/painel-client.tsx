@@ -46,7 +46,9 @@ import {
   Calendar,
   Trash2,
   Play,
-  Pause
+  Pause,
+  Download,
+  ExternalLink
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -255,9 +257,11 @@ function WhatsAppAudioPlayer({ src, isCustomer }: { src: string; isCustomer?: bo
 function MessageMedia({
   msg,
   isCustomer = false,
+  onOpenPreview,
 }: {
   msg: MessageData
   isCustomer?: boolean
+  onOpenPreview?: (url: string, fileName?: string) => void
 }) {
   const mediaUrl =
     msg.metadata?.media_url ||
@@ -282,14 +286,25 @@ function MessageMedia({
   if (mediaType === "image" || (mediaUrl && /\.(png|jpe?g|webp|gif)/i.test(mediaUrl))) {
     return (
       <div className="my-1.5 overflow-hidden rounded-lg">
-        <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="block group/img">
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenPreview && mediaUrl) {
+              onOpenPreview(mediaUrl, fileName)
+            } else if (mediaUrl) {
+              window.open(mediaUrl, "_blank")
+            }
+          }}
+          className="block group/img cursor-zoom-in text-left focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded-lg transition-transform active:scale-[0.99]"
+          title="Clique para ampliar na tela"
+        >
           <img
             src={mediaUrl}
             alt={fileName || "Imagem"}
-            className="max-h-72 w-auto max-w-full rounded-lg object-cover transition-transform hover:scale-[1.01]"
+            className="max-h-72 w-auto max-w-full rounded-lg object-cover transition-transform group-hover:scale-[1.01]"
             loading="lazy"
           />
-        </a>
+        </button>
       </div>
     )
   }
@@ -397,6 +412,20 @@ export default function PainelClient({
   const [isReopening, setIsReopening] = useState(false)
   // FASE 4 — Confirmação em dois passos para ação destrutiva (encerrar).
   const [confirmClose, setConfirmClose] = useState(false)
+
+  // Lightbox Modal para visualização ampliada de imagem na mesma página (estilo WhatsApp Web)
+  const [previewImage, setPreviewImage] = useState<{ url: string; fileName?: string } | null>(null)
+
+  // Fecha o lightbox modal ao pressionar a tecla Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && previewImage) {
+        setPreviewImage(null)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [previewImage])
 
   // 4. Estados do Perfil do Cliente e Painel Retrátil (Fase 2)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -2199,7 +2228,11 @@ export default function PainelClient({
                           <div className={`max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md ${
                             msg.message_type === "audio" || msg.metadata?.media_type === "audio" ? "min-w-[270px]" : ""
                           }`}>
-                            <MessageMedia msg={msg} isCustomer={true} />
+                            <MessageMedia
+                              msg={msg}
+                              isCustomer={true}
+                              onOpenPreview={(url, name) => setPreviewImage({ url, fileName: name })}
+                            />
                             {getDisplayContent(msg) && (
                               <p className="whitespace-pre-wrap leading-relaxed">{getDisplayContent(msg)}</p>
                             )}
@@ -2239,7 +2272,11 @@ export default function PainelClient({
                               : "msg-bubble-out"
                           }`}
                         >
-                          <MessageMedia msg={msg} isCustomer={false} />
+                          <MessageMedia
+                            msg={msg}
+                            isCustomer={false}
+                            onOpenPreview={(url, name) => setPreviewImage({ url, fileName: name })}
+                          />
                           {getDisplayContent(msg) && (
                             <p className="whitespace-pre-wrap leading-relaxed">{getDisplayContent(msg)}</p>
                           )}
@@ -2722,6 +2759,71 @@ export default function PainelClient({
           </div>
         )}
       </main>
+
+      {/* Lightbox Modal para Visualização de Imagem em Tela Cheia (Estilo WhatsApp Web) */}
+      {previewImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col animate-in fade-in duration-200"
+          onClick={() => setPreviewImage(null)}
+        >
+          {/* Top Bar de Controles */}
+          <div
+            className="flex items-center justify-between px-6 py-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent text-white shrink-0 select-none z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-sm font-medium text-white/90 truncate max-w-xs md:max-w-md">
+                {previewImage.fileName || "Imagem"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href={previewImage.url}
+                download={previewImage.fileName || "imagem"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                title="Baixar imagem"
+              >
+                <Download className="h-5 w-5" />
+              </a>
+              <a
+                href={previewImage.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                title="Abrir imagem em nova aba"
+              >
+                <ExternalLink className="h-5 w-5" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-2.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors ml-2"
+                title="Fechar (Esc)"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Área Central com Imagem */}
+          <div
+            className="flex-1 flex items-center justify-center p-4 sm:p-8 min-h-0 overflow-auto"
+            onClick={() => setPreviewImage(null)}
+          >
+            <img
+              src={previewImage.url}
+              alt={previewImage.fileName || "Visualização ampliada"}
+              className="max-h-[85vh] max-w-[92vw] object-contain rounded-lg shadow-2xl transition-transform"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
