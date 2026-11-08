@@ -275,7 +275,31 @@ export async function applyStagesToCompanyWorkflow({
 export async function applyWorkflowTemplate(
   params: ApplyWorkflowTemplateParams
 ): Promise<ApplyWorkflowTemplateResult> {
-  const template = getWorkflowTemplate(params.templateKey)
+  let template = getWorkflowTemplate(params.templateKey)
+  if (!template) {
+    try {
+      const adminClient = params.options?.adminClient || createAdminClient()
+      const { data: dbTmpl } = await adminClient
+        .from('platform_workflow_templates')
+        .select('*')
+        .or(`key.eq.${params.templateKey},id.eq.${params.templateKey}`)
+        .maybeSingle()
+
+      if (dbTmpl && Array.isArray(dbTmpl.stages)) {
+        template = {
+          key: dbTmpl.key,
+          label: dbTmpl.label,
+          description: dbTmpl.description || '',
+          segment: dbTmpl.segment || 'Geral',
+          badgeText: dbTmpl.badge_text || dbTmpl.segment || 'Blueprint',
+          stages: dbTmpl.stages,
+        }
+      }
+    } catch {
+      // Ignora erro caso a tabela ainda não exista
+    }
+  }
+
   if (!template) {
     throw new Error(`Template de funil não encontrado: "${params.templateKey}".`)
   }

@@ -1,11 +1,12 @@
 "use client"
 
 import React from "react"
-import { Building2, Plus, ArrowRight } from "lucide-react"
+import { Building2, Plus, ArrowRight, Kanban } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface CompaniesHeaderProps {
   onCreate: () => void
+  onOpenTemplates?: () => void
   totalCount?: number
   activeCount?: number
   trialCount?: number
@@ -14,6 +15,7 @@ interface CompaniesHeaderProps {
 
 export default function CompaniesHeader({ 
   onCreate, 
+  onOpenTemplates,
   totalCount = 6,
   activeCount = 5,
   trialCount = 1,
@@ -31,7 +33,19 @@ export default function CompaniesHeader({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {onOpenTemplates && (
+            <Button 
+              onClick={onOpenTemplates} 
+              variant="outline" 
+              size="sm" 
+              className="gap-1.5 font-display border-ellevee-stone bg-white text-ellevee-ink hover:bg-[#F8F8F5]"
+            >
+              <Kanban className="h-4 w-4 text-ellevee-ink" />
+              <span>Modelos de Funil</span>
+            </Button>
+          )}
+
           <Button onClick={onCreate} variant="default" size="sm" className="gap-1.5 font-display">
             <Plus className="h-4 w-4 text-ellevee-accent" />
             <span>Nova empresa</span>

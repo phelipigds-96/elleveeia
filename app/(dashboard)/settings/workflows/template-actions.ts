@@ -7,6 +7,7 @@ import {
   getWorkflowTemplate,
   WORKFLOW_TEMPLATES,
 } from '@/lib/services/workflows/templates'
+import { getPlatformWorkflowTemplatesList } from '@/lib/services/workflows/templates-service'
 
 /**
  * Marco 1 — Server Actions do motor de Templates por Segmento.
@@ -47,7 +48,8 @@ export async function listWorkflowTemplatesAction(): Promise<{
   error?: string
 }> {
   try {
-    const templates = Object.values(WORKFLOW_TEMPLATES).map((template) => ({
+    const list = await getPlatformWorkflowTemplatesList()
+    const templates = list.map((template) => ({
       key: template.key,
       label: template.label,
       segment: template.segment,
@@ -86,11 +88,6 @@ export async function applyWorkflowTemplateAction(
   }
 
   const { templateKey, workflowId } = parsed.data
-
-  // Falha rápida com mensagem legível antes de tocar no banco.
-  if (!getWorkflowTemplate(templateKey)) {
-    return { ok: false, message: `Template desconhecido: "${templateKey}".` }
-  }
 
   try {
     const result = await applyWorkflowTemplate({

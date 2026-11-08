@@ -7,11 +7,13 @@ export interface StageTemplate {
 }
 
 export interface WorkflowTemplate {
+  id?: string
   key: string
   label: string
   description: string
   segment: string
-  badgeText: string
+  badgeText?: string
+  isSystem?: boolean
   stages: StageTemplate[]
 }
 
@@ -221,6 +223,66 @@ export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplate> = {
       {
         name: 'Arquivado / Perdido',
         description: 'Proposta recusada ou oportunidade desqualificada',
+        stage_type: 'final',
+        handled_by: 'human',
+        color: '#ef4444'
+      }
+    ]
+  },
+
+  streaming_subscriptions: {
+    key: 'streaming_subscriptions',
+    label: 'Streaming & Assinaturas Digitais',
+    description: 'Funil voltado para serviços de streaming, IPTV e planos recorrentes com teste grátis, confirmação de Pix e renovação periódica.',
+    segment: 'Serviços Digitais & Recorrência',
+    badgeText: 'Streaming & Mídias',
+    isSystem: false,
+    stages: [
+      {
+        name: 'Novo Contato / Teste Grátis',
+        description: 'Primeira mensagem do cliente interessado e envio automático de link de teste ou instruções de aplicativo',
+        stage_type: 'initial',
+        handled_by: 'ai',
+        color: '#eab308'
+      },
+      {
+        name: 'Teste em Andamento',
+        description: 'Cliente realizando o teste do serviço; IA monitora qualidade e tira dúvidas técnicas',
+        stage_type: 'in_progress',
+        handled_by: 'waiting',
+        color: '#06b6d4'
+      },
+      {
+        name: 'Aguardando Pagamento (Pix)',
+        description: 'Planos e chave Pix enviados, aguardando envio do comprovante para ativação definitiva',
+        stage_type: 'in_progress',
+        handled_by: 'waiting',
+        color: '#a855f7'
+      },
+      {
+        name: 'Assinatura Ativa',
+        description: 'Pagamento confirmado; dados de acesso definitivos entregues e serviço liberado',
+        stage_type: 'in_progress',
+        handled_by: 'human',
+        color: '#3b82f6'
+      },
+      {
+        name: 'Cobrança de Renovação',
+        description: 'Lembrete preventivo próximo ao vencimento da mensalidade para retenção',
+        stage_type: 'in_progress',
+        handled_by: 'ai',
+        color: '#f97316'
+      },
+      {
+        name: 'Renovado / Concluído',
+        description: 'Mensalidade quitada ou ciclo de assinatura mantido com sucesso',
+        stage_type: 'final',
+        handled_by: 'human',
+        color: '#22c55e'
+      },
+      {
+        name: 'Cancelado / Expirado',
+        description: 'Cliente optou por não renovar ou teste expirou sem conversão',
         stage_type: 'final',
         handled_by: 'human',
         color: '#ef4444'

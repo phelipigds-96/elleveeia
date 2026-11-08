@@ -13,6 +13,7 @@ import {
   SaveStagesInput,
   WorkflowTemplate,
 } from "@/lib/services/workflows/templates"
+import { getPlatformWorkflowTemplatesList } from "@/lib/services/workflows/templates-service"
 
 export interface CreateCompanyInput {
   name: string
@@ -501,14 +502,35 @@ export async function createCompanyAction(
     // 4.1. Provisionamento opcional do Funil Kanban
     let appliedTemplateName = "Padrão (3 etapas básicas)"
     try {
-      if (workflowTemplateKey && workflowTemplateKey !== "none" && WORKFLOW_TEMPLATES[workflowTemplateKey]) {
-        const template = WORKFLOW_TEMPLATES[workflowTemplateKey]
-        appliedTemplateName = template.label
-        await applyStagesToCompanyWorkflow({
-          companyId: createdCompany.id,
-          stages: template.stages,
-          adminClient,
-        })
+      if (workflowTemplateKey && workflowTemplateKey !== "none") {
+        let template: any = WORKFLOW_TEMPLATES[workflowTemplateKey]
+        if (!template) {
+          const { data: dbTmpl } = await adminClient
+            .from("platform_workflow_templates")
+            .select("key, label, stages")
+            .or(`key.eq.${workflowTemplateKey},id.eq.${workflowTemplateKey}`)
+            .maybeSingle()
+
+          if (dbTmpl && Array.isArray(dbTmpl.stages)) {
+            template = {
+              key: dbTmpl.key,
+              label: dbTmpl.label,
+              stages: dbTmpl.stages,
+            }
+          }
+        }
+
+        if (template) {
+          appliedTemplateName = template.label
+          await applyStagesToCompanyWorkflow({
+            companyId: createdCompany.id,
+            stages: template.stages,
+            adminClient,
+          })
+        } else {
+          // Inicializa o workflow padrão com as 3 etapas essenciais
+          await getCompanyWorkflowForAdmin(createdCompany.id, adminClient)
+        }
       } else {
         // Inicializa o workflow padrão com as 3 etapas essenciais
         await getCompanyWorkflowForAdmin(createdCompany.id, adminClient)
@@ -956,11 +978,19 @@ export async function getCompanyWorkflowAction(companyId: string): Promise<Actio
   try {
     const adminClient = createAdminClient()
     const workflow = await getCompanyWorkflowForAdmin(companyId, adminClient)
+
+    // Carrega templates incluindo blueprints customizados no banco
+    const dynamicList = await getPlatformWorkflowTemplatesList()
+    const templatesMap: Record<string, WorkflowTemplate> = { ...WORKFLOW_TEMPLATES }
+    for (const t of dynamicList) {
+      templatesMap[t.key] = t
+    }
+
     return {
       success: true,
       data: {
         workflow,
-        templates: WORKFLOW_TEMPLATES,
+        templates: templatesMap,
       },
     }
   } catch (err: any) {
@@ -1047,7 +1077,24 @@ export async function applyCompanyWorkflowTemplateAction(params: {
     const adminClient = createAdminClient()
     const { companyId, workflowId, templateKey } = params
 
-    const template = WORKFLOW_TEMPLATES[templateKey]
+    let template: any = WORKFLOW_TEMPLATES[templateKey]
+    if (!template) {
+      // Buscar no banco de dados caso seja um template dinâmico/customizado
+      const { data: dbTmpl } = await adminClient
+        .from("platform_workflow_templates")
+        .select("key, label, stages")
+        .or(`key.eq.${templateKey},id.eq.${templateKey}`)
+        .maybeSingle()
+
+      if (dbTmpl && Array.isArray(dbTmpl.stages)) {
+        template = {
+          key: dbTmpl.key,
+          label: dbTmpl.label,
+          stages: dbTmpl.stages,
+        }
+      }
+    }
+
     if (!template) {
       return { success: false, error: `Template '${templateKey}' não encontrado.` }
     }
@@ -1071,7 +1118,7 @@ export async function applyCompanyWorkflowTemplateAction(params: {
           template_key: templateKey,
           template_name: template.label,
           stages_count: template.stages.length,
-          stage_names: template.stages.map((s) => s.name),
+          stage_names: (template.stages as any[]).map((s: any) => s.name),
         },
         reason: `Aplicação do template '${template.label}' via Super Admin`,
         status: "success",
