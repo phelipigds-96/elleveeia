@@ -30,10 +30,18 @@ import {
   ArrowLeftRight,
   Menu,
   ChevronDown,
-  LayoutGrid
+  LayoutGrid,
+  ArrowLeft,
+  MoreVertical
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import { 
   ConversationData, 
   MessageData, 
@@ -485,6 +493,7 @@ export default function PainelClient({
     setSelectedId(convId)
     setIsListOpen(false)
     setConfirmClose(false)
+    setIsProfileOpen(false)
     setLoadingMessages(true)
 
     try {
@@ -878,6 +887,33 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // FASE 1 — NAVEGACAO MOBILE EM PILHA (Padrao WhatsApp Web)
+  // Abaixo de `lg` o painel funciona como app de celular: uma tela por vez.
+  // Sem selecao -> so a lista; com selecao -> so a conversa. O botao de voltar
+  // do cabecalho limpa a selecao e retorna para a lista.
+  // =========================================================================
+  const hasSelection = Boolean(selectedId)
+  const handleBackToList = () => {
+    setSelectedId(null)
+    setConfirmClose(false)
+    setIsProfileOpen(false)
+    setLoadingMessages(false)
+    setMessages([])
+  }
+
+  // =========================================================================
+  // FASE 3 — TEXTAREA QUE CRESCE COM O CONTEUDO (sem quebrar o layout)
+  // O campo volta ao tamanho padrao quando o texto e esvaziado.
+  // =========================================================================
+  const handleInputContentChange = (value: string) => {
+    setInputContent(value)
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }
+
+  // =========================================================================
   // FASE 4 — Confirmação em dois passos: o primeiro clique arma a confirmação
   // (rótulo vira "Confirmar encerramento"), o segundo executa. O estado arma
   // expira sozinho para não deixar o atendente em dúvida.
@@ -1031,51 +1067,36 @@ export default function PainelClient({
   }, [messages])
 
   return (
-    <div className="flex h-full flex-1 min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative">
-      {/* Botão flutuante para abrir a lista de conversas em telas pequenas */}
-      {!activeConversation && (
-        <button
-          type="button"
-          onClick={() => setIsListOpen(true)}
-          className="lg:hidden absolute top-3 left-3 z-30 inline-flex items-center gap-2 h-9 px-3 rounded-md bg-ellevee-ink text-white text-meta font-medium shadow-lg focus-ring"
-          aria-label="Abrir a lista de conversas"
-        >
-          <Menu className="h-4 w-4" />
-          <span>Conversas</span>
-        </button>
-      )}
+    <div
+      className={`flex flex-1 min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative ${
+        hasSelection ? "h-full" : "min-h-[100dvh]"
+      }`}
+    >
       {/* =====================================================================
           SIDEBAR: LISTA DE CONVERSAS (Quiet Luxury / Deep Ink)
+          Mobile (Stack Navigation): a lista ocupa a tela inteira enquanto
+          nenhuma conversa esta selecionada.
       ====================================================================== */}
       <aside
-        className={`w-80 sm:w-96 border-r border-ellevee-stone bg-white flex-col shrink-0 h-full transition-transform duration-200 z-40 ${
-          isListOpen ? "absolute inset-y-0 left-0 flex shadow-2xl" : "hidden lg:flex"
-        }`}
+        className={`${
+          hasSelection
+            ? "hidden"
+            : "flex w-full absolute inset-y-0 left-0 lg:static lg:w-80 xl:w-96"
+        } border-r border-ellevee-stone bg-white flex-col shrink-0 h-full z-40`}
       >
         {/* Cabeçalho de Busca e Filtros */}
         <div className="p-3 border-b border-ellevee-stone space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h1 className="font-display font-bold text-sm tracking-tight text-ellevee-ink flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <h1 className="font-display font-bold text-sm tracking-tight text-ellevee-ink flex items-center gap-1.5 mr-auto">
               <span>Atendimento</span>
               <span className="text-meta font-mono font-medium px-1.5 py-0.2 rounded bg-ellevee-stone-subtle text-ellevee-ink-muted border border-ellevee-stone">
                 {conversations.length}
               </span>
             </h1>
 
-            {/* Fechar lista (mobile) */}
-            <button
-              type="button"
-              onClick={() => setIsListOpen(false)}
-              className="lg:hidden inline-flex items-center justify-center h-7 w-7 rounded-md text-ellevee-ink-muted hover:bg-ellevee-ivory hover:text-ellevee-ink focus-ring"
-              aria-label="Fechar lista de conversas"
-              title="Fechar lista de conversas"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
             {/* Perfil do usuário atual */}
             {currentUser && (
-              <span className="text-meta font-mono px-2 py-0.5 rounded bg-ellevee-stone-subtle text-ellevee-ink border border-ellevee-stone capitalize">
+              <span className="hidden sm:inline text-meta font-mono px-2 py-0.5 rounded bg-ellevee-stone-subtle text-ellevee-ink border border-ellevee-stone capitalize">
                 {currentUser.role === "master" || currentUser.role === "admin" ? "Master" : "Atendente"}
               </span>
             )}
@@ -1083,7 +1104,7 @@ export default function PainelClient({
             {/* Acesso ao quadro de funil (Kanban) */}
             <a
               href="/conversations/kanban"
-              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring"
+              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring shrink-0"
               title="Abrir o funil de atendimento (Kanban)"
               aria-label="Abrir o funil de atendimento (Kanban)"
             >
@@ -1105,10 +1126,9 @@ export default function PainelClient({
             />
           </div>
 
-          {/* Faixa de filtros por status: rótulos visíveis + contadores.
-              Substitui a grade de só ícones, que escondia o contexto atual
-              (Fase 1 da auditoria visual). */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          {/* Faixa de filtros por status: em telas pequenas rola na horizontal
+              (uma linha só) em vez de quebrar em varias linhas. */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scroll-slim pb-1 -mb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isMasterOrAdmin && (
               <button
                 type="button"
@@ -1151,7 +1171,7 @@ export default function PainelClient({
                   onClick={() => setActiveTab(tab.key)}
                   aria-pressed={isActive}
                   title={`${tab.label} (${tab.count})`}
-                  className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border ${
+                  className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta transition-colors cursor-pointer focus-ring border shrink-0 whitespace-nowrap ${
                     isActive
                       ? `bg-white ${toneClass} font-semibold border-ellevee-ink/20 shadow-2xs`
                       : "bg-white text-ellevee-ink-muted border-ellevee-stone hover:text-ellevee-ink hover:border-ellevee-ink/30"
@@ -1335,7 +1355,11 @@ export default function PainelClient({
       {/* =====================================================================
           MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink) COM DRAWER RETRÁTIL
       ====================================================================== */}
-      <main className="flex-1 flex flex-row h-full min-h-0 bg-ellevee-ivory overflow-hidden">
+      <main
+        className={`flex-1 flex flex-row h-full min-h-0 bg-ellevee-ivory overflow-hidden ${
+          hasSelection ? "flex" : "hidden lg:flex"
+        }`}
+      >
         {activeConversation ? (
           <>
             {/* Coluna Central do Chat */}
@@ -1344,15 +1368,16 @@ export default function PainelClient({
             <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                {/* Botão voltar para a lista (mobile) */}
+                {/* Botão voltar para a lista (mobile) — padrão de navegação
+                    em pilha: uma tela por vez. */}
                 <button
                   type="button"
-                  onClick={() => setIsListOpen(true)}
-                  className="lg:hidden inline-flex items-center justify-center h-9 w-9 rounded-md text-ellevee-ink hover:bg-ellevee-ivory focus-ring shrink-0"
-                  title="Ver lista de conversas"
-                  aria-label="Ver lista de conversas"
+                  onClick={handleBackToList}
+                  className="lg:hidden inline-flex items-center justify-center h-9 w-9 -ml-2 rounded-md text-ellevee-ink hover:bg-ellevee-ivory focus-ring shrink-0"
+                  title="Voltar para a lista de conversas"
+                  aria-label="Voltar para a lista de conversas"
                 >
-                  <Menu className="h-4 w-4" />
+                  <ArrowLeft className="h-5 w-5" />
                 </button>
                 {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
                 <div className="relative shrink-0">
@@ -1448,12 +1473,12 @@ export default function PainelClient({
                   <button
                     onClick={handleReopenConversation}
                     disabled={isReopening}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle border border-ellevee-stone transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle border border-ellevee-stone transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                     title="Reativar esta conversa"
                     aria-label="Reativar esta conversa"
                   >
                     <RotateCcw className="h-3.5 w-3.5 text-ellevee-ink-muted" />
-                    <span>{isReopening ? "Reabrindo..." : "Reabrir"}</span>
+                    <span className="hidden sm:inline">{isReopening ? "Reabrindo..." : "Reabrir"}</span>
                   </button>
                 ) : activeConversation.status === "human" ? (
                   /* 2. Conversa em Atendimento Humano */
@@ -1462,7 +1487,7 @@ export default function PainelClient({
                       <button
                         onClick={handleTakeover}
                         disabled={isTakingOver}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-semibold bg-ellevee-warning hover:bg-ellevee-warning-strong text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-semibold bg-ellevee-warning hover:bg-ellevee-warning-strong text-white transition-colors shadow-2xs cursor-pointer disabled:opacity-50 whitespace-nowrap"
                         title="Pegar esta conversa que está na fila"
                         aria-label="Assumir conversa que está na fila"
                       >
@@ -1471,15 +1496,16 @@ export default function PainelClient({
                         ) : (
                           <UserCheck className="h-3.5 w-3.5" />
                         )}
-                        <span>Pegar para Mim</span>
+                        <span className="hidden sm:inline">Pegar para Mim</span>
                       </button>
                     )}
 
-                    {/* Botão Devolver para IA (ChatPro: ⇄ transferir) */}
+                    {/* Botão Devolver para IA (ChatPro: ⇄ transferir)
+                        No mobile fica dentro do menu “⋯”. */}
                     <button
                       onClick={handleReturnToAI}
                       disabled={isReturningToAI}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring"
                       title={`Pausar atendimento humano e devolver para o agente ${activeConversation.agent_name || "IA"}`}
                     >
                       {isReturningToAI ? (
@@ -1495,7 +1521,7 @@ export default function PainelClient({
                     <button
                       onClick={requestClose}
                       disabled={isClosing}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
+                      className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
                         confirmClose
                           ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
                           : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
@@ -1533,7 +1559,7 @@ export default function PainelClient({
                     <button
                       onClick={handleTakeover}
                       disabled={isTakingOver}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-60 whitespace-nowrap focus-ring"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer disabled:opacity-60 whitespace-nowrap focus-ring"
                       title="Pausar a IA e assumir o atendimento humano"
                       aria-label="Pausar a IA e assumir o atendimento humano"
                     >
@@ -1542,13 +1568,13 @@ export default function PainelClient({
                       ) : (
                         <UserCheck className="h-3.5 w-3.5 text-ellevee-ink-muted" />
                       )}
-                      <span>Assumir Conversa</span>
+                      <span className="hidden sm:inline">Assumir Conversa</span>
                     </button>
 
                     <button
                       onClick={requestClose}
                       disabled={isClosing}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
+                      className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap focus-ring ${
                         confirmClose
                           ? "bg-ellevee-danger text-white hover:bg-ellevee-danger-strong shadow-2xs"
                           : "text-ellevee-ink-muted hover:text-ellevee-danger-strong hover:bg-ellevee-danger/10"
@@ -1582,12 +1608,108 @@ export default function PainelClient({
                   </>
                 )}
 
+                {/* Menu “⋯” — ações secundárias em telas estreitas */}
+                <DropdownMenu
+                  trigger={
+                    <span
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-md text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors focus-ring"
+                      title="Mais ações do atendimento"
+                      aria-label="Mais ações do atendimento"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </span>
+                  }
+                >
+                  <DropdownMenuLabel>Ações do Atendimento</DropdownMenuLabel>
+
+                  {activeConversation.status === "closed" && (
+                    <DropdownMenuItem onClick={handleReopenConversation} disabled={isReopening}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        {isReopening ? "Reabrindo..." : "Reabrir atendimento"}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {activeConversation.status !== "human" && (
+                    <DropdownMenuItem onClick={handleTakeover} disabled={isTakingOver}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {isTakingOver ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <UserCheck className="h-3.5 w-3.5" />
+                        )}
+                        Assumir atendimento
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {activeConversation.status === "human" && !activeConversation.assigned_to && (
+                    <DropdownMenuItem onClick={handleTakeover} disabled={isTakingOver}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {isTakingOver ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <UserCheck className="h-3.5 w-3.5" />
+                        )}
+                        Pegar para Mim
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {activeConversation.status === "human" && (
+                    <DropdownMenuItem onClick={handleReturnToAI} disabled={isReturningToAI}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {isReturningToAI ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ArrowLeftRight className="h-3.5 w-3.5" />
+                        )}
+                        Devolver p/ {activeConversation.agent_name || "IA"}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuItem onClick={() => setIsProfileOpen((prev) => !prev)}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      {isProfileOpen ? "Ocultar perfil" : "Perfil do Cliente"}
+                    </span>
+                  </DropdownMenuItem>
+
+                  {activeConversation.status !== "closed" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => (confirmClose ? handleCloseConversation() : requestClose())}
+                        disabled={isClosing}
+                        destructive={!confirmClose}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          {isClosing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : confirmClose ? (
+                            <AlertCircle className="h-3.5 w-3.5" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+                          {isClosing
+                            ? "Encerrando..."
+                            : confirmClose
+                            ? "Confirmar encerramento"
+                            : "Encerrar atendimento"}
+                        </span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenu>
+
                 {/* Botão Perfil (ChatPro: 👤 perfil) */}
                 <button
                   onClick={() => setIsProfileOpen((prev) => !prev)}
                   aria-expanded={isProfileOpen}
                   aria-controls="painel-perfil-cliente"
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap focus-ring ${
+                  className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-meta font-medium transition-colors cursor-pointer whitespace-nowrap focus-ring ${
                     isProfileOpen
                       ? "bg-ellevee-ink text-white shadow-2xs"
                       : "text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle"
@@ -1690,7 +1812,7 @@ export default function PainelClient({
                           <span className="text-meta text-ellevee-ink-muted px-1 font-mono">
                             {activeConversation.customers?.name || "Cliente"}
                           </span>
-                          <div className="max-w-[85%] sm:max-w-md max-h-56 overflow-y-auto scroll-slim msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
+                          <div className="max-w-[85%] sm:max-w-md msg-bubble msg-bubble-in rounded-tl-sm transition-shadow duration-200 hover:shadow-md">
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                             <div className="flex justify-end items-center gap-1 mt-1 text-meta text-ellevee-ink-muted font-mono opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                               <span>{formatTime(msg.created_at)}</span>
@@ -1720,7 +1842,7 @@ export default function PainelClient({
                         </span>
 
                         <div
-                          className={`max-w-[85%] sm:max-w-md max-h-56 overflow-y-auto scroll-slim msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
+                          className={`max-w-[85%] sm:max-w-md msg-bubble rounded-tr-sm transition-shadow duration-200 hover:shadow-md ${
                             isAgent
                               ? "msg-bubble-in border-ellevee-success/40 ring-1 ring-ellevee-success/20"
                               : "msg-bubble-out"
@@ -1769,34 +1891,40 @@ export default function PainelClient({
             ) : (
               <footer className="border-t border-ellevee-stone px-4 py-3 bg-white shrink-0">
                 <div className="max-w-3xl mx-auto space-y-2">
-                  {/* Abas de Modo: Mensagem WhatsApp vs Nota Interna */}
-                  <div className="flex items-center gap-2 text-meta">
+                  {/* Abas de Modo: Mensagem WhatsApp vs Nota Interna
+                      No mobile vira um controle compacto (segmentado) acima
+                      do campo, com rotulos curtos. */}
+                  <div className="flex items-center gap-1.5 text-meta w-fit p-0.5 rounded-lg bg-ellevee-stone-subtle border border-ellevee-stone">
                     <button
                       type="button"
                       onClick={() => setSendMode("whatsapp")}
                       aria-pressed={sendMode === "whatsapp"}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer focus-ring ${
+                      title="Enviar mensagem pelo WhatsApp ao cliente"
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
                         sendMode === "whatsapp"
                           ? "bg-ellevee-ink text-white shadow-2xs"
                           : "text-ellevee-ink-muted hover:text-ellevee-ink bg-transparent"
                       }`}
                     >
                       <Send className="h-3 w-3" />
-                      <span>Mensagem WhatsApp</span>
+                      <span className="hidden sm:inline">Mensagem WhatsApp</span>
+                      <span className="sm:hidden">Mensagem</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setSendMode("note")}
                       aria-pressed={sendMode === "note"}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer focus-ring ${
+                      title="Registrar nota interna visivel apenas para a equipe"
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-meta transition-all cursor-pointer focus-ring ${
                         sendMode === "note"
                           ? "bg-ellevee-note-border text-ellevee-note-strong shadow-2xs border border-ellevee-note-border-strong"
                           : "text-ellevee-ink-muted hover:text-ellevee-note-strong bg-transparent"
                       }`}
                     >
                       <Lock className="h-3 w-3" />
-                      <span>Nota Interna (Equipe)</span>
+                      <span className="hidden sm:inline">Nota Interna (Equipe)</span>
+                      <span className="sm:hidden">Nota</span>
                     </button>
                   </div>
 
@@ -1812,7 +1940,7 @@ export default function PainelClient({
                         ref={textareaRef}
                         rows={sendMode === "note" ? 2 : 1}
                         value={inputContent}
-                        onChange={(e) => setInputContent(e.target.value)}
+                        onChange={(e) => handleInputContentChange(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={isSending || isSendingInternalNote}
                         placeholder={
@@ -1876,7 +2004,7 @@ export default function PainelClient({
           {isProfileOpen && (
             <aside
               id="painel-perfil-cliente"
-              className="w-80 lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto scroll-slim z-40 fixed lg:static inset-y-0 right-0 shadow-2xl lg:shadow-none"
+              className="w-full lg:w-96 border-l border-ellevee-stone bg-white h-full flex flex-col shrink-0 overflow-y-auto scroll-slim z-40 fixed lg:static inset-0 lg:inset-y-0 lg:right-0 shadow-2xl lg:shadow-none"
             >
               {/* Header do Drawer */}
               <div className="p-4 border-b border-ellevee-stone flex items-center justify-between bg-ellevee-stone-subtle">
@@ -1888,7 +2016,7 @@ export default function PainelClient({
                 </div>
                 <button
                   onClick={() => setIsProfileOpen(false)}
-                  className="p-1 rounded-md text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone-subtle transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-ink/40"
+                  className="p-1.5 rounded-md text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-stone transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-ink/40"
                   title="Fechar painel"
                   aria-label="Fechar painel do cliente"
                 >
@@ -2085,7 +2213,7 @@ export default function PainelClient({
                   </div>
 
                   {/* Lista de Notas Recentes na Conversa */}
-                  <div className="space-y-2 pt-1 max-h-56 overflow-y-auto">
+                  <div className="space-y-2 pt-1">
                     {internalNotes.length === 0 ? (
                       <p className="text-meta text-ellevee-ink-muted italic text-center py-2">
                         Nenhuma nota interna registrada nesta conversa.
