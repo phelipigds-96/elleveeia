@@ -135,6 +135,13 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   const rawHistory = messages || []
 
+  // 3.1 Verificar se a empresa possui catálogo de produtos cadastrado
+  const { count: productCount } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+  const hasCatalogProducts = (productCount || 0) > 0
+
   // 4. Extrair Working Memory Operacional
   let workingMemory: WorkingMemory | null = null
   for (const msg of rawHistory) {
@@ -191,9 +198,10 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   systemPrompt += `\n[PRIORIDADE ABSOLUTA]\nQuando uma ferramenta disponivel retornar sucesso (ex: horas, datas, precos, etc), VOCE DEVE priorizar o resultado dessa ferramenta na resposta. O resultado de uma ferramenta tem precedencia total sobre restricoes genericas de dominio ("Responda apenas sobre produtos"). Nao finja que nao pode informar algo se a ferramenta acabou de lhe devolver os dados.`
 
-  systemPrompt += `\n\n[OBRIGATORIEDADE DE CATALOGO E REGRAS COMERCIAIS]\n`
-  systemPrompt += `1. IDENTIFICAÇÃO DE PRODUTOS:\n`
-  systemPrompt += `- Use o catálogo importado da Sumel como fonte oficial de identificação.\n`
+  if (hasCatalogProducts) {
+    systemPrompt += `\n\n[OBRIGATORIEDADE DE CATALOGO E REGRAS COMERCIAIS]\n`
+    systemPrompt += `1. IDENTIFICAÇÃO DE PRODUTOS:\n`
+    systemPrompt += `- Use o catálogo oficial como fonte de identificação.\n`
   systemPrompt += `- Não invente produtos, marcas, códigos ou preços.\n`
   systemPrompt += `- Quando houver ambiguidade de marcas ou modelos, apresente as opções disponíveis e peça esclarecimento ao cliente.\n`
   systemPrompt += `- Produto não localizado no catálogo NÃO significa produto sem estoque. NUNCA diga 'está sem estoque' ou 'esgotou'. Diga que não localizou o produto no catálogo e ofereça transferir para um atendente humano apenas SE a ferramenta consultar_produto_comercial tiver sido executada e retornado not_found.\n`
@@ -261,6 +269,13 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `  1. Ao listar produtos para o cliente escolher ou confirmar, destaque SEMPRE o nome e a gramagem/peso de forma clara e legível em negrito.\n`
   systemPrompt += `  2. Omita siglas técnicas brutas de ERP (como "TP", "PET", "FD", "C/5", "GF") para manter a mensagem elegante e amigável no WhatsApp.\n`
   systemPrompt += `  3. Exemplo de formatação ideal: "*LEITE CONDENSADO ITALAC SEMIDESNATADO (395G)* - R$ 5,69".\n\n`
+  } else {
+    systemPrompt += `\n\n[INFORMAÇÕES DE PLANOS, SERVIÇOS E PREÇOS]\n`
+    systemPrompt += `- Os planos, valores e diretrizes oficiais desta empresa estão definidos diretamente nas suas [INSTRUCOES].\n`
+    systemPrompt += `- Utilize as informações das suas [INSTRUCOES] com total certeza, naturalidade e clareza para responder ao cliente.\n`
+    systemPrompt += `- NUNCA diga que "não conseguiu encontrar informações" sobre planos ou preços que constam nas suas instruções.\n`
+    systemPrompt += `- Não force busca em catálogo de produtos quando os planos e valores já constam no seu próprio treinamento.\n\n`
+  }
 
   const payloadMessages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt }
@@ -284,6 +299,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     conversation,
     payloadMessages,
     workingMemory,
+    hasCatalogProducts,
     contextMetrics: {
       availableMessages: rawHistory.length,
       usedMessages: selectedHistory.length,

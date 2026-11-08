@@ -180,7 +180,7 @@ export async function runAgentEngine({
     }
 
     // 4. Carregamento do contexto operacional do agente (histórico, Working Memory, etc.)
-    const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics } = await buildAgentContext({
+    const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics, hasCatalogProducts } = await buildAgentContext({
       companyId,
       agentId,
       conversationId
@@ -205,7 +205,10 @@ export async function runAgentEngine({
     // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg, historico limpo e Working Memory atual
     const historyForScoping = payloadMessages.filter(m => m.role === 'user' || m.role === 'assistant')
     scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list(), previousWorkingMemory)
-    const availableTools = registry.getProviderPayload(scopedTools)
+    const filteredScopedTools = hasCatalogProducts
+      ? scopedTools
+      : scopedTools.filter(t => t.name !== 'consultar_produto_comercial' && t.name !== 'buscar_produto' && t.name !== 'consultar_preco' && t.name !== 'calcular_preco_produto')
+    const availableTools = registry.getProviderPayload(filteredScopedTools)
 
     let messagesForLLM: LLMRequestMessage[] = payloadMessages.map(msg => ({
       role: msg.role === 'function' || msg.role === 'tool' ? 'user' : msg.role,
@@ -243,6 +246,7 @@ export async function runAgentEngine({
       // forçamos a chamada da ferramenta injetando-a na resposta do LLM ANTES de processar,
       // DESDE QUE a mensagem tenha intenção explícita de produto/preço (não institucional, não encerramento).
       if (
+        hasCatalogProducts &&
         iteration === 1 && 
         (!response.tool_calls || response.tool_calls.length === 0) &&
         hasClearProductIntent(userMessage)
