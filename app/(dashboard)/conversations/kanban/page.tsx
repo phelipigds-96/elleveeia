@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import Link from "next/link"
 import KanbanPanelClient from "../components/kanban-panel-client"
 
 export const dynamic = "force-dynamic"
@@ -110,12 +111,12 @@ export default async function ConversationsKanbanPage() {
             {conversations.length} conversa(s)
           </p>
         </div>
-        <a
+        <Link
           href="/conversations"
           className="focus-ring rounded-lg border border-ellevee-stone bg-white px-3 py-2 text-meta text-ellevee-ink transition-colors hover:bg-ellevee-ivory"
         >
           Ver lista de conversas
-        </a>
+        </Link>
       </div>
 
       <KanbanPanelClient stages={visibleStages} conversations={conversations} />

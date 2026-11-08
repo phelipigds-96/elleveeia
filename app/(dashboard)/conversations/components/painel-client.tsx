@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { 
   Search, 
   Bot, 
@@ -466,6 +467,7 @@ export default function PainelClient({
                 p.unread_count !== u.unread_count ||
                 p.workflow_stage_id !== u.workflow_stage_id ||
                 p.workflow_stage_name !== u.workflow_stage_name ||
+                p.workflow_stage_color !== u.workflow_stage_color ||
                 p.customers?.avatar_url !== u.customers?.avatar_url
               )
             })
@@ -1068,9 +1070,7 @@ export default function PainelClient({
 
   return (
     <div
-      className={`flex flex-1 min-h-0 w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative ${
-        hasSelection ? "h-full" : "min-h-[100dvh]"
-      }`}
+      className="flex flex-1 min-h-0 h-full w-full bg-ellevee-ivory text-ellevee-ink overflow-hidden border-t border-ellevee-stone font-sans relative"
     >
       {/* =====================================================================
           SIDEBAR: LISTA DE CONVERSAS (Quiet Luxury / Deep Ink)
@@ -1078,11 +1078,7 @@ export default function PainelClient({
           nenhuma conversa esta selecionada.
       ====================================================================== */}
       <aside
-        className={`${
-          hasSelection
-            ? "hidden"
-            : "flex w-full absolute inset-y-0 left-0 lg:static lg:w-80 xl:w-96"
-        } border-r border-ellevee-stone bg-white flex-col shrink-0 h-full z-40`}
+        className={`${hasSelection ? "hidden lg:flex" : "flex"} w-full lg:w-80 xl:w-96 border-r border-ellevee-stone bg-white flex-col shrink-0 h-full z-40 lg:static`}
       >
         {/* Cabeçalho de Busca e Filtros */}
         <div className="p-3 border-b border-ellevee-stone space-y-2.5">
@@ -1102,7 +1098,7 @@ export default function PainelClient({
             )}
 
             {/* Acesso ao quadro de funil (Kanban) */}
-            <a
+            <Link
               href="/conversations/kanban"
               className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-meta font-medium text-ellevee-ink-muted hover:text-ellevee-ink hover:bg-ellevee-ivory border border-ellevee-stone transition-colors focus-ring shrink-0"
               title="Abrir o funil de atendimento (Kanban)"
@@ -1110,7 +1106,7 @@ export default function PainelClient({
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Funil</span>
-            </a>
+            </Link>
           </div>
 
           {/* Campo de Busca */}
@@ -1304,22 +1300,21 @@ export default function PainelClient({
                       )}
                     </div>
 
-                    {/* Etapa do funil (mesma informação do Kanban) — FASE 3:
-                        ponto com a cor da etapa + rótulo legível. */}
+                    {/* Etapa do funil (mesma informação do Kanban) */}
                     {conv.workflow_stage_name ? (
-                      <span
-                        title={`Etapa no funil: ${conv.workflow_stage_name}`}
-                        className="mt-1 inline-flex items-center gap-1.5 max-w-full rounded sm:bg-ellevee-stone-subtle sm:px-1.5 sm:py-0.5 text-meta text-ellevee-ink-muted sm:border sm:border-ellevee-stone"
-                      >
+                      <div className="mt-1 flex items-center">
                         <span
-                          aria-hidden="true"
-                          className="h-1.5 w-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: stageColorOf(conv) }}
-                        />
-                        {/* No mobile fica apenas o ponto colorido (estilo WhatsApp);
-                            o nome da etapa aparece a partir de `sm`. */}
-                        <span className="truncate hidden sm:inline">{conv.workflow_stage_name}</span>
-                      </span>
+                          title={`Etapa no funil: ${conv.workflow_stage_name}`}
+                          className="inline-flex items-center gap-1.5 rounded bg-ellevee-stone-subtle px-2 py-0.5 text-meta text-ellevee-ink border border-ellevee-stone font-medium max-w-full shadow-2xs"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{ backgroundColor: stageColorOf(conv) }}
+                          />
+                          <span className="truncate max-w-[150px]">{conv.workflow_stage_name}</span>
+                        </span>
+                      </div>
                     ) : null}
 
                     {/* FASE 3: selo de status compacto */}
@@ -1452,19 +1447,18 @@ export default function PainelClient({
                         }
                       />
                     </span>
-                    {/* Etapa do funil no cabeçalho — FASE 3: dá contexto de
-                        trabalho sem precisar voltar para a Lista. */}
+                    {/* Etapa do funil no cabeçalho */}
                     {activeConversation.workflow_stage_name ? (
                       <span
                         title={`Etapa no funil: ${activeConversation.workflow_stage_name}`}
-                        className="hidden sm:inline-flex items-center gap-1.5 rounded bg-ellevee-stone-subtle border border-ellevee-stone px-1.5 py-0.5 text-meta text-ellevee-ink-muted whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 rounded bg-ellevee-stone-subtle border border-ellevee-stone px-2 py-0.5 text-meta text-ellevee-ink font-medium whitespace-nowrap shadow-2xs"
                       >
                         <span
                           aria-hidden="true"
-                          className="h-1.5 w-1.5 rounded-full shrink-0"
+                          className="h-2 w-2 rounded-full shrink-0 shadow-2xs"
                           style={{ backgroundColor: stageColorOf(activeConversation) }}
                         />
-                        <span className="max-w-[150px] truncate">
+                        <span className="max-w-[160px] truncate">
                           {activeConversation.workflow_stage_name}
                         </span>
                       </span>
