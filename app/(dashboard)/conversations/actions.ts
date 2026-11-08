@@ -28,6 +28,7 @@ export interface ConversationData {
   workflow_id?: string | null
   workflow_stage_id?: string | null
   workflow_stage_name?: string | null
+  workflow_stage_color?: string | null
   started_at?: string | null
   last_message_at: string
   closed_at?: string | null
@@ -171,7 +172,8 @@ export async function getConversationsList(): Promise<ConversationData[]> {
           ),
           workflow_stages (
             id,
-            name
+            name,
+            color
           ),
           customers (
             id,
@@ -243,6 +245,7 @@ export async function getConversationsList(): Promise<ConversationData[]> {
         workflow_id: c.workflow_id || null,
         workflow_stage_id: c.workflow_stage_id || null,
         workflow_stage_name: stageObj?.name || null,
+        workflow_stage_color: stageObj?.color || null,
         started_at: c.started_at,
         last_message_at: c.last_message_at || c.created_at,
         closed_at: c.closed_at,
