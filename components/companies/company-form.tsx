@@ -1,13 +1,14 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Building2, CheckCircle2, Shield, AlertCircle, Kanban, Copy, Check, Key } from "lucide-react"
-import { WORKFLOW_TEMPLATES } from "@/lib/services/workflows/template-catalog"
+import { WORKFLOW_TEMPLATES, WorkflowTemplate } from "@/lib/services/workflows/template-catalog"
+import { getPlatformWorkflowTemplatesList } from "@/lib/services/workflows/templates-service"
 import { CompanyMock } from "./mock-companies"
 import { createCompanyAction } from "@/app/(admin)/companies/actions"
 import { toast } from "@/components/ui/toast"
@@ -35,9 +36,20 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
   const [plan, setPlan] = useState<"Trial" | "Starter" | "Pro" | "Enterprise">("Pro")
   const [aiProvider, setAiProvider] = useState<"openai" | "gemini" | "hybrid">("openai")
   const [workflowTemplateKey, setWorkflowTemplateKey] = useState<string>("none")
+  const [dynamicTemplates, setDynamicTemplates] = useState<WorkflowTemplate[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      getPlatformWorkflowTemplatesList()
+        .then((list) => {
+          if (list && list.length > 0) setDynamicTemplates(list)
+        })
+        .catch(() => {})
+    }
+  }, [open])
 
   // Auto-slug generation from name
   const handleNameChange = (val: string) => {
@@ -346,15 +358,17 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                 onChange={(e) => setWorkflowTemplateKey(e.target.value)}
               >
                 <option value="none">Padrão da Plataforma (3 etapas básicas)</option>
-                <option value="retail_food">Varejo & Confeitaria (ex: Sumel · 6 etapas)</option>
-                <option value="events_party">Salão de Festas & Eventos (6 etapas)</option>
-                <option value="dental_clinic">Clínica Odontológica & Saúde (5 etapas)</option>
-                <option value="general_services">Serviços & B2B Geral (5 etapas)</option>
+                {(dynamicTemplates.length > 0 ? dynamicTemplates : Object.values(WORKFLOW_TEMPLATES)).map((tmpl) => (
+                  <option key={tmpl.key} value={tmpl.key}>
+                    {tmpl.label} ({tmpl.stages.length} etapas)
+                  </option>
+                ))}
               </Select>
               <p className="text-[10px] text-ellevee-sage mt-1">
                 {workflowTemplateKey === "none"
                   ? "Provisiona o funil padrão com 3 etapas. Poderá ser personalizado a qualquer momento pelo Super Admin."
-                  : WORKFLOW_TEMPLATES[workflowTemplateKey]?.description}
+                  : (dynamicTemplates.find((t) => t.key === workflowTemplateKey)?.description ||
+                     WORKFLOW_TEMPLATES[workflowTemplateKey]?.description)}
               </p>
             </div>
 

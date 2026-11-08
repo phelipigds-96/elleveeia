@@ -27,6 +27,8 @@ import {
   Briefcase,
   Loader2,
   Check,
+  Tv,
+  BookmarkPlus,
 } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
 import {
@@ -36,6 +38,7 @@ import {
 } from "@/app/(admin)/companies/actions"
 import { toast } from "@/components/ui/toast"
 import { WORKFLOW_TEMPLATES, WorkflowTemplate } from "@/lib/services/workflows/template-catalog"
+import { getPlatformWorkflowTemplatesList, saveCompanyWorkflowAsTemplateAction } from "@/lib/services/workflows/templates-service"
 
 interface CompanyWorkflowDialogProps {
   company: CompanyMock | null
@@ -68,6 +71,7 @@ const TEMPLATE_ICONS: Record<string, React.ReactNode> = {
   events_party: <PartyPopper className="h-4 w-4 text-purple-500" />,
   dental_clinic: <Stethoscope className="h-4 w-4 text-cyan-500" />,
   general_services: <Briefcase className="h-4 w-4 text-blue-500" />,
+  streaming_subscriptions: <Tv className="h-4 w-4 text-emerald-500" />,
 }
 
 export default function CompanyWorkflowDialog({
@@ -82,6 +86,10 @@ export default function CompanyWorkflowDialog({
   const [stages, setStages] = useState<EditableStage[]>([])
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null)
   const [activeColorPickerIdx, setActiveColorPickerIdx] = useState<number | null>(null)
+  const [dynamicTemplates, setDynamicTemplates] = useState<WorkflowTemplate[]>([])
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
+  const [templateNameInput, setTemplateNameInput] = useState("")
+  const [isSavingAsTemplate, setIsSavingAsTemplate] = useState(false)
 
   // Carrega workflow da empresa ao abrir o modal
   useEffect(() => {
@@ -91,6 +99,12 @@ export default function CompanyWorkflowDialog({
     setLoading(true)
     setSelectedTemplateKey(null)
     setActiveColorPickerIdx(null)
+
+    getPlatformWorkflowTemplatesList()
+      .then((list) => {
+        if (isMounted && list && list.length > 0) setDynamicTemplates(list)
+      })
+      .catch(() => {})
 
     getCompanyWorkflowAction(company.id)
       .then((res) => {
@@ -127,7 +141,7 @@ export default function CompanyWorkflowDialog({
   if (!company) return null
 
   const handleApplyTemplate = (templateKey: string) => {
-    const tmpl = WORKFLOW_TEMPLATES[templateKey]
+    const tmpl = dynamicTemplates.find((t) => t.key === templateKey) || WORKFLOW_TEMPLATES[templateKey]
     if (!tmpl) return
 
     setSelectedTemplateKey(templateKey)
@@ -141,6 +155,30 @@ export default function CompanyWorkflowDialog({
       }))
     )
     toast.info("Template selecionado", `Etapas de "${tmpl.label}" pré-carregadas para visualização.`)
+  }
+
+  const handleSaveAsTemplate = async () => {
+    if (!company || !templateNameInput.trim()) return
+    setIsSavingAsTemplate(true)
+    try {
+      const res = await saveCompanyWorkflowAsTemplateAction(company.id, {
+        label: templateNameInput.trim(),
+        segment: company.name,
+        description: `Modelo gerado a partir do funil da empresa ${company.name}.`,
+      })
+      if (res.success) {
+        toast.success("Modelo Salvo!", `O funil foi salvo na biblioteca de modelos com sucesso.`)
+        setShowSaveTemplateModal(false)
+        const updated = await getPlatformWorkflowTemplatesList()
+        setDynamicTemplates(updated)
+      } else {
+        alert(res.error || "Falha ao salvar modelo.")
+      }
+    } catch (err: any) {
+      alert("Erro ao salvar: " + err?.message)
+    } finally {
+      setIsSavingAsTemplate(false)
+    }
   }
 
   const handleUpdateStage = (index: number, updates: Partial<EditableStage>) => {
@@ -272,8 +310,8 @@ export default function CompanyWorkflowDialog({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-                {Object.values(WORKFLOW_TEMPLATES).map((tmpl) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                {(dynamicTemplates.length > 0 ? dynamicTemplates : Object.values(WORKFLOW_TEMPLATES)).map((tmpl) => {
                   const isSelected = selectedTemplateKey === tmpl.key
                   return (
                     <button
@@ -317,16 +355,79 @@ export default function CompanyWorkflowDialog({
                     Defina o nome, a cor visual do cabeçalho da coluna e quem atua na etapa.
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddStage}
-                  className="h-7 text-xs border-dashed border-ellevee-stone hover:border-ellevee-ink"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Adicionar Etapa
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setTemplateNameInput(company?.name ? `Modelo ${company.name}` : "")
+                      setShowSaveTemplateModal(true)
+                    }}
+                    className="h-7 text-xs border-ellevee-stone hover:border-ellevee-ink gap-1"
+                    title="Salvar esta configuração como um novo modelo reutilizável"
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5 text-ellevee-ink" />
+                    <span>Salvar como Modelo</span>
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddStage}
+                    className="h-7 text-xs border-dashed border-ellevee-stone hover:border-ellevee-ink"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Adicionar Etapa
+                  </Button>
+                </div>
               </div>
+
+              {/* Modal Inline: Salvar Funil como Novo Modelo */}
+              {showSaveTemplateModal && (
+                <div className="p-3.5 rounded-lg border border-ellevee-ink bg-emerald-50/60 space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-ellevee-ink flex items-center gap-1.5">
+                      <BookmarkPlus className="h-4 w-4 text-emerald-700" />
+                      Salvar este Funil como Novo Modelo Global
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSaveTemplateModal(false)}
+                      className="text-xs text-ellevee-sage hover:text-ellevee-ink"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ellevee-sage">
+                    O funil configurado acima ficará disponível como blueprint para ser selecionado em novos clientes.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Nome do Modelo (ex: Varejo Especial, Streaming IPTV)"
+                      value={templateNameInput}
+                      onChange={(e) => setTemplateNameInput(e.target.value)}
+                      className="h-8 text-xs bg-white flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isSavingAsTemplate || !templateNameInput.trim()}
+                      onClick={handleSaveAsTemplate}
+                      className="h-8 text-xs bg-ellevee-ink text-white hover:bg-black shrink-0"
+                    >
+                      {isSavingAsTemplate ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                          <span>Salvando...</span>
+                        </>
+                      ) : (
+                        <span>Confirmar e Salvar</span>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Lista interativa */}
               <div className="space-y-2">

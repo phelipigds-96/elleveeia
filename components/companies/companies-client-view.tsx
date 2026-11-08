@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import CompaniesHeader from "@/components/companies/companies-header"
 import CompaniesTable from "@/components/companies/companies-table"
 import CompanyForm from "@/components/companies/company-form"
+import PlatformTemplatesDialog from "@/components/companies/platform-templates-dialog"
 import { CompanyMock } from "@/components/companies/mock-companies"
 
 interface CompaniesClientViewProps {
@@ -13,6 +14,7 @@ interface CompaniesClientViewProps {
 export default function CompaniesClientView({ initialCompanies }: CompaniesClientViewProps) {
   const [companies, setCompanies] = useState<CompanyMock[]>(initialCompanies)
   const [openCreate, setOpenCreate] = useState(false)
+  const [openTemplates, setOpenTemplates] = useState(false)
 
   // Atualiza estado local quando o Server Component revalida
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function CompaniesClientView({ initialCompanies }: CompaniesClien
     <div className="space-y-6">
       <CompaniesHeader
         onCreate={() => setOpenCreate(true)}
+        onOpenTemplates={() => setOpenTemplates(true)}
         totalCount={companies.length}
         activeCount={activeCount}
         trialCount={trialCount}
@@ -73,6 +76,11 @@ export default function CompaniesClientView({ initialCompanies }: CompaniesClien
         open={openCreate}
         onClose={() => setOpenCreate(false)}
         onSave={handleCreateCompanySuccess}
+      />
+
+      <PlatformTemplatesDialog
+        open={openTemplates}
+        onClose={() => setOpenTemplates(false)}
       />
     </div>
   )
