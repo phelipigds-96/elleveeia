@@ -62,6 +62,7 @@ import {
   ConversationData, 
   MessageData, 
   UserProfileContext,
+  UploadMediaResult,
   getConversationMessages,
   getConversationsList,
   sendMessageAction,
@@ -549,7 +550,7 @@ export default function PainelClient({
       setIsLoadingCustomer(true)
       getCustomerDetailsAction(targetCustId)
         .then((res) => {
-          if (res.success && res.customer) {
+          if (res?.success && res?.customer) {
             setCustomerForm((prev) => ({
               ...prev,
               name: res.customer?.name || prev.name,
@@ -853,7 +854,7 @@ export default function PainelClient({
     try {
       const result = await sendMessageAction(selectedId, trimmed, clientMessageId)
 
-      if (result.success) {
+      if (result?.success) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -866,7 +867,7 @@ export default function PainelClient({
           )
         )
       } else {
-        toast.error("Falha no Envio", result.error || "Não foi possível registrar a mensagem na fila.")
+        toast.error("Falha no Envio", result?.error || "Não foi possível registrar a mensagem na fila.")
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -877,7 +878,7 @@ export default function PainelClient({
       }
     } catch (err: any) {
       console.error("[Chat] Exceção ao enviar mensagem:", err)
-      toast.error("Erro inesperado", err.message || "Falha na comunicação com o servidor.")
+      toast.error("Erro inesperado", err?.message || "Falha na comunicação com o servidor.")
     } finally {
       setIsSending(false)
       textareaRef.current?.focus()
@@ -917,6 +918,146 @@ export default function PainelClient({
     }
     setSelectedFile(null)
     setFilePreviewUrl(null)
+  }
+
+  /**
+   * Otimiza fotos de smartphone/câmera antes do envio via HTML5 Canvas.
+   * Reduz imagens pesadas (ex: 8MB a 12MB de câmera móvel) para ~250KB - 400KB
+   * sem perda perceptível de qualidade, evitando limitações de payload e acelerando o envio no celular.
+   */
+  const compressImageIfNeeded = async (file: File): Promise<File> => {
+    if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+      return file
+    }
+    // Arquivos pequenos (< 800KB) não precisam de compressão
+    if (file.size <= 800 * 1024) {
+      return file
+    }
+
+    try {
+      return await new Promise<File>((resolve) => {
+        const img = new Image()
+        const objectUrl = URL.createObjectURL(file)
+
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl)
+          const MAX_DIM = 1920
+          let { width, height } = img
+
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width)
+              width = MAX_DIM
+            } else {
+              width = Math.round((width * MAX_DIM) / height)
+              height = MAX_DIM
+            }
+          }
+
+          const canvas = document.createElement("canvas")
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext("2d")
+          if (!ctx) {
+            resolve(file)
+            return
+          }
+
+          ctx.fillStyle = "#FFFFFF"
+          ctx.fillRect(0, 0, width, height)
+          ctx.drawImage(img, 0, 0, width, height)
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob || blob.size >= file.size) {
+                resolve(file)
+                return
+              }
+              const cleanName = file.name.replace(/\.[^.]+$/, "") + ".jpg"
+              const compressedFile = new File([blob], cleanName, {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              })
+              resolve(compressedFile)
+            },
+            "image/jpeg",
+            0.82
+          )
+        }
+
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl)
+          resolve(file)
+        }
+
+        img.src = objectUrl
+      })
+    } catch {
+      return file
+    }
+  }
+
+  /**
+   * Realiza upload de mídia com fallback resiliente:
+   * 1. Comprime imagem se necessário
+   * 2. Tenta Route Handler dedicado /api/chat/upload
+   * 3. Se falhar, tenta Server Action uploadChatMediaAction
+   * 4. Retorna sempre objeto seguro { success: boolean, url?: string, error?: string } sem quebrar a execução
+   */
+  const uploadMediaFile = async (rawFile: File): Promise<UploadMediaResult> => {
+    let fileToUpload = rawFile
+    try {
+      fileToUpload = await compressImageIfNeeded(rawFile)
+    } catch (optErr) {
+      console.warn("[Upload] Fallback para arquivo original:", optErr)
+    }
+
+    const formData = new FormData()
+    formData.append("file", fileToUpload)
+
+    // 1ª Tentativa: Route Handler dedicado /api/chat/upload
+    try {
+      const response = await fetch("/api/chat/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (response.ok) {
+        const json = await response.json()
+        if (json?.url) {
+          return {
+            success: true,
+            url: json.url,
+            fileName: json.fileName || fileToUpload.name,
+            fileType: json.fileType || fileToUpload.type,
+            fileSize: json.fileSize || fileToUpload.size,
+          }
+        }
+      } else {
+        const errorData = await response.json().catch(() => null)
+        console.warn("[Upload] Route Handler retornou status:", response.status, errorData)
+      }
+    } catch (fetchErr) {
+      console.warn("[Upload] Fetch /api/chat/upload falhou, tentando Server Action:", fetchErr)
+    }
+
+    // 2ª Tentativa: Server Action uploadChatMediaAction
+    try {
+      const actionRes = await uploadChatMediaAction(formData)
+      if (actionRes?.success && actionRes?.url) {
+        return actionRes
+      }
+      return {
+        success: false,
+        error: actionRes?.error || "Não foi possível carregar o arquivo no servidor.",
+      }
+    } catch (actionErr: any) {
+      console.error("[Upload] Server Action falhou:", actionErr)
+      return {
+        success: false,
+        error: actionErr?.message || "Erro de rede ao enviar arquivo.",
+      }
+    }
   }
 
   const handleSendAttachedFile = async () => {
@@ -961,12 +1102,10 @@ export default function PainelClient({
     scrollToBottom(true)
 
     try {
-      const formData = new FormData()
-      formData.append("file", fileToSend)
-      const uploadRes = await uploadChatMediaAction(formData)
+      const uploadRes = await uploadMediaFile(fileToSend)
 
-      if (!uploadRes.success || !uploadRes.url) {
-        throw new Error(uploadRes.error || "Falha no upload do arquivo.")
+      if (!uploadRes?.success || !uploadRes?.url) {
+        throw new Error(uploadRes?.error || "Falha no upload do arquivo.")
       }
 
       const sendRes = await sendMediaMessageAction({
@@ -978,7 +1117,7 @@ export default function PainelClient({
         clientMessageId,
       })
 
-      if (sendRes.success) {
+      if (sendRes?.success) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -995,7 +1134,7 @@ export default function PainelClient({
           )
         )
       } else {
-        toast.error("Falha no Envio", sendRes.error || "Não foi possível enviar a mídia.")
+        toast.error("Falha no Envio", sendRes?.error || "Não foi possível enviar a mídia.")
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -1006,7 +1145,7 @@ export default function PainelClient({
       }
     } catch (err: any) {
       console.error("[Chat] Falha no envio de mídia:", err)
-      toast.error("Erro no Envio", err.message || "Erro ao processar arquivo.")
+      toast.error("Erro no Envio", err?.message || "Erro ao processar arquivo.")
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
@@ -1160,12 +1299,10 @@ export default function PainelClient({
       setMessages((prev) => [...prev, optimisticMsg])
       scrollToBottom(true)
 
-      const formData = new FormData()
-      formData.append("file", audioFile)
-      const uploadRes = await uploadChatMediaAction(formData)
+      const uploadRes = await uploadMediaFile(audioFile)
 
-      if (!uploadRes.success || !uploadRes.url) {
-        throw new Error(uploadRes.error || "Falha ao fazer upload da gravação de áudio.")
+      if (!uploadRes?.success || !uploadRes?.url) {
+        throw new Error(uploadRes?.error || "Falha ao fazer upload da gravação de áudio.")
       }
 
       const sendRes = await sendMediaMessageAction({
@@ -1176,7 +1313,7 @@ export default function PainelClient({
         clientMessageId,
       })
 
-      if (sendRes.success) {
+      if (sendRes?.success) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -1193,7 +1330,7 @@ export default function PainelClient({
           )
         )
       } else {
-        toast.error("Falha no Envio de Áudio", sendRes.error || "Não foi possível enviar o áudio.")
+        toast.error("Falha no Envio de Áudio", sendRes?.error || "Não foi possível enviar o áudio.")
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -1204,7 +1341,7 @@ export default function PainelClient({
       }
     } catch (err: any) {
       console.error("[AudioRecord] Erro ao processar gravação:", err)
-      toast.error("Erro no Áudio", err.message || "Falha ao gravar ou enviar áudio.")
+      toast.error("Erro no Áudio", err?.message || "Falha ao gravar ou enviar áudio.")
     } finally {
       setIsUploadingAudio(false)
       setRecordingSeconds(0)
@@ -1226,7 +1363,7 @@ export default function PainelClient({
         content: text,
       })
 
-      if (res.success && res.message) {
+      if (res?.success && res?.message) {
         setMessages((prev) => [...prev, res.message!])
         if (customContent !== undefined) {
           setQuickNoteContent("")
@@ -1236,10 +1373,10 @@ export default function PainelClient({
         scrollToBottom(true)
         toast.success("Nota Salva", "A anotação interna foi registrada na conversa.")
       } else {
-        toast.error("Erro ao salvar nota", res.error || "Falha ao registrar nota.")
+        toast.error("Erro ao salvar nota", res?.error || "Falha ao registrar nota.")
       }
     } catch (err: any) {
-      toast.error("Erro inesperado", err.message || "Falha ao registrar nota.")
+      toast.error("Erro inesperado", err?.message || "Falha ao registrar nota.")
     } finally {
       setIsSendingInternalNote(false)
     }
@@ -1268,7 +1405,7 @@ export default function PainelClient({
         notes: customerForm.notes,
       })
 
-      if (res.success) {
+      if (res?.success) {
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
@@ -1296,10 +1433,10 @@ export default function PainelClient({
           toast.success("Perfil atualizado!", "As informações do cliente foram salvas com sucesso.")
         }
       } else {
-        toast.error("Erro ao salvar", res.error || "Não foi possível atualizar o perfil.")
+        toast.error("Erro ao salvar", res?.error || "Não foi possível atualizar o perfil.")
       }
     } catch (err: any) {
-      toast.error("Erro inesperado", err.message || "Falha ao salvar dados do cliente.")
+      toast.error("Erro inesperado", err?.message || "Falha ao salvar dados do cliente.")
     } finally {
       setIsSavingCustomer(false)
     }
@@ -1341,7 +1478,7 @@ export default function PainelClient({
     try {
       const result = await takeoverConversationAction(selectedId)
 
-      if (result.success) {
+      if (result?.success) {
         toast.success(
           "Atendimento Assumido!",
           "A IA foi pausada e a conversa agora está atribuída a você."
@@ -1367,10 +1504,10 @@ export default function PainelClient({
         setMessages((prev) => [...prev, takeoverEventMsg])
         scrollToBottom(true)
       } else {
-        toast.error("Erro ao assumir conversa", result.error || "Falha na transferência.")
+        toast.error("Erro ao assumir conversa", result?.error || "Falha na transferência.")
       }
     } catch (err: any) {
-      toast.error("Erro inesperado", err.message || "Falha ao assumir atendimento.")
+      toast.error("Erro inesperado", err?.message || "Falha ao assumir atendimento.")
     } finally {
       setIsTakingOver(false)
     }
@@ -1388,7 +1525,7 @@ export default function PainelClient({
     try {
       const result = await returnToAIAction(selectedId)
 
-      if (result.success) {
+      if (result?.success) {
         const resolvedName = result.agentName || currentAgentName
         toast.success(
           "Devolvido para a IA!",
@@ -1415,10 +1552,10 @@ export default function PainelClient({
         setMessages((prev) => [...prev, resumeEventMsg])
         scrollToBottom(true)
       } else {
-        toast.error("Erro ao devolver para IA", result.error || "Falha na operação.")
+        toast.error("Erro ao devolver para IA", result?.error || "Falha na operação.")
       }
     } catch (err: any) {
-      toast.error("Erro inesperado", err.message || "Falha ao devolver para IA.")
+      toast.error("Erro inesperado", err?.message || "Falha ao devolver para IA.")
     } finally {
       setIsReturningToAI(false)
     }
@@ -1434,7 +1571,7 @@ export default function PainelClient({
     try {
       const result = await closeConversationAction(selectedId)
 
-      if (result.success) {
+      if (result?.success) {
         toast.success(
           "Atendimento Encerrado",
           "A conversa foi finalizada com sucesso e movida para Finalizados."
@@ -1461,10 +1598,10 @@ export default function PainelClient({
         scrollToBottom(true)
         setConfirmClose(false)
       } else {
-        toast.error("Erro ao encerrar", result.error || "Falha ao finalizar conversa.")
+        toast.error("Erro ao encerrar", result?.error || "Falha ao finalizar conversa.")
       }
     } catch (err: any) {
-      toast.error("Erro inesperado", err.message || "Falha ao encerrar conversa.")
+      toast.error("Erro inesperado", err?.message || "Falha ao encerrar conversa.")
     } finally {
       setIsClosing(false)
     }
@@ -1480,7 +1617,7 @@ export default function PainelClient({
     try {
       const result = await reopenConversationAction(selectedId)
 
-      if (result.success) {
+      if (result?.success) {
         toast.success(
           "Atendimento Reaberto",
           "A conversa foi reaberta com sucesso e atribuída a você."
