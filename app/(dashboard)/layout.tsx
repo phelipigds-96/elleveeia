@@ -42,7 +42,7 @@ export default async function DashboardLayout({
   const userDisplayName = profile?.full_name || (userRole === "attendant" ? "Atendente" : "Administrador")
 
   return (
-    <div className="h-screen overflow-hidden bg-ellevee-ivory text-ellevee-ink flex flex-col antialiased font-sans selection:bg-ellevee-accent selection:text-ellevee-ink">
+    <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-ellevee-ivory text-ellevee-ink flex flex-col antialiased font-sans selection:bg-ellevee-accent selection:text-ellevee-ink">
       {impersonate.isImpersonating && (
         <ImpersonateBanner
           companyName={impersonate.targetCompanyName || "Organização Alvo"}

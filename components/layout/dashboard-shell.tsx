@@ -284,7 +284,7 @@ export function DashboardShell({
   // MODO WHATSAPP OMNICHANNEL FULL-BLEED PARA /conversations
   // =========================================================================
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-[#efeae2] relative">
+    <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden bg-[#efeae2] relative">
       {/* 1. TOP BAR TEAL ESTILO WHATSAPP BUSINESS COM MENU MOBILE */}
       <header className="h-14 bg-[#005d4b] text-white px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-sm z-30 select-none">
         {/* Esquerda: Botão Menu Mobile + Identidade da Empresa e Canal WhatsApp Conectado */}
@@ -352,7 +352,7 @@ export function DashboardShell({
       </header>
 
       {/* 2. CORPO: SLIM ICON-RAIL (OCULTO EM MOBILE) + MAIN FULL-BLEED */}
-      <div className="flex flex-1 min-h-0 h-full w-full overflow-hidden">
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
         {/* Barra Lateral Estreita (Icon Rail) — oculta em mobile para liberar 100% da tela */}
         <aside className="w-14 bg-[#004738] text-white hidden md:flex flex-col items-center justify-between py-3 shrink-0 border-r border-[#00382c] z-20">
           {/* Ícones de Navegação Superiores */}
@@ -433,7 +433,7 @@ export function DashboardShell({
         </aside>
 
         {/* Área Central / Chat sem Padding (Full Bleed) */}
-        <main className="flex-1 flex flex-col min-h-0 h-full w-full overflow-hidden bg-[#efeae2]">
+        <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-[#efeae2]">
           {children}
         </main>
       </div>
