@@ -1007,7 +1007,8 @@ export async function uploadChatMediaAction(formData: FormData): Promise<UploadM
     }
 
     const adminClient = createAdminClient()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+    const rawName = file.name || "arquivo"
+    const sanitizedName = rawName.replace(/[^a-zA-Z0-9.-]/g, "_")
     const filePath = `${companyId}/${Date.now()}-${sanitizedName}`
     const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -1030,9 +1031,9 @@ export async function uploadChatMediaAction(formData: FormData): Promise<UploadM
     return {
       success: true,
       url: publicUrl,
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
+      fileName: file.name || "arquivo",
+      fileType: file.type || "application/octet-stream",
+      fileSize: file.size || buffer.length,
     }
   } catch (err: any) {
     console.error("[ChatMedia] Exceção em uploadChatMediaAction:", err)
