@@ -1702,7 +1702,7 @@ export default function PainelClient({
 
   return (
     <div
-      className="flex flex-1 min-h-0 h-full w-full bg-[#efeae2] text-ellevee-ink overflow-hidden font-sans relative"
+      className="flex flex-1 min-h-0 w-full bg-[#efeae2] text-ellevee-ink overflow-hidden font-sans relative"
     >
       {/* =====================================================================
           SIDEBAR: LISTA DE CONVERSAS (Quiet Luxury / Deep Ink)
@@ -1749,8 +1749,8 @@ export default function PainelClient({
             </Link>
           </div>
 
-          {/* Abas Superiores de Fila por Ícones (Idêntico ao layout de referência) */}
-          <div className="flex items-center justify-between border-t border-[#f0f2f5] pt-1.5 px-2">
+          {/* Abas Superiores de Fila por Ícones com Contagem Numérica */}
+          <div className="flex items-center justify-between border-t border-[#f0f2f5] pt-1.5 px-1 sm:px-2">
             {/* 1. Todas as conversas */}
             <button
               type="button"
@@ -1759,11 +1759,17 @@ export default function PainelClient({
                 activeTab === "all" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
               }`}
               title={`Todas as conversas (${counts.all})`}
+              aria-label={`Todas as conversas: ${counts.all}`}
             >
               <ListFilter className="h-4 w-4" />
+              {counts.all > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-slate-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {counts.all}
+                </span>
+              )}
             </button>
 
-            {/* 2. Aguardando na Fila (com badge numérico verde) */}
+            {/* 2. Aguardando na Fila (com badge numérico verde WhatsApp) */}
             <button
               type="button"
               onClick={() => setActiveTab("waiting")}
@@ -1771,28 +1777,35 @@ export default function PainelClient({
                 activeTab === "waiting" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
               }`}
               title={`Aguardando atendimento (${counts.waiting})`}
+              aria-label={`Aguardando atendimento: ${counts.waiting}`}
             >
               <Hourglass className="h-4 w-4" />
               {counts.waiting > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-[#25d366] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-[#25d366] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs animate-pulse">
                   {counts.waiting}
                 </span>
               )}
             </button>
 
-            {/* 3. Em atendimento */}
+            {/* 3. Em atendimento humano (com badge azul) */}
             <button
               type="button"
               onClick={() => setActiveTab("in_progress")}
               className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
                 activeTab === "in_progress" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
               }`}
-              title={`Em atendimento (${counts.inProgress})`}
+              title={`Em atendimento humano (${counts.inProgress})`}
+              aria-label={`Em atendimento humano: ${counts.inProgress}`}
             >
               <MessageSquare className="h-4 w-4" />
+              {counts.inProgress > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {counts.inProgress}
+                </span>
+              )}
             </button>
 
-            {/* 4. Atendimento com IA */}
+            {/* 4. Atendimento com IA (com badge índigo) */}
             <button
               type="button"
               onClick={() => setActiveTab("ai")}
@@ -1800,8 +1813,32 @@ export default function PainelClient({
                 activeTab === "ai" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
               }`}
               title={`Atendimento IA ativa (${counts.ai})`}
+              aria-label={`Atendimento IA ativa: ${counts.ai}`}
             >
-              <User className="h-4 w-4" />
+              <Bot className="h-4 w-4" />
+              {counts.ai > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-indigo-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {counts.ai}
+                </span>
+              )}
+            </button>
+
+            {/* 5. Finalizadas (com badge cinza) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab("closed")}
+              className={`p-2 rounded-lg flex items-center justify-center transition-colors relative ${
+                activeTab === "closed" ? "text-[#005d4b] bg-[#f0f2f5]" : "text-[#8696a0] hover:text-[#54656f]"
+              }`}
+              title={`Finalizadas (${counts.closed})`}
+              aria-label={`Conversas finalizadas: ${counts.closed}`}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {counts.closed > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 bg-gray-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {counts.closed}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1971,24 +2008,24 @@ export default function PainelClient({
           MAIN: ÁREA DE CHAT (Warm Ivory #F3F2ED + Deep Ink) COM DRAWER RETRÁTIL
       ====================================================================== */}
       <main
-        className={`flex-1 flex flex-row h-full min-h-0 bg-ellevee-ivory overflow-hidden ${
+        className={`flex-1 flex flex-row min-h-0 w-full bg-ellevee-ivory overflow-hidden ${
           hasSelection ? "flex" : "hidden lg:flex"
         }`}
       >
         {activeConversation ? (
           <>
             {/* Coluna Central do Chat */}
-            <div className="flex-1 basis-0 flex flex-col h-full min-h-0 overflow-hidden min-w-0">
+            <div className="flex-1 basis-0 flex flex-col min-h-0 w-full overflow-hidden min-w-0">
             {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
-            <header className="h-16 sm:h-[70px] border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-4 shadow-[0_1px_2px_0_rgba(0,0,0,0.03)]">
+            <header className="h-14 sm:h-16 border-b border-ellevee-stone px-3 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-2 sm:gap-4 shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] z-10">
               {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Metadados */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 {/* Botão voltar para a lista (mobile) — padrão de navegação
                     em pilha: uma tela por vez. */}
                 <button
                   type="button"
                   onClick={handleBackToList}
-                  className="lg:hidden inline-flex items-center justify-center h-9 w-9 -ml-2 rounded-full text-ellevee-ink hover:bg-slate-100 focus-ring shrink-0"
+                  className="lg:hidden inline-flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 -ml-1 sm:-ml-2 rounded-full text-ellevee-ink hover:bg-slate-100 focus-ring shrink-0"
                   title="Voltar para a lista de conversas"
                   aria-label="Voltar para a lista de conversas"
                 >
@@ -2005,7 +2042,7 @@ export default function PainelClient({
                       src={activeConversation.customers.avatar_url}
                       alt={activeConversation.customers?.name || "Cliente"}
                       referrerPolicy="no-referrer"
-                      className="h-11 w-11 rounded-full object-cover border border-slate-200 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all"
+                      className="h-9 w-9 sm:h-11 sm:w-11 rounded-full object-cover border border-slate-200 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all"
                       onError={(e) => {
                         e.currentTarget.style.display = "none"
                         if (e.currentTarget.nextElementSibling) {
@@ -2015,33 +2052,33 @@ export default function PainelClient({
                     />
                   ) : null}
                   <div
-                    className={`h-11 w-11 rounded-full bg-slate-900 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all ${
+                    className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-slate-900 text-white font-bold text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all ${
                       activeConversation.customers?.avatar_url ? "hidden" : ""
                     }`}
                   >
                     {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-xs ring-2 ring-white">
-                    <WhatsAppIcon className="h-2.5 w-2.5" />
+                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-xs ring-2 ring-white">
+                    <WhatsAppIcon className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
                   </div>
                 </div>
 
                 {/* Nome e Metadados do Atendimento */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <h2
-                      className="font-semibold text-sm sm:text-base text-gray-900 truncate hover:text-emerald-700 cursor-pointer transition-colors"
+                      className="font-semibold text-sm sm:text-base text-gray-900 truncate hover:text-emerald-700 cursor-pointer transition-colors max-w-[130px] xs:max-w-[200px] sm:max-w-none"
                       onClick={() => setIsProfileOpen(true)}
                       title={activeConversation.customers?.name || "Cliente Desconhecido"}
                     >
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
 
-                    {/* Etapa do Funil (Pílula arredondada) */}
+                    {/* Etapa do Funil no Desktop */}
                     {activeConversation.workflow_stage_name ? (
                       <span
                         title={`Etapa no funil: ${activeConversation.workflow_stage_name}`}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700 font-medium whitespace-nowrap shadow-2xs shrink-0"
+                        className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700 font-medium whitespace-nowrap shadow-2xs shrink-0"
                       >
                         <span
                           aria-hidden="true"
@@ -2055,50 +2092,69 @@ export default function PainelClient({
                     ) : null}
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5 truncate">
-                    {activeConversation.customers?.phone && (
-                      <span className="flex items-center gap-1 font-mono text-gray-600">
-                        <Phone className="h-3 w-3 text-gray-400 shrink-0" />
-                        <span>{formatPhoneNumber(activeConversation.customers.phone)}</span>
-                      </span>
-                    )}
-
-                    <span className="text-gray-300">•</span>
-
-                    {/* Status Operacional Arredondado */}
+                  {/* Linha inferior de status */}
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5 truncate">
+                    {/* Indicador de Status com ponto colorido */}
                     {activeConversation.status === "human" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800 shadow-2xs shrink-0">
-                        <User className="h-3 w-3 text-emerald-600 shrink-0" />
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 truncate">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                         <span>
                           {activeConversation.assigned_to === currentUser?.userId
                             ? "Com você"
-                            : "Atendente Humano"}
+                            : "Humano"}
                         </span>
                       </span>
                     ) : activeConversation.status === "closed" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 border border-gray-200 px-2.5 py-0.5 text-[11px] font-medium text-gray-600 shadow-2xs shrink-0">
-                        <CheckCircle2 className="h-3 w-3 text-gray-500 shrink-0" />
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 truncate">
+                        <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
                         <span>Finalizado</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 text-[11px] font-medium text-indigo-800 shadow-2xs shrink-0">
-                        <Bot className="h-3 w-3 text-indigo-600 shrink-0" />
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-700 truncate">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
                         <span>{activeConversation.agent_name || "Ellevee IA"}</span>
                       </span>
+                    )}
+
+                    {/* Etapa do funil no mobile */}
+                    {activeConversation.workflow_stage_name && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] text-gray-600 truncate">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: stageColorOf(activeConversation) }}
+                          />
+                          <span className="truncate max-w-[90px] sm:max-w-[120px]">
+                            {activeConversation.workflow_stage_name}
+                          </span>
+                        </span>
+                      </>
+                    )}
+
+                    {/* Telefone no Desktop */}
+                    {activeConversation.customers?.phone && (
+                      <>
+                        <span className="hidden sm:inline text-gray-300">•</span>
+                        <span className="hidden sm:flex items-center gap-1 font-mono text-gray-500">
+                          <Phone className="h-3 w-3 text-gray-400 shrink-0" />
+                          <span>{formatPhoneNumber(activeConversation.customers.phone)}</span>
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Lado Direito: Ações Rápidas com Acabamento Arredondado (Pill Style) */}
+              {/* Lado Direito: Ações Rápidas com Acabamento Arredondado */}
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                {/* 1. Botão Dinâmico: "Assumir" / "Devolver para [nome do agente]" */}
+                {/* 1. Botão Dinâmico Principal: "Assumir" / "Devolver" (Visível em Mobile e Desktop) */}
                 {activeConversation.status === "human" ? (
                   <button
                     type="button"
                     onClick={handleReturnToAI}
                     disabled={isReturningToAI}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-all shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
+                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-all shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
                     title={`Devolver atendimento para ${activeConversation.agent_name || "a IA"}`}
                   >
                     {isReturningToAI ? (
@@ -2114,7 +2170,7 @@ export default function PainelClient({
                     type="button"
                     onClick={handleTakeover}
                     disabled={isTakingOver || activeConversation.status === "closed"}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-2xs transition-all disabled:opacity-50 shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-2xs transition-all disabled:opacity-50 shrink-0"
                     title="Assumir conversa (pausar a IA e atender manualmente)"
                   >
                     {isTakingOver ? (
@@ -2126,24 +2182,24 @@ export default function PainelClient({
                   </button>
                 )}
 
-                {/* 2. Botão Agendar */}
+                {/* 2. Botão Agendar (Desktop) */}
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95 shrink-0"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95 shrink-0"
                   title="Agendar follow-up, notas ou ver tarefas"
                 >
                   <Calendar className="h-3.5 w-3.5 text-gray-500" />
-                  <span className="hidden sm:inline">Agendar</span>
+                  <span>Agendar</span>
                 </button>
 
-                {/* 3. Botão Finalizar / Reabrir */}
+                {/* 3. Botão Finalizar / Reabrir (Desktop) */}
                 {activeConversation.status === "closed" ? (
                   <button
                     type="button"
                     onClick={handleReopenConversation}
                     disabled={isReopening}
-                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs active:scale-95 shrink-0"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs active:scale-95 shrink-0"
                     title="Reabrir conversa"
                   >
                     {isReopening ? (
@@ -2158,7 +2214,7 @@ export default function PainelClient({
                     type="button"
                     onClick={requestClose}
                     disabled={isClosing}
-                    className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shadow-2xs active:scale-95 shrink-0 ${
+                    className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-2xs active:scale-95 shrink-0 ${
                       confirmClose
                         ? "bg-rose-600 text-white hover:bg-rose-700 border border-rose-600 shadow-sm"
                         : "text-gray-700 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200/80 hover:border-rose-200"
@@ -2172,23 +2228,55 @@ export default function PainelClient({
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 group-hover:text-rose-600" />
                     )}
-                    <span className="hidden sm:inline">{confirmClose ? "Confirmar?" : "Finalizar"}</span>
-                    {confirmClose && <span className="sm:hidden text-xs">Sim?</span>}
+                    <span>{confirmClose ? "Confirmar?" : "Finalizar"}</span>
                   </button>
                 )}
 
-                {/* Separador vertical sutil */}
                 <div className="h-5 w-px bg-gray-200 mx-0.5 hidden sm:block" />
 
-                {/* 4. Menu Mais Opções (⋮) */}
-                <button
-                  type="button"
-                  onClick={() => setIsProfileOpen((v) => !v)}
-                  className="h-8 w-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200/70 transition-all shadow-2xs shrink-0"
-                  title="Mais opções e perfil do contato"
+                {/* 4. Menu Suspenso Mais Opções (⋮) — Acesso a Agendar, Perfil e Finalizar em Mobile e Desktop */}
+                <DropdownMenu
+                  align="right"
+                  trigger={
+                    <button
+                      type="button"
+                      className="h-8 w-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200/70 transition-all shadow-2xs shrink-0 cursor-pointer"
+                      title="Mais opções da conversa"
+                      aria-label="Mais opções da conversa"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  }
                 >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
+                  <DropdownMenuLabel>Ações da Conversa</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                    <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                    <span>Agendar / Notas</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                    <Tag className="h-4 w-4 mr-2 text-gray-500" />
+                    <span>Etiquetas e Funil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                    <User className="h-4 w-4 mr-2 text-gray-500" />
+                    <span>Ver Perfil do Cliente</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {activeConversation.status === "closed" ? (
+                    <DropdownMenuItem onClick={handleReopenConversation}>
+                      <RotateCcw className="h-4 w-4 mr-2 text-emerald-600" />
+                      <span>Reabrir Atendimento</span>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={requestClose}
+                      className={confirmClose ? "text-red-600 font-semibold" : "text-red-500"}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2 text-red-500" />
+                      <span>{confirmClose ? "Confirmar Encerramento?" : "Finalizar Atendimento"}</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenu>
               </div>
             </header>
 
@@ -2355,7 +2443,7 @@ export default function PainelClient({
 
             {/* Rodapé: Textarea Ativo OU Banner de Atendimento Encerrado */}
             {activeConversation.status === "closed" ? (
-              <footer className="border-t border-ellevee-stone px-6 py-4 bg-white shrink-0 flex items-center justify-between">
+              <footer className="border-t border-ellevee-stone px-4 sm:px-6 py-3 sm:py-4 bg-white shrink-0 z-20 flex items-center justify-between pb-[max(0.6rem,env(safe-area-inset-bottom))]">
                 <div className="flex items-center gap-2 text-ellevee-ink-muted">
                   <CheckCircle2 className="h-4 w-4 text-ellevee-ink-muted shrink-0" />
                   <span className="text-meta font-semibold text-ellevee-ink">
@@ -2376,7 +2464,7 @@ export default function PainelClient({
                 </button>
               </footer>
             ) : (
-              <footer className="p-2 sm:p-2.5 px-3 sm:px-4 bg-[#f0f2f5] border-t border-[#e9ecef] shrink-0">
+              <footer className="p-2 sm:p-2.5 px-3 sm:px-4 bg-[#f0f2f5] border-t border-[#e9ecef] shrink-0 z-20 pb-[max(0.6rem,env(safe-area-inset-bottom))]">
                   <div className="max-w-4xl mx-auto space-y-1.5">
                     {/* Modo: Mensagem WhatsApp vs Nota Interna */}
                     <div className="flex items-center gap-2 px-1">
