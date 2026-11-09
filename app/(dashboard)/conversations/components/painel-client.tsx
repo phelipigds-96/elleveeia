@@ -404,6 +404,17 @@ export default function PainelClient({
   const [loadingMessages, setLoadingMessages] = useState(false)
   // Lista de conversas recolhida em telas pequenas (mobile)
   const [isListOpen, setIsListOpen] = useState(false)
+
+  // Em smartphones e telas pequenas (< 1024px), inicia sempre na lista de conversas (estilo WhatsApp mobile),
+  // a menos que um ID específico tenha sido passado explicitamente na URL (ex: ?id=xxx)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      const params = new URLSearchParams(window.location.search)
+      if (!params.get("id")) {
+        setSelectedId(null)
+      }
+    }
+  }, [])
   
   // 3. Estados de envio de mensagem e Ações de Ciclo de Vida (Fase 1)
   const [inputContent, setInputContent] = useState("")
@@ -2080,14 +2091,14 @@ export default function PainelClient({
               </div>
 
               {/* Lado Direito: Ações Rápidas com Acabamento Arredondado (Pill Style) */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {/* 1. Botão Dinâmico: "Assumir" / "Devolver para [nome do agente]" */}
                 {activeConversation.status === "human" ? (
                   <button
                     type="button"
                     onClick={handleReturnToAI}
                     disabled={isReturningToAI}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-all shadow-2xs active:scale-95 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-all shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
                     title={`Devolver atendimento para ${activeConversation.agent_name || "a IA"}`}
                   >
                     {isReturningToAI ? (
@@ -2095,14 +2106,15 @@ export default function PainelClient({
                     ) : (
                       <Bot className="h-3.5 w-3.5 text-indigo-600" />
                     )}
-                    <span>Devolver para {activeConversation.agent_name || "IA"}</span>
+                    <span className="sm:hidden">Devolver</span>
+                    <span className="hidden sm:inline">Devolver para {activeConversation.agent_name || "IA"}</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleTakeover}
                     disabled={isTakingOver || activeConversation.status === "closed"}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-2xs transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-2xs transition-all disabled:opacity-50 shrink-0"
                     title="Assumir conversa (pausar a IA e atender manualmente)"
                   >
                     {isTakingOver ? (
@@ -2118,7 +2130,7 @@ export default function PainelClient({
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95 shrink-0"
                   title="Agendar follow-up, notas ou ver tarefas"
                 >
                   <Calendar className="h-3.5 w-3.5 text-gray-500" />
@@ -2131,7 +2143,7 @@ export default function PainelClient({
                     type="button"
                     onClick={handleReopenConversation}
                     disabled={isReopening}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs active:scale-95"
+                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs active:scale-95 shrink-0"
                     title="Reabrir conversa"
                   >
                     {isReopening ? (
@@ -2146,7 +2158,7 @@ export default function PainelClient({
                     type="button"
                     onClick={requestClose}
                     disabled={isClosing}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shadow-2xs active:scale-95 ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shadow-2xs active:scale-95 shrink-0 ${
                       confirmClose
                         ? "bg-rose-600 text-white hover:bg-rose-700 border border-rose-600 shadow-sm"
                         : "text-gray-700 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200/80 hover:border-rose-200"
@@ -2160,7 +2172,8 @@ export default function PainelClient({
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 group-hover:text-rose-600" />
                     )}
-                    <span>{confirmClose ? "Confirmar?" : "Finalizar"}</span>
+                    <span className="hidden sm:inline">{confirmClose ? "Confirmar?" : "Finalizar"}</span>
+                    {confirmClose && <span className="sm:hidden text-xs">Sim?</span>}
                   </button>
                 )}
 
@@ -2171,7 +2184,7 @@ export default function PainelClient({
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
-                  className="h-8 w-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200/70 transition-all shadow-2xs"
+                  className="h-8 w-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200/70 transition-all shadow-2xs shrink-0"
                   title="Mais opções e perfil do contato"
                 >
                   <MoreVertical className="h-4 w-4" />
