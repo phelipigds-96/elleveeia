@@ -117,6 +117,24 @@ function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
+function formatPhoneNumber(phone?: string | null): string {
+  if (!phone) return ""
+  const clean = phone.replace(/\D/g, "")
+  if (clean.length === 13 && clean.startsWith("55")) {
+    return `+55 (${clean.slice(2, 4)}) ${clean.slice(4, 9)}-${clean.slice(9)}`
+  }
+  if (clean.length === 12 && clean.startsWith("55")) {
+    return `+55 (${clean.slice(2, 4)}) ${clean.slice(4, 8)}-${clean.slice(8)}`
+  }
+  if (clean.length === 11) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`
+  }
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`
+  }
+  return phone
+}
+
 function isSameDay(a: string, b: string): boolean {
   if (!a || !b) return false
   const d1 = new Date(a)
@@ -1951,28 +1969,32 @@ export default function PainelClient({
             {/* Coluna Central do Chat */}
             <div className="flex-1 basis-0 flex flex-col h-full min-h-0 overflow-hidden min-w-0">
             {/* Header do Chat (Harmonização Didática Estilo ChatPro / WhatsApp Web) */}
-            <header className="h-16 border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-3 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
-              {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Subtítulo */}
+            <header className="h-16 sm:h-[70px] border-b border-ellevee-stone px-4 sm:px-6 flex items-center justify-between bg-white shrink-0 gap-4 shadow-[0_1px_2px_0_rgba(0,0,0,0.03)]">
+              {/* Lado Esquerdo: Avatar + Nome com Selo WhatsApp + Metadados */}
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 {/* Botão voltar para a lista (mobile) — padrão de navegação
                     em pilha: uma tela por vez. */}
                 <button
                   type="button"
                   onClick={handleBackToList}
-                  className="lg:hidden inline-flex items-center justify-center h-9 w-9 -ml-2 rounded-md text-ellevee-ink hover:bg-ellevee-ivory focus-ring shrink-0"
+                  className="lg:hidden inline-flex items-center justify-center h-9 w-9 -ml-2 rounded-full text-ellevee-ink hover:bg-slate-100 focus-ring shrink-0"
                   title="Voltar para a lista de conversas"
                   aria-label="Voltar para a lista de conversas"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp */}
-                <div className="relative shrink-0">
+                {/* Avatar com Foto Real ou Iniciais + Selo WhatsApp (Clicável para abrir perfil) */}
+                <div
+                  className="relative shrink-0 cursor-pointer group"
+                  onClick={() => setIsProfileOpen(true)}
+                  title="Abrir detalhes do cliente"
+                >
                   {activeConversation.customers?.avatar_url ? (
                     <img
                       src={activeConversation.customers.avatar_url}
                       alt={activeConversation.customers?.name || "Cliente"}
                       referrerPolicy="no-referrer"
-                      className="h-10 w-10 rounded-full object-cover border border-ellevee-stone shadow-2xs"
+                      className="h-11 w-11 rounded-full object-cover border border-slate-200 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all"
                       onError={(e) => {
                         e.currentTarget.style.display = "none"
                         if (e.currentTarget.nextElementSibling) {
@@ -1982,154 +2004,175 @@ export default function PainelClient({
                     />
                   ) : null}
                   <div
-                    className={`h-10 w-10 rounded-full bg-ellevee-ink text-white font-bold text-meta flex items-center justify-center shrink-0 shadow-2xs ${
+                    className={`h-11 w-11 rounded-full bg-slate-900 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs group-hover:ring-2 group-hover:ring-emerald-500/30 transition-all ${
                       activeConversation.customers?.avatar_url ? "hidden" : ""
                     }`}
                   >
                     {(activeConversation.customers?.name || "C").slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-ellevee-success text-white flex items-center justify-center shadow-xs ring-1 ring-white">
-                    <WhatsAppIcon className="h-2 w-2" />
+                  <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-xs ring-2 ring-white">
+                    <WhatsAppIcon className="h-2.5 w-2.5" />
                   </div>
                 </div>
 
                 {/* Nome e Metadados do Atendimento */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                     <h2
-                      className="font-semibold text-sm sm:text-base text-ellevee-ink truncate"
+                      className="font-semibold text-sm sm:text-base text-gray-900 truncate hover:text-emerald-700 cursor-pointer transition-colors"
+                      onClick={() => setIsProfileOpen(true)}
                       title={activeConversation.customers?.name || "Cliente Desconhecido"}
                     >
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
-                    <span title="WhatsApp Oficial" className="text-ellevee-success shrink-0">
-                      <WhatsAppIcon className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-meta text-ellevee-ink-muted mt-0.5 truncate">
-                    {activeConversation.customers?.phone && (
-                      <span className="hidden sm:flex items-center gap-1 font-mono text-ellevee-ink/80">
-                        <Phone className="h-3 w-3 text-ellevee-ink-muted" />
-                        {activeConversation.customers.phone}
-                      </span>
-                    )}
-                    <span className="hidden sm:inline">•</span>
-                    <span className="truncate">
-                      <StatusChip
-                        view={resolveStatusView(
-                          activeConversation.status,
-                          !!activeConversation.assigned_to
-                        )}
-                        detail={
-                          activeConversation.status === "human"
-                            ? activeConversation.assigned_to === currentUser?.userId
-                              ? "com você"
-                              : "em atendimento"
-                            : activeConversation.status === "open"
-                            ? activeConversation.agent_name || "IA ativa"
-                            : undefined
-                        }
-                      />
-                    </span>
-                    {/* Etapa do funil no cabeçalho */}
+
+                    {/* Etapa do Funil (Pílula arredondada) */}
                     {activeConversation.workflow_stage_name ? (
                       <span
                         title={`Etapa no funil: ${activeConversation.workflow_stage_name}`}
-                        className="inline-flex items-center gap-1.5 rounded bg-ellevee-stone-subtle border border-ellevee-stone px-2 py-0.5 text-meta text-ellevee-ink font-medium whitespace-nowrap shadow-2xs"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700 font-medium whitespace-nowrap shadow-2xs shrink-0"
                       >
                         <span
                           aria-hidden="true"
                           className="h-2 w-2 rounded-full shrink-0 shadow-2xs"
                           style={{ backgroundColor: stageColorOf(activeConversation) }}
                         />
-                        <span className="max-w-[160px] truncate">
+                        <span className="max-w-[120px] sm:max-w-[180px] truncate">
                           {activeConversation.workflow_stage_name}
                         </span>
                       </span>
                     ) : null}
                   </div>
+
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5 truncate">
+                    {activeConversation.customers?.phone && (
+                      <span className="flex items-center gap-1 font-mono text-gray-600">
+                        <Phone className="h-3 w-3 text-gray-400 shrink-0" />
+                        <span>{formatPhoneNumber(activeConversation.customers.phone)}</span>
+                      </span>
+                    )}
+
+                    <span className="text-gray-300">•</span>
+
+                    {/* Status Operacional Arredondado */}
+                    {activeConversation.status === "human" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800 shadow-2xs shrink-0">
+                        <User className="h-3 w-3 text-emerald-600 shrink-0" />
+                        <span>
+                          {activeConversation.assigned_to === currentUser?.userId
+                            ? "Com você"
+                            : "Atendente Humano"}
+                        </span>
+                      </span>
+                    ) : activeConversation.status === "closed" ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 border border-gray-200 px-2.5 py-0.5 text-[11px] font-medium text-gray-600 shadow-2xs shrink-0">
+                        <CheckCircle2 className="h-3 w-3 text-gray-500 shrink-0" />
+                        <span>Finalizado</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 text-[11px] font-medium text-indigo-800 shadow-2xs shrink-0">
+                        <Bot className="h-3 w-3 text-indigo-600 shrink-0" />
+                        <span>{activeConversation.agent_name || "Ellevee IA"}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Lado Direito: Ações Rápidas no Padrão do Layout (transferir, etiquetas, agendar, finalizar) */}
-              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {/* 1. Botão Transferir */}
-                <button
-                  type="button"
-                  onClick={activeConversation.status === "human" ? handleReturnToAI : handleTakeover}
-                  disabled={isReturningToAI || isTakingOver}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
-                  title={activeConversation.status === "human" ? "Devolver para a IA" : "Assumir atendimento"}
-                >
-                  <ArrowLeftRight className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">transferir</span>
-                </button>
+              {/* Lado Direito: Ações Rápidas com Acabamento Arredondado (Pill Style) */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* 1. Botão Dinâmico: "Assumir" / "Devolver para [nome do agente]" */}
+                {activeConversation.status === "human" ? (
+                  <button
+                    type="button"
+                    onClick={handleReturnToAI}
+                    disabled={isReturningToAI}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-all shadow-2xs active:scale-95 disabled:opacity-50"
+                    title={`Devolver atendimento para ${activeConversation.agent_name || "a IA"}`}
+                  >
+                    {isReturningToAI ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Bot className="h-3.5 w-3.5 text-indigo-600" />
+                    )}
+                    <span>Devolver para {activeConversation.agent_name || "IA"}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleTakeover}
+                    disabled={isTakingOver || activeConversation.status === "closed"}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-2xs transition-all disabled:opacity-50"
+                    title="Assumir conversa (pausar a IA e atender manualmente)"
+                  >
+                    {isTakingOver ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UserCheck className="h-3.5 w-3.5" />
+                    )}
+                    <span>Assumir</span>
+                  </button>
+                )}
 
-                {/* 2. Botão Etiquetas / Funil */}
+                {/* 2. Botão Agendar */}
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
-                  title="Etiquetas e Etapa do Funil"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95"
+                  title="Agendar follow-up, notas ou ver tarefas"
                 >
-                  <Tag className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">
-                    {activeConversation.workflow_stage_name || "etiquetas"}
-                  </span>
+                  <Calendar className="h-3.5 w-3.5 text-gray-500" />
+                  <span className="hidden sm:inline">Agendar</span>
                 </button>
 
-                {/* 3. Botão Agendar */}
-                <button
-                  type="button"
-                  onClick={() => setIsProfileOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] transition-colors border border-transparent hover:border-[#e9ecef]"
-                  title="Agendar follow-up ou notas"
-                >
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">agendar</span>
-                </button>
-
-                {/* 4. Botão Finalizar */}
+                {/* 3. Botão Finalizar / Reabrir */}
                 {activeConversation.status === "closed" ? (
                   <button
                     type="button"
                     onClick={handleReopenConversation}
                     disabled={isReopening}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#005d4b] hover:bg-[#005d4b]/10 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs active:scale-95"
                     title="Reabrir conversa"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    <span>reabrir</span>
+                    {isReopening ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
+                    <span>Reabrir</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={requestClose}
                     disabled={isClosing}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shadow-2xs active:scale-95 ${
                       confirmClose
-                        ? "bg-red-600 text-white hover:bg-red-700 shadow-xs"
-                        : "text-[#54656f] hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200"
+                        ? "bg-rose-600 text-white hover:bg-rose-700 border border-rose-600 shadow-sm"
+                        : "text-gray-700 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200/80 hover:border-rose-200"
                     }`}
-                    title="Finalizar atendimento"
+                    title={confirmClose ? "Clique novamente para confirmar encerramento" : "Finalizar atendimento"}
                   >
                     {isClosing ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : confirmClose ? (
                       <AlertCircle className="h-3.5 w-3.5 text-white" />
                     ) : (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-[#54656f]" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 group-hover:text-rose-600" />
                     )}
-                    <span>{confirmClose ? "confirmar?" : "finalizar"}</span>
+                    <span>{confirmClose ? "Confirmar?" : "Finalizar"}</span>
                   </button>
                 )}
 
-                {/* 5. Menu Mais Opções (⋮) */}
+                {/* Separador vertical sutil */}
+                <div className="h-5 w-px bg-gray-200 mx-0.5 hidden sm:block" />
+
+                {/* 4. Menu Mais Opções (⋮) */}
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
-                  className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
-                  title="Mais opções do contato"
+                  className="h-8 w-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200/70 transition-all shadow-2xs"
+                  title="Mais opções e perfil do contato"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </button>
