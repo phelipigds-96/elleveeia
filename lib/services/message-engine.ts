@@ -6,6 +6,7 @@ import { sendOutboundMessage } from '@/lib/services/n8n-internal'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 import { prepareOutboundMessage } from '@/lib/services/outbound-internal'
 import { assignDefaultWorkflowStages } from '@/lib/services/workflows/conversation-workflow'
+import { getBrazilianPhoneVariants } from '@/lib/services/phone-normalization'
 export type ProcessWebhookResult = 
   | { success: true; duplicate: true; event_id: string; conversation_id?: undefined; message_id?: undefined }
   | { success: true; duplicate: false; event_id: string; conversation_id: string; message_id: string }
@@ -42,8 +43,13 @@ export async function processWebhookEvent(
   try {
     // 2. Customer Upsert (Localiza ou Cria cliente baseado em Company + Phone)
     let customerId: string
+    const phoneVariants = getBrazilianPhoneVariants(payload.customer.phone)
     const { data: existingCustomer } = await supabase.from('customers')
-      .select('id').eq('company_id', companyId).eq('phone', payload.customer.phone).single()
+      .select('id, phone')
+      .eq('company_id', companyId)
+      .in('phone', phoneVariants)
+      .limit(1)
+      .maybeSingle()
     
     const avatarUrl = payload.customer.avatar_url || payload.customer.profile_picture_url || null
 
@@ -108,7 +114,7 @@ export async function processWebhookEvent(
     let convStatus = 'open'
     
     let convQuery = supabase.from('conversations')
-      .select('id, status, workflow_id, workflow_stage_id')
+      .select('id, status, workflow_id, workflow_stage_id, external_id')
       .eq('company_id', companyId)
       
     if (payload.conversation?.external_id) {
@@ -120,7 +126,30 @@ export async function processWebhookEvent(
         .order('last_message_at', { ascending: false })
     }
 
-    const { data: existingConv } = await convQuery.maybeSingle()
+    let { data: existingConv } = await convQuery.maybeSingle()
+
+    // Se não localizou por external_id exato, mas o cliente já possui conversa aberta/recente criada manualmente no painel
+    if (!existingConv && customerId) {
+      const { data: manualConv } = await supabase.from('conversations')
+        .select('id, status, workflow_id, workflow_stage_id, external_id')
+        .eq('company_id', companyId)
+        .eq('customer_id', customerId)
+        .eq('channel', payload.channel)
+        .order('last_message_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (manualConv) {
+        existingConv = manualConv
+        // Vincula o external_id à conversa existente para evitar duplicidade de janelas
+        if (!manualConv.external_id && payload.conversation?.external_id) {
+          await supabase.from('conversations')
+            .update({ external_id: payload.conversation.external_id })
+            .eq('id', manualConv.id)
+            .eq('company_id', companyId)
+        }
+      }
+    }
 
     if (existingConv) {
       conversationId = existingConv.id
