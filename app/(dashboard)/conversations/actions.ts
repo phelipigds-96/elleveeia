@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/service"
 import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
 import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
 import { assignDefaultWorkflowStages } from "@/lib/services/workflows/conversation-workflow"
+import { getBrazilianPhoneVariants } from "@/lib/services/phone-normalization"
 
 export interface CustomerData {
   id?: string
@@ -1248,13 +1249,15 @@ export async function startNewConversationAction(params: {
 
     const cleanName = params.name?.trim() || `Cliente (${cleanPhone.slice(-4)})`
 
-    // 2. Localiza ou cadastra o cliente no Supabase
+    // 2. Localiza ou cadastra o cliente no Supabase (com suporte a variantes do 9º dígito no Brasil)
     let customerId: string
+    const phoneVariants = getBrazilianPhoneVariants(cleanPhone)
     const { data: existingCust } = await adminClient
       .from("customers")
-      .select("id, name")
+      .select("id, name, phone")
       .eq("company_id", companyId)
-      .eq("phone", cleanPhone)
+      .in("phone", phoneVariants)
+      .limit(1)
       .maybeSingle()
 
     if (existingCust) {
@@ -1317,6 +1320,7 @@ export async function startNewConversationAction(params: {
           company_id: companyId,
           customer_id: customerId,
           channel: "whatsapp",
+          external_id: `${cleanPhone}@s.whatsapp.net`,
           status: "human",
           assigned_to: userId,
           unread_count: 0,
