@@ -27,6 +27,7 @@ import {
   LogOut
 } from "lucide-react"
 import { logout } from "@/app/(auth)/actions"
+import { ElleveeLogo } from "@/components/ui/ellevee-logo"
 
 interface DashboardShellProps {
   userRole?: string
@@ -96,33 +97,14 @@ export function DashboardShell({
         {/* Drawer Lateral Deslizante */}
         <div className="relative w-72 max-w-[85vw] bg-ellevee-ink text-white shadow-2xl flex flex-col justify-between animate-in slide-in-from-left duration-200 border-r border-white/10 z-10">
           <div className="flex flex-col min-h-0 overflow-y-auto">
-            {/* Header do Drawer */}
+            {/* Header do Drawer: Logotipo Oficial Ellevee IA */}
             <div className="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-4 h-4 text-ellevee-accent"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 6h16" />
-                    <path d="M4 12h10" />
-                    <path d="M4 18h16" />
-                  </svg>
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-display font-bold text-sm text-white tracking-tight leading-none">
-                    Ellevee IA
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-medium truncate mt-0.5 max-w-[150px]">
-                    {companyName}
-                  </span>
-                </div>
-              </div>
+              <ElleveeLogo
+                variant="full"
+                theme="dark"
+                size="sm"
+                href="/dashboard"
+              />
 
               <button
                 type="button"
@@ -243,9 +225,7 @@ export function DashboardShell({
                 <Menu className="h-6 w-6" />
               </button>
               <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-sm text-ellevee-ink">
-                  Ellevee IA
-                </span>
+                <ElleveeLogo variant="full" theme="light" size="xs" href="/dashboard" />
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 truncate max-w-[120px]">
                   {companyName}
                 </span>

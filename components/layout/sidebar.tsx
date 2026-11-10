@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen
 } from "lucide-react"
+import { ElleveeLogo } from "@/components/ui/ellevee-logo"
 
 interface NavLinkItem {
   href: string
@@ -116,47 +117,21 @@ export function Sidebar({ userRole = "admin" }: SidebarProps) {
       }`}
     >
       <div>
-        {/* Header da Marca */}
-        <div className={`h-16 flex items-center border-b border-white/10 gap-3 ${
-          isCollapsed ? "justify-center px-2" : "px-6"
+        {/* Header da Marca: Logotipo Oficial Ellevee IA */}
+        <div className={`h-16 flex items-center border-b border-white/10 ${
+          isCollapsed ? "justify-center px-2" : "px-5"
         }`}>
-          <div className="h-8 w-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
-            {isAttendant ? (
-              <Headphones className="w-4 h-4 text-ellevee-accent" />
-            ) : (
-              <svg 
-                className="w-4 h-4 text-ellevee-accent" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-              >
-                <path d="M4 6h16" />
-                <path d="M4 12h10" />
-                <path d="M4 18h16" />
-              </svg>
-            )}
-          </div>
-          {!isCollapsed && (
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-base tracking-tight text-white leading-none">
-                  Ellevee IA
-                </span>
-                <span className={`text-[9px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded border ${
-                  isAttendant 
-                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                    : "bg-white/10 border-white/15 text-ellevee-accent"
-                }`}>
-                  {isAttendant ? "ATENDENTE" : "PORTAL"}
-                </span>
-              </div>
-              <span className="text-[10px] text-[#A6B5A6] font-medium tracking-tight mt-0.5">
-                {isAttendant ? "Central de Atendimento" : "Plataforma Omnichannel"}
-              </span>
-            </div>
+          {isCollapsed ? (
+            <ElleveeLogo variant="icon" size="sm" href="/dashboard" />
+          ) : (
+            <ElleveeLogo
+              variant="full"
+              theme="dark"
+              size="md"
+              badge={isAttendant ? "ATENDENTE" : "PORTAL"}
+              href="/dashboard"
+              priority
+            />
           )}
         </div>
 

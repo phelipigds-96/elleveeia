@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { login } from '../actions'
+import { ElleveeLogo } from '@/components/ui/ellevee-logo'
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
@@ -67,22 +68,19 @@ export default function LoginPage() {
           <span className="bg-icon bg-letter icon-8">E</span>
         </div>
 
-        <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ellevee-ink text-sm font-bold text-ellevee-white shadow-sm">
-            E
-          </span>
-          <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
+        <div className="relative z-10">
+          <ElleveeLogo variant="full" theme="light" size="lg" withTagline priority />
         </div>
 
         <div className="relative z-10 max-w-md space-y-4">
-          <span className="inline-flex items-center gap-2 rounded-full border border-ellevee-sage/30 bg-ellevee-sage-light px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ellevee-sage-strong">
-            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
-            Plataforma de IA conversacional
+          <span className="inline-flex items-center gap-2 rounded-full border border-ellevee-purple/20 bg-ellevee-purple/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ellevee-purple">
+            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-purple animate-pulse" />
+            Plataforma de IA Conversacional
           </span>
-          <h2 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-ellevee-ink">
+          <h2 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-ellevee-deep-ink">
             Soluções de IA para o seu negócio
           </h2>
-          <p className="text-base leading-relaxed text-ellevee-ink-muted">
+          <p className="text-base leading-relaxed text-ellevee-text-secondary">
             Atendimento automatizado, funis de vendas e integrações em um só painel — do primeiro
             contato ao orçamento enviado.
           </p>
@@ -90,7 +88,7 @@ export default function LoginPage() {
             {['Conversas', 'Catálogo', 'Funil Kanban', 'Automações'].map((item) => (
               <li
                 key={item}
-                className="rounded-full border border-ellevee-stone bg-ellevee-white/80 px-3 py-1 text-xs font-medium text-ellevee-ink-muted shadow-sm backdrop-blur-sm"
+                className="rounded-full border border-ellevee-border bg-white/80 px-3 py-1 text-xs font-medium text-ellevee-text-secondary shadow-2xs backdrop-blur-sm"
               >
                 {item}
               </li>
@@ -98,7 +96,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="relative z-10 text-xs text-ellevee-sage-strong">
+        <p className="relative z-10 text-xs text-ellevee-text-secondary">
           © {new Date().getFullYear()} Ellevee IA. Todos os direitos reservados.
         </p>
       </aside>
@@ -106,16 +104,13 @@ export default function LoginPage() {
       {/* Coluna de acesso */}
       <main className="relative flex min-h-screen w-full flex-1 flex-col justify-center px-6 py-12 sm:px-10 lg:w-1/2">
         <div className="mx-auto w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ellevee-ink text-sm font-bold text-ellevee-white shadow-sm">
-              E
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Ellevee IA</span>
+          <div className="mb-8 lg:hidden">
+            <ElleveeLogo variant="full" theme="light" size="md" withTagline />
           </div>
 
           <div className="space-y-2">
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-ellevee-ink">Entrar na sua conta</h1>
-            <p className="text-sm text-ellevee-ink-muted">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-ellevee-deep-ink">Entrar na sua conta</h1>
+            <p className="text-sm text-ellevee-text-secondary">
               Use seu e-mail e senha para acessar o painel Ellevee IA
             </p>
           </div>
@@ -160,7 +155,7 @@ export default function LoginPage() {
               />
             </div>
             <button
-              className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-md bg-ellevee-ink px-4 py-2 text-sm font-semibold text-ellevee-white transition-colors hover:bg-ellevee-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ellevee-sage focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-lg bg-ellevee-gradient px-4 py-2 text-sm font-semibold text-white shadow-2xs transition-all hover:opacity-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ellevee-purple focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer"
               type="submit"
               disabled={isLoading}
             >
@@ -168,9 +163,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-ellevee-ink-muted">
+          <div className="mt-6 text-center text-sm text-ellevee-text-secondary">
             Não tem uma conta?{' '}
-            <Link href="/signup" className="font-semibold text-ellevee-sage-strong underline underline-offset-4 hover:text-ellevee-ink">
+            <Link href="/signup" className="font-semibold text-ellevee-purple underline underline-offset-4 hover:text-ellevee-blue transition-colors">
               Cadastre-se
             </Link>
           </div>
