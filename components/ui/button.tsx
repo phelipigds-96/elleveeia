@@ -11,6 +11,8 @@ const buttonVariants = cva(
           "bg-ellevee-ink text-ellevee-white hover:bg-black active:bg-black shadow-[0_1px_2px_rgba(32,37,32,0.1)]",
         primary:
           "bg-ellevee-ink text-ellevee-white hover:bg-black active:bg-black shadow-[0_1px_2px_rgba(32,37,32,0.1)]",
+        gradient:
+          "bg-ellevee-gradient text-white hover:opacity-95 active:opacity-90 font-semibold shadow-[0_1px_4px_rgba(112,40,217,0.2)] transition-opacity",
         accent:
           "bg-ellevee-accent text-ellevee-ink hover:bg-[#a8cb46] font-semibold shadow-[0_1px_2px_rgba(183,217,87,0.3)]",
         outline:
