@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { Toaster } from "@/components/ui/toast"
 import AdminCommandPalette from "./admin-command-palette"
+import { ElleveeLogo } from "@/components/ui/ellevee-logo"
 
 interface AdminShellProps {
   children: React.ReactNode
@@ -117,36 +118,16 @@ export default function AdminShell({ children }: AdminShellProps) {
       {/* Sidebar Lateral - Deep Ink Oficial (#202520) */}
       <aside className="w-64 bg-[#202520] text-white flex flex-col justify-between shrink-0 border-r border-white/10 z-20 shadow-xl">
         <div>
-          {/* Header da Marca: Emblema Minimalista Oficial */}
-          <div className="h-16 flex items-center px-5 border-b border-white/10 gap-3">
-            <div className="h-9 w-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 shadow-sm">
-              <svg
-                className="w-4 h-4 text-[#16BCE0]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 6h16" />
-                <path d="M4 12h10" />
-                <path d="M4 18h16" />
-              </svg>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-base tracking-tight text-white leading-none">
-                  Ellevee IA
-                </span>
-                <span className="text-[9px] font-mono font-bold tracking-wider uppercase text-white bg-ellevee-gradient px-1.5 py-0.5 rounded shadow-2xs">
-                  ADMIN
-                </span>
-              </div>
-              <span className="text-[10px] text-[#A6B5A6] font-medium tracking-tight mt-1">
-                Governança &amp; Infraestrutura
-              </span>
-            </div>
+          {/* Header da Marca: Logotipo Oficial Ellevee IA */}
+          <div className="h-16 flex items-center px-5 border-b border-white/10">
+            <ElleveeLogo
+              variant="full"
+              theme="dark"
+              size="md"
+              badge="ADMIN"
+              href="/paineladmin"
+              priority
+            />
           </div>
 
           {/* Menus de Navegação Estruturados */}
@@ -256,9 +237,15 @@ export default function AdminShell({ children }: AdminShellProps) {
         <header className="sticky top-0 z-20 h-16 bg-white/90 backdrop-blur-md border-b border-ellevee-border px-6 lg:px-8 flex items-center justify-between transition-colors shadow-2xs">
           {/* Breadcrumb da Página Atual */}
           <div className="flex items-center gap-2 text-xs font-medium text-ellevee-text-secondary">
-            <span className="hover:text-ellevee-deep-ink transition-colors font-display font-semibold">
-              Ellevee IA
-            </span>
+            <Link href="/paineladmin" className="flex items-center gap-1.5 hover:opacity-85 transition-opacity">
+              <ElleveeLogo variant="icon" size="xs" />
+              <span className="font-display font-semibold text-ellevee-deep-ink">
+                Ellevee
+              </span>
+              <span className="font-display font-extrabold bg-gradient-to-r from-[#7028D9] via-[#087BEA] to-[#16BCE0] bg-clip-text text-transparent">
+                IA
+              </span>
+            </Link>
             <ChevronRight className="h-3.5 w-3.5 text-ellevee-border stroke-[2.5]" />
             <span className="text-ellevee-text-secondary font-medium">{breadcrumb.section}</span>
             <ChevronRight className="h-3.5 w-3.5 text-ellevee-border stroke-[2.5]" />
