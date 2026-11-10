@@ -67,19 +67,19 @@ export default function CompanyStatusDialog({
       <DialogHeader>
         <div className="flex items-center gap-2.5">
           <div
-            className={`h-8 w-8 rounded-md flex items-center justify-center border ${
+            className={`h-8 w-8 rounded-lg flex items-center justify-center border ${
               isSuspending
                 ? "bg-rose-50 border-rose-200 text-rose-600"
-                : "bg-[#F4F8E8] border-[#D5E89B] text-[#3D5215]"
+                : "bg-emerald-50 border-emerald-200 text-emerald-800"
             }`}
           >
             {isSuspending ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
           </div>
           <div>
-            <DialogTitle>
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">
               {isSuspending ? "Suspender Acesso da Empresa" : "Reativar Acesso da Empresa"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs text-ellevee-text-secondary">
               {isSuspending
                 ? `Bloqueio temporário das operações de ${company.name}.`
                 : `Reativação operacional imediata de ${company.name}.`}
@@ -90,28 +90,28 @@ export default function CompanyStatusDialog({
 
       <div className="py-4 space-y-3">
         {isSuspending ? (
-          <div className="rounded-md bg-stone-50 border border-stone-200 p-3 text-xs text-ellevee-ink flex items-start gap-2.5">
+          <div className="rounded-xl bg-[#F8F8F6] border border-ellevee-border p-3 text-xs text-ellevee-deep-ink flex items-start gap-2.5">
             <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-ellevee-ink">Impacto no Motor Transacional:</p>
-              <p className="mt-0.5 text-ellevee-sage">
+              <p className="font-semibold text-ellevee-deep-ink font-display">Impacto no Motor Transacional:</p>
+              <p className="mt-0.5 text-ellevee-text-secondary">
                 O tráfego de mensagens na outbox e o agendamento de agentes serão suspensos via RLS e Server Actions de forma segura.
               </p>
             </div>
           </div>
         ) : (
-          <p className="text-xs text-ellevee-sage">
+          <p className="text-xs text-ellevee-text-secondary">
             A empresa terá suas permissões e agentes restabelecidos imediatamente para atendimento e fluxos autônomos.
           </p>
         )}
 
         {isSuspending && (
           <div>
-            <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+            <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
               Justificativa Operacional (Auditoria)
             </label>
             <textarea
-              className="w-full h-20 rounded-md border border-ellevee-stone bg-white p-2.5 text-xs text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink placeholder:text-ellevee-sage/70"
+              className="w-full h-20 rounded-lg border border-ellevee-border bg-white p-2.5 text-xs text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue placeholder:text-ellevee-text-secondary/60"
               placeholder="Ex: Pendência de faturamento, solicitação contratual ou manutenção programada."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -122,11 +122,11 @@ export default function CompanyStatusDialog({
       </div>
 
       <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={isProcessing}>
+        <Button variant="outline" onClick={onClose} disabled={isProcessing} className="border-ellevee-border text-ellevee-deep-ink">
           Cancelar
         </Button>
         <Button
-          variant={isSuspending ? "destructive" : "default"}
+          variant={isSuspending ? "destructive" : "primary"}
           onClick={handleConfirm}
           disabled={isProcessing}
         >

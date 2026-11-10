@@ -119,19 +119,19 @@ export default function PlanEditDialog({
     <Dialog open={open} onClose={onClose} className="max-w-2xl">
       <DialogHeader>
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-ellevee-ink text-white shadow-sm">
-            <Layers className="w-5 h-5 text-ellevee-accent" />
+          <div className="p-2.5 rounded-xl bg-ellevee-deep-ink text-white shadow-sm">
+            <Layers className="w-5 h-5 text-ellevee-cyan" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <DialogTitle className="font-display text-lg text-ellevee-ink">
+              <DialogTitle className="font-display text-lg text-ellevee-deep-ink">
                 Editar Plano: {plan.name}
               </DialogTitle>
-              <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider">
+              <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider border-ellevee-border text-ellevee-deep-ink bg-white">
                 {plan.key}
               </Badge>
             </div>
-            <DialogDescription className="text-xs text-ellevee-sage">
+            <DialogDescription className="text-xs text-ellevee-text-secondary">
               Defina as cotas, precificação mensal e infraestrutura de IA padrão aplicada aos tenants deste nível.
             </DialogDescription>
           </div>
@@ -149,7 +149,7 @@ export default function PlanEditDialog({
         {/* Linha 1: Nome comercial, Preço e Destaque */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="text-[11px] font-semibold text-ellevee-ink uppercase tracking-wider block mb-1">
+            <label className="text-[11px] font-semibold text-ellevee-deep-ink uppercase tracking-wider block mb-1">
               Nome do Plano
             </label>
             <Input
@@ -161,11 +161,11 @@ export default function PlanEditDialog({
             />
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-ellevee-ink uppercase tracking-wider block mb-1">
+            <label className="text-[11px] font-semibold text-ellevee-deep-ink uppercase tracking-wider block mb-1">
               Preço Mensal (R$)
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-2 text-xs font-semibold text-ellevee-sage">
+              <span className="absolute left-3 top-2 text-xs font-semibold text-ellevee-text-secondary">
                 R$
               </span>
               <Input
@@ -180,7 +180,7 @@ export default function PlanEditDialog({
             </div>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-ellevee-ink uppercase tracking-wider block mb-1">
+            <label className="text-[11px] font-semibold text-ellevee-deep-ink uppercase tracking-wider block mb-1">
               Badge Promocional
             </label>
             <Input
@@ -195,7 +195,7 @@ export default function PlanEditDialog({
 
         {/* Linha 2: Descrição curta */}
         <div>
-          <label className="text-[11px] font-semibold text-ellevee-ink uppercase tracking-wider block mb-1">
+          <label className="text-[11px] font-semibold text-ellevee-deep-ink uppercase tracking-wider block mb-1">
             Descrição Operacional
           </label>
           <Input
@@ -207,17 +207,17 @@ export default function PlanEditDialog({
         </div>
 
         {/* Seção de Cotas Operacionais */}
-        <div className="rounded-xl border border-ellevee-stone/60 bg-ellevee-ivory/40 p-4 space-y-3">
+        <div className="rounded-xl border border-ellevee-border bg-[#F8F8F6] p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Bot className="w-4 h-4 text-ellevee-ink" />
-            <span className="text-xs font-bold text-ellevee-ink uppercase tracking-wider">
+            <Bot className="w-4 h-4 text-ellevee-deep-ink" />
+            <span className="text-xs font-bold text-ellevee-deep-ink uppercase tracking-wider font-display">
               Cotas e Limites de Volume
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-ellevee-sage block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
                 Msgs Mensais
               </label>
               <Input
@@ -231,7 +231,7 @@ export default function PlanEditDialog({
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-ellevee-sage block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
                 Máx. Agentes
               </label>
               <Input
@@ -245,7 +245,7 @@ export default function PlanEditDialog({
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-ellevee-sage block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
                 Itens no Catálogo
               </label>
               <Input
@@ -259,7 +259,7 @@ export default function PlanEditDialog({
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-ellevee-sage block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
                 Orçamentos / Mês
               </label>
               <Input
@@ -279,19 +279,19 @@ export default function PlanEditDialog({
         <div className="rounded-xl border border-emerald-900/10 bg-emerald-50/40 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-700" />
-              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-ellevee-purple" />
+              <span className="text-xs font-bold text-ellevee-deep-ink uppercase tracking-wider font-display">
                 Infraestrutura de IA Padrão (OpenAI)
               </span>
             </div>
-            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200">
               Provider Recomendado
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-emerald-950 block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-deep-ink block mb-1">
                 Provedor de LLM Primário
               </label>
               <Select
@@ -306,7 +306,7 @@ export default function PlanEditDialog({
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-emerald-950 block mb-1">
+              <label className="text-[11px] font-medium text-ellevee-deep-ink block mb-1">
                 Modelo Padrão Recomendado
               </label>
               <Select
@@ -321,33 +321,33 @@ export default function PlanEditDialog({
               </Select>
             </div>
           </div>
-          <p className="text-[11px] text-emerald-800 leading-relaxed">
+          <p className="text-[11px] text-ellevee-text-secondary leading-relaxed">
             * Todas as novas organizações provisionadas com este plano herdarão OpenAI como motor cognitivo prioritário.
           </p>
         </div>
 
         {/* Recursos / Itens de Checklist */}
         <div>
-          <label className="text-[11px] font-semibold text-ellevee-ink uppercase tracking-wider block mb-1">
+          <label className="text-[11px] font-semibold text-ellevee-deep-ink uppercase tracking-wider block mb-1">
             Recursos Incluídos (um item por linha)
           </label>
           <textarea
             rows={4}
             value={featuresText}
             onChange={(e) => setFeaturesText(e.target.value)}
-            className="w-full rounded-lg border border-ellevee-stone bg-white p-3 text-xs text-ellevee-ink shadow-[0_1px_1px_rgba(32,37,32,0.02)] focus:outline-none focus:ring-1 focus:ring-ellevee-ink leading-relaxed font-sans"
+            className="w-full rounded-lg border border-ellevee-border bg-white p-3 text-xs text-ellevee-deep-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-ellevee-blue leading-relaxed font-sans placeholder:text-ellevee-text-secondary/60"
             placeholder="Ex: 5.000 mensagens incluídas/mês&#10;OpenAI GPT-4o Mini nativo&#10;Kanban de Atendimento"
           />
         </div>
 
-        <DialogFooter className="pt-2 border-t border-ellevee-stone/40">
+        <DialogFooter className="pt-2 border-t border-ellevee-border">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onClose}
             disabled={isSaving}
-            className="text-xs"
+            className="text-xs border-ellevee-border text-ellevee-deep-ink"
           >
             Cancelar
           </Button>
@@ -355,7 +355,7 @@ export default function PlanEditDialog({
             type="submit"
             size="sm"
             disabled={isSaving}
-            className="text-xs bg-ellevee-ink hover:bg-black text-white px-5"
+            className="text-xs bg-ellevee-gradient hover:opacity-95 text-white px-5 rounded-lg shadow-sm font-semibold"
           >
             {isSaving ? "Salvando alterações..." : "Salvar Parâmetros"}
           </Button>

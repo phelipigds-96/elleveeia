@@ -356,10 +356,10 @@ export default function InstancesClientView({ initialData }: Props) {
   return (
     <div className="space-y-8 pb-16">
       {/* CABEÇALHO */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-ellevee-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-2xl font-bold tracking-tight text-gray-900">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-ellevee-deep-ink">
               Instâncias WhatsApp (Evolution API)
             </h1>
             <span
@@ -379,7 +379,7 @@ export default function InstancesClientView({ initialData }: Props) {
                 : 'Offline / Não Conectado'}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-ellevee-text-secondary mt-1">
             Gerencie centralmente a conexão de gateway e instâncias de WhatsApp para todas as empresas da Ellevee. O cliente final só precisa escanear o QR Code.
           </p>
         </div>
@@ -387,23 +387,23 @@ export default function InstancesClientView({ initialData }: Props) {
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-2xs self-start sm:self-auto"
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-ellevee-deep-ink bg-white border border-ellevee-border rounded-lg hover:bg-ellevee-warm-ivory/50 transition-colors shadow-2xs self-start sm:self-auto"
         >
-          <RefreshCw className="h-3.5 w-3.5 text-gray-500" />
+          <RefreshCw className="h-3.5 w-3.5 text-ellevee-text-secondary" />
           Atualizar Dados
         </button>
       </div>
 
       {/* CARD 1: SERVIDOR EVOLUTION API GLOBAL */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="bg-white rounded-xl border border-ellevee-border shadow-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-ellevee-border bg-[#F8F8F6] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#005d4b]/10 text-[#005d4b] rounded-xl">
+            <div className="p-2 bg-purple-500/10 text-purple-700 border border-purple-500/20 rounded-xl">
               <Server className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Servidor Gateway Global</h2>
-              <p className="text-xs text-gray-500">
+              <h2 className="text-sm font-bold text-ellevee-deep-ink font-display">Servidor Gateway Global</h2>
+              <p className="text-xs text-ellevee-text-secondary">
                 Endereço mestre e chave de autenticação utilizados por padrão para todos os clientes.
               </p>
             </div>
@@ -414,12 +414,12 @@ export default function InstancesClientView({ initialData }: Props) {
               type="button"
               disabled={isTestingGlobal}
               onClick={handleTestGlobal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-ellevee-deep-ink bg-white border border-ellevee-border rounded-lg hover:bg-ellevee-warm-ivory/50 transition-colors disabled:opacity-50"
             >
               {isTestingGlobal ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Globe className="h-3.5 w-3.5 text-gray-500" />
+                <Globe className="h-3.5 w-3.5 text-ellevee-text-secondary" />
               )}
               Testar Conexão
             </button>
@@ -429,50 +429,50 @@ export default function InstancesClientView({ initialData }: Props) {
         <form onSubmit={handleSaveGlobal} className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                URL da Evolution API <span className="text-red-500">*</span>
+              <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
+                URL da Evolution API <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Globe className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Globe className="h-4 w-4 text-ellevee-text-secondary absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="url"
                   required
                   value={globalUrl}
                   onChange={(e) => setGlobalUrl(e.target.value)}
                   placeholder="https://evolution.seuservidor.com"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-ellevee-border rounded-lg text-xs sm:text-sm text-ellevee-deep-ink placeholder:text-ellevee-text-secondary/60 focus:outline-none focus:ring-1 focus:ring-ellevee-blue focus:border-ellevee-blue"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                API Key Global (AUTHENTICATION_API_KEY) <span className="text-red-500">*</span>
+              <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
+                API Key Global (AUTHENTICATION_API_KEY) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Key className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Key className="h-4 w-4 text-ellevee-text-secondary absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   required
                   value={globalKey}
                   onChange={(e) => setGlobalKey(e.target.value)}
                   placeholder="Chave mestre da Evolution API"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-ellevee-border rounded-lg text-xs sm:text-sm text-ellevee-deep-ink placeholder:text-ellevee-text-secondary/60 focus:outline-none focus:ring-1 focus:ring-ellevee-blue focus:border-ellevee-blue"
                 />
               </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
+            <p className="text-[11px] text-ellevee-text-secondary flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              Webhook padrão de mensagens: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono">/api/webhooks/messages</code>
+              Webhook padrão de mensagens: <code className="bg-ellevee-warm-ivory border border-ellevee-border px-1 py-0.5 rounded font-mono">/api/webhooks/messages</code>
             </p>
 
             <button
               type="submit"
               disabled={isSavingGlobal || !globalUrl.trim() || !globalKey.trim()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#005d4b] hover:bg-[#004738] text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-ellevee-gradient hover:opacity-95 text-white text-xs font-semibold rounded-lg transition-opacity shadow-sm disabled:opacity-50"
             >
               {isSavingGlobal ? (
                 <>
@@ -495,10 +495,10 @@ export default function InstancesClientView({ initialData }: Props) {
         {/* Barra de Filtros e Contadores */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-gray-900">
+            <h2 className="text-base font-bold text-ellevee-deep-ink font-display">
               Instâncias por Empresa
             </h2>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-ellevee-text-secondary">
               ({filteredCompanies.length} de {totalCompanies} empresas)
             </span>
           </div>
@@ -508,10 +508,10 @@ export default function InstancesClientView({ initialData }: Props) {
             <button
               type="button"
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                 statusFilter === 'all'
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  ? 'bg-ellevee-deep-ink text-white border-ellevee-deep-ink shadow-2xs'
+                  : 'bg-white text-ellevee-text-secondary border-ellevee-border hover:bg-ellevee-warm-ivory/60'
               }`}
             >
               Todas: {totalCompanies}
@@ -519,10 +519,10 @@ export default function InstancesClientView({ initialData }: Props) {
             <button
               type="button"
               onClick={() => setStatusFilter('open')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                 statusFilter === 'open'
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                  : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50/60'
               }`}
             >
               🟢 Conectadas: {totalOpen}
@@ -530,10 +530,10 @@ export default function InstancesClientView({ initialData }: Props) {
             <button
               type="button"
               onClick={() => setStatusFilter('disconnected')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                 statusFilter === 'disconnected'
-                  ? 'bg-red-600 text-white border-red-600'
-                  : 'bg-white text-red-700 border-red-200 hover:bg-red-50'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                  : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50/60'
               }`}
             >
               🔴 Desconectadas: {totalDisconnected}
@@ -541,10 +541,10 @@ export default function InstancesClientView({ initialData }: Props) {
             <button
               type="button"
               onClick={() => setStatusFilter('unassigned')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                 statusFilter === 'unassigned'
-                  ? 'bg-amber-600 text-white border-amber-600'
-                  : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                  : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50/60'
               }`}
             >
               ⚪ Sem Instância: {totalUnassigned}
@@ -554,22 +554,22 @@ export default function InstancesClientView({ initialData }: Props) {
 
         {/* Input de Busca */}
         <div className="relative">
-          <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="h-4 w-4 text-ellevee-text-secondary/70 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por nome da empresa, slug ou nome da instância..."
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b] shadow-2xs"
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-ellevee-border rounded-xl text-xs sm:text-sm text-ellevee-deep-ink placeholder:text-ellevee-text-secondary/60 focus:outline-none focus:ring-1 focus:ring-ellevee-blue focus:border-ellevee-blue shadow-2xs"
           />
         </div>
 
         {/* TABELA DE INSTÂNCIAS */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-ellevee-border shadow-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50/70 text-gray-600 uppercase font-semibold text-[11px] tracking-wider">
+                <tr className="border-b border-ellevee-border bg-[#F8F8F6] text-ellevee-text-secondary uppercase font-semibold text-[11px] tracking-wider">
                   <th className="px-5 py-3.5">Empresa</th>
                   <th className="px-4 py-3.5">Instância Evolution</th>
                   <th className="px-4 py-3.5">Status WhatsApp</th>
@@ -577,10 +577,10 @@ export default function InstancesClientView({ initialData }: Props) {
                   <th className="px-5 py-3.5 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-ellevee-border/60">
                 {filteredCompanies.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-10 text-center text-gray-500">
+                    <td colSpan={5} className="px-5 py-10 text-center text-ellevee-text-secondary">
                       Nenhuma empresa encontrada com os filtros aplicados.
                     </td>
                   </tr>
@@ -589,22 +589,22 @@ export default function InstancesClientView({ initialData }: Props) {
                     const isLoadingThis = actionLoadingId === comp.companyId
 
                     return (
-                      <tr key={comp.companyId} className="hover:bg-gray-50/60 transition-colors">
+                      <tr key={comp.companyId} className="hover:bg-ellevee-warm-ivory/40 transition-colors">
                         {/* Empresa */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 font-bold text-xs shrink-0">
+                            <div className="h-8 w-8 rounded-lg bg-ellevee-warm-ivory border border-ellevee-border flex items-center justify-center text-ellevee-deep-ink font-bold text-xs shrink-0 font-display">
                               {comp.companyName.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-gray-900 text-sm truncate">
+                              <p className="font-semibold text-ellevee-deep-ink text-sm truncate font-display">
                                 {comp.companyName}
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="font-mono text-[10px] text-gray-400 truncate max-w-[140px]">
+                                <span className="font-mono text-[10px] text-ellevee-text-secondary truncate max-w-[140px]">
                                   {comp.companySlug}
                                 </span>
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-ellevee-warm-ivory text-ellevee-deep-ink border border-ellevee-border">
                                   {comp.companyPlan}
                                 </span>
                               </div>
@@ -616,7 +616,7 @@ export default function InstancesClientView({ initialData }: Props) {
                         <td className="px-4 py-4">
                           {comp.instanceName ? (
                             <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium bg-[#005d4b]/10 text-[#005d4b] border border-[#005d4b]/20">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium bg-ellevee-warm-ivory text-ellevee-deep-ink border border-ellevee-border">
                                 {comp.instanceName}
                               </span>
                               {comp.isDedicatedServer && (
@@ -626,7 +626,7 @@ export default function InstancesClientView({ initialData }: Props) {
                               )}
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-ellevee-warm-ivory text-ellevee-text-secondary border border-ellevee-border">
                               Não Vinculada
                             </span>
                           )}
@@ -635,27 +635,27 @@ export default function InstancesClientView({ initialData }: Props) {
                         {/* Status */}
                         <td className="px-4 py-4">
                           {comp.status === 'open' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                               Conectado
                             </span>
                           ) : comp.status === 'connecting' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                               <span className="h-2 w-2 rounded-full bg-amber-500" />
                               Aguardando QR
                             </span>
                           ) : comp.status === 'not_created' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-800 border border-purple-200" title="Instância mapeada no banco mas não existe no servidor Evolution">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200" title="Instância mapeada no banco mas não existe no servidor Evolution">
                               <span className="h-2 w-2 rounded-full bg-purple-500" />
                               Não Criada no Servidor
                             </span>
                           ) : comp.status === 'unassigned' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-ellevee-warm-ivory text-ellevee-text-secondary border border-ellevee-border">
                               Sem Instância
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200">
-                              <span className="h-2 w-2 rounded-full bg-red-500" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                              <span className="h-2 w-2 rounded-full bg-rose-500" />
                               Desconectado
                             </span>
                           )}
@@ -664,17 +664,17 @@ export default function InstancesClientView({ initialData }: Props) {
                         {/* Número Conectado */}
                         <td className="px-4 py-4">
                           {comp.phoneNumber ? (
-                            <div className="flex items-center gap-1.5 text-gray-900 font-medium">
+                            <div className="flex items-center gap-1.5 text-ellevee-deep-ink font-medium">
                               <Smartphone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                              <span>+{comp.phoneNumber}</span>
+                              <span className="font-mono text-xs">+{comp.phoneNumber}</span>
                               {comp.profileName && (
-                                <span className="text-gray-400 text-[11px] truncate max-w-[120px]">
+                                <span className="text-ellevee-text-secondary text-[11px] truncate max-w-[120px]">
                                   ({comp.profileName})
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-xs">—</span>
+                            <span className="text-ellevee-text-secondary/60 text-xs">—</span>
                           )}
                         </td>
 
@@ -687,7 +687,7 @@ export default function InstancesClientView({ initialData }: Props) {
                                 type="button"
                                 onClick={() => handleOpenQrModal(comp)}
                                 disabled={isLoadingThis}
-                                className="p-1.5 text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200"
+                                className="p-1.5 text-ellevee-text-secondary hover:text-ellevee-deep-ink hover:bg-ellevee-warm-ivory rounded-lg transition-colors border border-transparent hover:border-ellevee-border"
                                 title="Ver QR Code / Conectar"
                               >
                                 <QrCode className="h-4 w-4" />
@@ -699,7 +699,7 @@ export default function InstancesClientView({ initialData }: Props) {
                               type="button"
                               onClick={() => handleOpenEditModal(comp)}
                               disabled={isLoadingThis}
-                              className="px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+                              className="px-2.5 py-1.5 text-xs font-semibold text-ellevee-deep-ink bg-white hover:bg-ellevee-warm-ivory/60 border border-ellevee-border rounded-lg transition-colors shadow-2xs"
                               title="Configurar Instância da Empresa"
                             >
                               {comp.instanceName ? 'Editar' : 'Vincular / Criar'}
@@ -711,7 +711,7 @@ export default function InstancesClientView({ initialData }: Props) {
                                 type="button"
                                 onClick={() => handleRestart(comp)}
                                 disabled={isLoadingThis}
-                                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-1.5 text-ellevee-text-secondary hover:text-ellevee-deep-ink hover:bg-ellevee-warm-ivory rounded-lg transition-colors border border-transparent hover:border-ellevee-border"
                                 title="Reiniciar Socket da Instância"
                               >
                                 {isLoadingThis ? (
@@ -728,7 +728,7 @@ export default function InstancesClientView({ initialData }: Props) {
                                 type="button"
                                 onClick={() => handleDisconnect(comp)}
                                 disabled={isLoadingThis}
-                                className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
                                 title="Desconectar Sessão do WhatsApp"
                               >
                                 <PowerOff className="h-4 w-4" />
@@ -741,7 +741,7 @@ export default function InstancesClientView({ initialData }: Props) {
                                 type="button"
                                 onClick={() => handleUnlink(comp)}
                                 disabled={isLoadingThis}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-ellevee-text-secondary hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
                                 title="Desvincular Instância desta Empresa"
                               >
                                 <Unlink className="h-4 w-4" />
@@ -762,30 +762,30 @@ export default function InstancesClientView({ initialData }: Props) {
       {/* MODAL 1: VINCULAR OU CRIAR INSTÂNCIA */}
       {editingCompany && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-[#202520]/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => !isSubmittingModal && setEditingCompany(null)}
         >
           <div
-            className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-gray-200 overflow-hidden"
+            className="bg-white rounded-xl max-w-lg w-full shadow-modal border border-ellevee-border overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#005d4b] text-white">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-ellevee-border bg-[#202520] text-white">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-white/10 rounded-xl">
-                  <Building2 className="h-5 w-5" />
+                <div className="p-2 bg-white/10 rounded-lg border border-white/10">
+                  <Building2 className="h-5 w-5 text-ellevee-cyan" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-white font-display">
                     {editingCompany.instanceName ? 'Editar Instância' : 'Vincular / Criar Instância'}
                   </h3>
-                  <p className="text-xs text-white/80">{editingCompany.companyName}</p>
+                  <p className="text-xs text-white/70 font-sans">{editingCompany.companyName}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => !isSubmittingModal && setEditingCompany(null)}
-                className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -794,8 +794,8 @@ export default function InstancesClientView({ initialData }: Props) {
             {/* Form */}
             <form onSubmit={handleSubmitInstanceModal} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Nome da Instância na Evolution API <span className="text-red-500">*</span>
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
+                  Nome da Instância na Evolution API <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -803,9 +803,9 @@ export default function InstancesClientView({ initialData }: Props) {
                   value={targetInstanceName}
                   onChange={(e) => setTargetInstanceName(e.target.value)}
                   placeholder="ex: cliente-clinica-sorriso"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 font-mono focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
+                  className="w-full px-3 py-2 bg-white border border-ellevee-border rounded-lg text-xs sm:text-sm text-ellevee-deep-ink placeholder:text-ellevee-text-secondary/60 font-mono focus:outline-none focus:ring-1 focus:ring-ellevee-blue focus:border-ellevee-blue"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-[11px] text-ellevee-text-secondary mt-1">
                   Identificador único da instância no servidor Evolution. Sem espaços ou caracteres especiais.
                 </p>
               </div>
@@ -817,28 +817,28 @@ export default function InstancesClientView({ initialData }: Props) {
                     type="checkbox"
                     checked={createOnServerImmediately}
                     onChange={(e) => setCreateOnServerImmediately(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded text-[#005d4b] focus:ring-[#005d4b] border-gray-300"
+                    className="mt-0.5 h-4 w-4 rounded text-ellevee-deep-ink focus:ring-ellevee-blue border-ellevee-border"
                   />
                   <div className="text-xs">
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-semibold text-ellevee-deep-ink">
                       Provisionar fisicamente no servidor Evolution agora
                     </span>
-                    <p className="text-gray-600 mt-0.5">
-                      Executa <code className="font-mono bg-white px-1 py-0.2 rounded border">POST /instance/create</code> com o webhook padrão apontado para a Ellevee IA.
+                    <p className="text-ellevee-text-secondary mt-0.5">
+                      Executa <code className="font-mono bg-white px-1 py-0.2 rounded border border-emerald-200">POST /instance/create</code> com o webhook padrão apontado para a Ellevee IA.
                     </p>
                   </div>
                 </label>
               </div>
 
               {/* Opção Avançada: Servidor Dedicado */}
-              <div className="pt-2 border-t border-gray-100">
-                <details className="text-xs text-gray-600">
-                  <summary className="font-semibold text-gray-700 cursor-pointer hover:text-gray-900 select-none">
+              <div className="pt-2 border-t border-ellevee-border">
+                <details className="text-xs text-ellevee-text-secondary">
+                  <summary className="font-semibold text-ellevee-deep-ink cursor-pointer hover:text-black select-none">
                     Configuração Avançada (Servidor Dedicado Opcional)
                   </summary>
                   <div className="pt-3 space-y-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      <label className="block text-[11px] font-semibold text-ellevee-deep-ink mb-1">
                         URL Customizada (Deixe em branco para usar o Gateway Global)
                       </label>
                       <input
@@ -846,7 +846,7 @@ export default function InstancesClientView({ initialData }: Props) {
                         value={customApiUrl}
                         onChange={(e) => setCustomApiUrl(e.target.value)}
                         placeholder="https://evolution-dedicado.cliente.com"
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-[#005d4b]"
+                        className="w-full px-3 py-2 bg-white border border-ellevee-border rounded-lg text-xs text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue focus:border-ellevee-blue"
                       />
                     </div>
                   </div>
@@ -854,19 +854,19 @@ export default function InstancesClientView({ initialData }: Props) {
               </div>
 
               {/* Botões */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-ellevee-border">
                 <button
                   type="button"
                   disabled={isSubmittingModal}
                   onClick={() => setEditingCompany(null)}
-                  className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-ellevee-deep-ink hover:bg-ellevee-warm-ivory/60 border border-ellevee-border rounded-lg transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingModal || !targetInstanceName.trim()}
-                  className="px-5 py-2 text-xs font-semibold bg-[#005d4b] hover:bg-[#004738] text-white rounded-lg transition-colors flex items-center gap-2 shadow-2xs disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-semibold bg-ellevee-gradient hover:opacity-95 text-white rounded-lg transition-opacity flex items-center gap-2 shadow-sm disabled:opacity-50"
                 >
                   {isSubmittingModal ? (
                     <>
@@ -889,53 +889,53 @@ export default function InstancesClientView({ initialData }: Props) {
       {/* MODAL 2: QR CODE SUPERADMIN */}
       {qrModalCompany && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-[#202520]/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setQrModalCompany(null)}
         >
           <div
-            className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-gray-200 overflow-hidden"
+            className="bg-white rounded-xl max-w-sm w-full shadow-modal border border-ellevee-border overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-[#005d4b] text-white">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-ellevee-border bg-[#202520] text-white">
               <div className="flex items-center gap-2">
-                <QrCode className="h-5 w-5" />
+                <QrCode className="h-5 w-5 text-ellevee-cyan" />
                 <div>
-                  <h3 className="text-sm font-bold text-white">QR Code de Conexão</h3>
-                  <p className="text-[11px] text-white/80">{qrModalCompany.companyName}</p>
+                  <h3 className="text-sm font-bold text-white font-display">QR Code de Conexão</h3>
+                  <p className="text-[11px] text-white/70">{qrModalCompany.companyName}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setQrModalCompany(null)}
-                className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/10"
+                className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="p-6 flex flex-col items-center text-center space-y-4">
-              <div className="relative p-2 bg-white rounded-xl border-2 border-emerald-500/20 shadow-md flex items-center justify-center min-h-[220px] min-w-[220px]">
+              <div className="relative p-3 bg-white rounded-xl border border-ellevee-border shadow-card flex items-center justify-center min-h-[220px] min-w-[220px]">
                 {isLoadingQr ? (
-                  <div className="flex flex-col items-center gap-2 text-gray-400">
-                    <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+                  <div className="flex flex-col items-center gap-2 text-ellevee-text-secondary">
+                    <Loader2 className="h-7 w-7 animate-spin text-ellevee-purple" />
                     <span className="text-xs">Carregando QR Code...</span>
                   </div>
                 ) : qrCodeBase64 ? (
                   <img
                     src={qrCodeBase64}
                     alt="QR Code WhatsApp"
-                    className="h-52 w-52 object-contain rounded"
+                    className="h-52 w-52 object-contain rounded-lg"
                   />
                 ) : (
                   <div className="p-3 text-center space-y-2">
                     <AlertCircle className="h-6 w-6 text-amber-500 mx-auto" />
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-ellevee-text-secondary">
                       {qrError || 'Não foi possível carregar o QR Code. A instância pode já estar conectada ou precisando ser reiniciada.'}
                     </p>
                     <button
                       type="button"
                       onClick={() => handleOpenQrModal(qrModalCompany)}
-                      className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg font-medium hover:bg-emerald-700"
+                      className="px-3.5 py-1.5 bg-ellevee-gradient text-white text-xs rounded-lg font-semibold hover:opacity-95 shadow-sm"
                     >
                       Tentar Novamente
                     </button>
@@ -943,15 +943,15 @@ export default function InstancesClientView({ initialData }: Props) {
                 )}
               </div>
 
-              <p className="text-[11px] text-gray-500">
-                Instância: <code className="font-mono font-semibold text-gray-800">{qrModalCompany.instanceName}</code>
+              <p className="text-[11px] text-ellevee-text-secondary">
+                Instância: <code className="font-mono font-semibold text-ellevee-deep-ink bg-ellevee-warm-ivory px-1.5 py-0.5 rounded border border-ellevee-border">{qrModalCompany.instanceName}</code>
               </p>
 
               <button
                 type="button"
                 onClick={() => handleOpenQrModal(qrModalCompany)}
                 disabled={isLoadingQr}
-                className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-medium hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs text-ellevee-blue hover:text-ellevee-purple font-semibold transition-colors"
               >
                 <RefreshCw className="h-3 w-3" />
                 Atualizar QR Code

@@ -98,13 +98,13 @@ export default function CompanyLimitsDialog({
     <Dialog open={open} onClose={onClose} className="max-w-lg">
       <DialogHeader>
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center">
-            <Sliders className="h-4 w-4" />
+          <div className="h-8 w-8 rounded-lg bg-ellevee-warm-ivory border border-ellevee-border text-ellevee-deep-ink flex items-center justify-center">
+            <Sliders className="h-4 w-4 text-ellevee-cyan" />
           </div>
           <div>
-            <DialogTitle>Ajustar Limites de Infraestrutura</DialogTitle>
-            <DialogDescription>
-              Configuração fina de cotas para <span className="font-semibold text-ellevee-ink">{company.name}</span>
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">Ajustar Limites de Infraestrutura</DialogTitle>
+            <DialogDescription className="text-xs text-ellevee-text-secondary">
+              Configuração fina de cotas para <span className="font-semibold text-ellevee-deep-ink">{company.name}</span>
             </DialogDescription>
           </div>
         </div>
@@ -112,13 +112,13 @@ export default function CompanyLimitsDialog({
 
       <div className="space-y-4 py-4">
         {/* Limite de Mensagens */}
-        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
+        <div className="rounded-xl border border-ellevee-border p-3.5 bg-[#F8F8F6] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
-              <MessageSquare className="h-3.5 w-3.5 text-ellevee-sage" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-deep-ink">
+              <MessageSquare className="h-3.5 w-3.5 text-ellevee-text-secondary" />
               <span>Limite Mensal de Mensagens</span>
             </div>
-            <span className="text-xs font-mono text-ellevee-sage">
+            <span className="text-xs font-mono text-ellevee-text-secondary">
               Consumo: {company.messagesUsed.toLocaleString()} msgs
             </span>
           </div>
@@ -126,22 +126,22 @@ export default function CompanyLimitsDialog({
             type="number"
             value={messagesLimit}
             onChange={(e) => setMessagesLimit(Number(e.target.value))}
-            className="bg-white font-mono text-xs"
+            className="bg-white font-mono text-xs border-ellevee-border text-ellevee-deep-ink"
             disabled={isSaving}
           />
-          <p className="text-[11px] text-ellevee-sage">
+          <p className="text-[11px] text-ellevee-text-secondary">
             Total de mensagens que o motor de atendimento (humano e IA) pode transacionar por mês.
           </p>
         </div>
 
         {/* Limite de Tokens */}
-        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
+        <div className="rounded-xl border border-ellevee-border p-3.5 bg-[#F8F8F6] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
-              <Zap className="h-3.5 w-3.5 text-ellevee-sage" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-deep-ink">
+              <Zap className="h-3.5 w-3.5 text-ellevee-text-secondary" />
               <span>Limite de Tokens de IA (Mensal)</span>
             </div>
-            <span className="text-xs font-mono text-ellevee-sage">
+            <span className="text-xs font-mono text-ellevee-text-secondary">
               Consumo: {company.tokensUsed.toLocaleString()} tokens
             </span>
           </div>
@@ -149,22 +149,22 @@ export default function CompanyLimitsDialog({
             type="number"
             value={tokensLimit}
             onChange={(e) => setTokensLimit(Number(e.target.value))}
-            className="bg-white font-mono text-xs"
+            className="bg-white font-mono text-xs border-ellevee-border text-ellevee-deep-ink"
             disabled={isSaving}
           />
-          <p className="text-[11px] text-ellevee-sage">
+          <p className="text-[11px] text-ellevee-text-secondary">
             Cota de tokens consumidos em chamadas ao Agent Engine e inferência de modelos.
           </p>
         </div>
 
         {/* Quantidade de Agentes */}
-        <div className="rounded-lg border border-ellevee-stone p-3.5 bg-[#FBFBFA] space-y-2">
+        <div className="rounded-xl border border-ellevee-border p-3.5 bg-[#F8F8F6] space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-ink">
-              <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-deep-ink">
+              <Bot className="h-3.5 w-3.5 text-ellevee-text-secondary" />
               <span>Máximo de Agentes Ativos Simultâneos</span>
             </div>
-            <span className="text-xs font-mono text-ellevee-sage">
+            <span className="text-xs font-mono text-ellevee-text-secondary">
               Ativos: {company.agentsCount} / {company.maxAgents}
             </span>
           </div>
@@ -172,46 +172,46 @@ export default function CompanyLimitsDialog({
             type="number"
             value={maxAgents}
             onChange={(e) => setMaxAgents(Number(e.target.value))}
-            className="bg-white font-mono text-xs"
+            className="bg-white font-mono text-xs border-ellevee-border text-ellevee-deep-ink"
             disabled={isSaving}
           />
-          <p className="text-[11px] text-ellevee-sage">
+          <p className="text-[11px] text-ellevee-text-secondary">
             Número de bots especializados ou instâncias simultâneas no catálogo do tenant.
           </p>
         </div>
 
         {/* Provedores Permitidos */}
         <div className="pt-1">
-          <label className="block text-xs font-semibold text-ellevee-ink mb-2">
+          <label className="block text-xs font-semibold text-ellevee-deep-ink mb-2">
             Provedores de LLM Permitidos para esta Empresa:
           </label>
           <div className="grid grid-cols-3 gap-2">
-            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
+            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/50 cursor-pointer text-xs font-medium text-ellevee-deep-ink">
               <input
                 type="checkbox"
                 checked={allowOpenAI}
                 onChange={(e) => setAllowOpenAI(e.target.checked)}
-                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                className="rounded border-ellevee-border text-ellevee-deep-ink focus:ring-ellevee-blue"
                 disabled={isSaving}
               />
               OpenAI
             </label>
-            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
+            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/50 cursor-pointer text-xs font-medium text-ellevee-deep-ink">
               <input
                 type="checkbox"
                 checked={allowGemini}
                 onChange={(e) => setAllowGemini(e.target.checked)}
-                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                className="rounded border-ellevee-border text-ellevee-deep-ink focus:ring-ellevee-blue"
                 disabled={isSaving}
               />
               Google Gemini
             </label>
-            <label className="flex items-center gap-2 p-2.5 rounded-md border border-ellevee-stone bg-white hover:bg-[#F8F8F5] cursor-pointer text-xs font-medium text-ellevee-ink">
+            <label className="flex items-center gap-2 p-2.5 rounded-lg border border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/50 cursor-pointer text-xs font-medium text-ellevee-deep-ink">
               <input
                 type="checkbox"
                 checked={allowAnthropic}
                 onChange={(e) => setAllowAnthropic(e.target.checked)}
-                className="rounded border-ellevee-stone text-ellevee-ink focus:ring-ellevee-ink"
+                className="rounded border-ellevee-border text-ellevee-deep-ink focus:ring-ellevee-blue"
                 disabled={isSaving}
               />
               Anthropic
@@ -221,10 +221,10 @@ export default function CompanyLimitsDialog({
       </div>
 
       <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={isSaving}>
+        <Button variant="outline" onClick={onClose} disabled={isSaving} className="border-ellevee-border text-ellevee-deep-ink">
           Cancelar
         </Button>
-        <Button variant="default" onClick={handleSave} disabled={isSaving}>
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Salvando..." : "Salvar Alterações de Limites"}
         </Button>
       </DialogFooter>

@@ -112,13 +112,13 @@ export default function CompanyPlanDialog({
     <Dialog open={open} onClose={onClose} className="max-w-xl">
       <DialogHeader>
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center">
-            <Award className="h-4 w-4" />
+          <div className="h-8 w-8 rounded-lg bg-ellevee-warm-ivory border border-ellevee-border text-ellevee-deep-ink flex items-center justify-center">
+            <Award className="h-4 w-4 text-ellevee-purple" />
           </div>
           <div>
-            <DialogTitle>Alterar Plano Contratado</DialogTitle>
-            <DialogDescription>
-              Selecione o tier de assinatura para <span className="font-semibold text-ellevee-ink">{company.name}</span>
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">Alterar Plano Contratado</DialogTitle>
+            <DialogDescription className="text-xs text-ellevee-text-secondary">
+              Selecione o tier de assinatura para <span className="font-semibold text-ellevee-deep-ink">{company.name}</span>
             </DialogDescription>
           </div>
         </div>
@@ -131,22 +131,22 @@ export default function CompanyPlanDialog({
             <div
               key={p.name}
               onClick={() => setSelectedPlan(p.name as any)}
-              className={`p-4 rounded-lg border transition-all cursor-pointer relative ${
+              className={`p-4 rounded-xl border transition-all cursor-pointer relative ${
                 isSelected
-                  ? "border-ellevee-ink bg-[#FBFBFA] shadow-sm ring-1 ring-ellevee-ink/10"
-                  : "border-ellevee-stone hover:border-ellevee-ink/40 bg-white"
+                  ? "border-ellevee-purple bg-ellevee-warm-ivory/40 shadow-card ring-1 ring-ellevee-purple/30"
+                  : "border-ellevee-border hover:border-ellevee-purple/40 bg-white"
               }`}
             >
               {isSelected && (
-                <div className="absolute top-3.5 right-3.5 h-4 w-4 rounded-full bg-ellevee-ink text-white flex items-center justify-center">
+                <div className="absolute top-3.5 right-3.5 h-4 w-4 rounded-full bg-ellevee-purple text-white flex items-center justify-center">
                   <Check className="h-2.5 w-2.5 stroke-[3]" />
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-sm text-ellevee-ink">{p.name}</span>
+                <span className="font-display font-bold text-sm text-ellevee-deep-ink">{p.name}</span>
                 <Badge variant={p.badge}>{p.price}</Badge>
               </div>
-              <ul className="mt-3 space-y-1 text-xs text-ellevee-sage font-mono">
+              <ul className="mt-3 space-y-1 text-xs text-ellevee-text-secondary font-mono">
                 <li>• {p.msgs}</li>
                 <li>• {p.tokens}</li>
                 <li>• {p.agents}</li>
@@ -157,10 +157,10 @@ export default function CompanyPlanDialog({
       </div>
 
       <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={isSaving}>
+        <Button variant="outline" onClick={onClose} disabled={isSaving} className="border-ellevee-border text-ellevee-deep-ink">
           Cancelar
         </Button>
-        <Button variant="default" onClick={handleSave} disabled={isSaving}>
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Atualizando..." : "Confirmar Alteração de Plano"}
         </Button>
       </DialogFooter>

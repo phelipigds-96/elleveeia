@@ -121,15 +121,19 @@ export default function CompaniesTable({
   const getPlanBadge = (plan: CompanyMock["plan"]) => {
     switch (plan) {
       case "Trial":
-        return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">Trial</Badge>
+        return <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-medium border-ellevee-border bg-ellevee-warm-ivory text-ellevee-text-secondary">Trial</Badge>
       case "Starter":
-        return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">Starter</Badge>
+        return <Badge variant="success" className="text-[10px] px-2 py-0.5 font-medium">Starter</Badge>
       case "Pro":
-        return <Badge variant="default" className="text-[10px] px-1.5 py-0 font-medium">Pro</Badge>
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ellevee-gradient text-white shadow-2xs">
+            Pro
+          </span>
+        )
       case "Enterprise":
         return (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-ellevee-ink text-white">
-            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent" />
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ellevee-deep-ink text-white shadow-2xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#16BCE0]" />
             Enterprise
           </span>
         )
@@ -140,19 +144,19 @@ export default function CompaniesTable({
     switch (provider) {
       case "openai":
         return (
-          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
+          <span className="text-[10px] font-mono font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block text-center">
             OpenAI
           </span>
         )
       case "gemini":
         return (
-          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
+          <span className="text-[10px] font-mono font-medium text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 inline-block text-center">
             Gemini
           </span>
         )
       case "hybrid":
         return (
-          <span className="text-[10px] font-mono font-medium text-ellevee-ink bg-[#F3F2ED] px-1.5 py-0.5 rounded border border-ellevee-stone inline-block text-center">
+          <span className="text-[10px] font-mono font-medium text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-block text-center">
             Híbrido
           </span>
         )
@@ -170,14 +174,14 @@ export default function CompaniesTable({
   return (
     <div className="space-y-4">
       {/* Barra de Filtros e Busca */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-ellevee-stone shadow-sm">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-ellevee-border shadow-card">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-sage" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ellevee-text-secondary" />
           <Input
             placeholder="Buscar por nome, slug ou CNPJ..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-8.5 text-xs bg-[#FBFBFA]"
+            className="pl-9 h-9 text-xs bg-white border-ellevee-border focus:ring-ellevee-blue"
           />
         </div>
 
@@ -186,7 +190,7 @@ export default function CompaniesTable({
           <select
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
-            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-9 rounded-lg border border-ellevee-border bg-white px-2.5 text-xs font-medium text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue"
           >
             <option value="ALL">Todos os Planos</option>
             <option value="Trial">Trial</option>
@@ -199,7 +203,7 @@ export default function CompaniesTable({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-9 rounded-lg border border-ellevee-border bg-white px-2.5 text-xs font-medium text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue"
           >
             <option value="ALL">Todos os Status</option>
             <option value="Ativo">Ativas</option>
@@ -210,7 +214,7 @@ export default function CompaniesTable({
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
-            className="h-8.5 rounded-md border border-ellevee-stone bg-[#F8F8F5] px-2.5 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+            className="h-9 rounded-lg border border-ellevee-border bg-white px-2.5 text-xs font-medium text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue"
           >
             <option value="ALL">Todos os Provedores</option>
             <option value="openai">OpenAI</option>
@@ -224,7 +228,7 @@ export default function CompaniesTable({
               onClick={handleClearFilters}
               variant="outline"
               size="sm"
-              className="h-8.5 px-2.5 text-xs text-ellevee-sage hover:text-ellevee-ink border-ellevee-stone gap-1"
+              className="h-9 px-2.5 text-xs text-ellevee-text-secondary hover:text-ellevee-deep-ink border-ellevee-border gap-1"
             >
               <X className="h-3.5 w-3.5" />
               <span>Limpar filtros</span>
@@ -234,25 +238,25 @@ export default function CompaniesTable({
       </div>
 
       {/* Data Table de Empresas — Estrutura Compacta e Sem Rolagem Horizontal em 1366px/1440px */}
-      <div className="rounded-lg border border-ellevee-stone bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-ellevee-border bg-white shadow-card overflow-hidden">
         <div className="overflow-x-auto">
           <Table className="table-fixed w-full min-w-[880px]">
             <TableHeader>
-              <TableRow className="border-b border-ellevee-stone bg-[#F8F8F5]">
-                <TableHead className="w-[230px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Empresa</TableHead>
-                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Plano</TableHead>
-                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Status</TableHead>
-                <TableHead className="w-[195px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Consumo</TableHead>
-                <TableHead className="w-[80px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Agentes</TableHead>
-                <TableHead className="w-[90px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Provedor</TableHead>
-                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-sage py-2.5 px-3">Cadastro</TableHead>
-                <TableHead className="w-[45px] text-right text-xs font-semibold text-ellevee-sage py-2.5 px-3">Ações</TableHead>
+              <TableRow className="border-b border-ellevee-border bg-[#F8F8F6]">
+                <TableHead className="w-[230px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Empresa</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Plano</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Status</TableHead>
+                <TableHead className="w-[195px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Consumo</TableHead>
+                <TableHead className="w-[80px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Agentes</TableHead>
+                <TableHead className="w-[90px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Provedor</TableHead>
+                <TableHead className="w-[85px] text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Cadastro</TableHead>
+                <TableHead className="w-[45px] text-right text-xs font-semibold text-ellevee-text-secondary py-2.5 px-3">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-28 text-center text-xs text-ellevee-sage">
+                  <TableCell colSpan={8} className="h-28 text-center text-xs text-ellevee-text-secondary">
                     Nenhuma organização encontrada para os filtros selecionados.
                   </TableCell>
                 </TableRow>
@@ -262,19 +266,19 @@ export default function CompaniesTable({
                   const usageStatus = getUsageStatus(usagePercent)
 
                   return (
-                    <TableRow key={company.id} className="hover:bg-[#FBFBFA] border-b border-ellevee-stone/60">
+                    <TableRow key={company.id} className="hover:bg-ellevee-warm-ivory/40 border-b border-ellevee-border transition-colors">
                       {/* 1. Empresa: Monograma 32px + Vertical Stack */}
                       <TableCell className="py-2.5 px-3">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center font-display font-bold text-xs shrink-0">
+                          <div className="h-8 w-8 rounded-lg bg-ellevee-warm-ivory border border-ellevee-border text-ellevee-deep-ink flex items-center justify-center font-display font-bold text-xs shrink-0">
                             {company.name.slice(0, 2).toUpperCase()}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <span className="font-semibold text-xs text-ellevee-ink truncate leading-tight block">
+                            <span className="font-semibold text-xs text-ellevee-deep-ink truncate leading-tight block">
                               {company.name}
                             </span>
-                            <div className="flex items-center gap-1 text-[10px] text-ellevee-sage leading-tight mt-0.5 truncate">
-                              <span className="font-mono text-ellevee-sage/90">@{company.slug}</span>
+                            <div className="flex items-center gap-1 text-[10px] text-ellevee-text-secondary leading-tight mt-0.5 truncate">
+                              <span className="font-mono text-ellevee-text-secondary/90">@{company.slug}</span>
                               <span>•</span>
                               <span className="truncate">{company.cnpj}</span>
                             </div>
@@ -290,12 +294,12 @@ export default function CompaniesTable({
                       {/* 3. Status */}
                       <TableCell className="py-2.5 px-3">
                         {company.status === "Ativo" ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]/50">
-                            <span className="h-1.5 w-1.5 rounded-full bg-ellevee-accent ring-1 ring-ellevee-ink/10" />
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                             Ativo
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                             Suspenso
                           </span>
@@ -307,7 +311,7 @@ export default function CompaniesTable({
                         <div className="space-y-1.5">
                           {/* Linha 1: 48,5K / 50K msgs • 97% */}
                           <div className="flex items-center justify-between text-[11px] font-mono leading-none">
-                            <span className="text-ellevee-ink font-medium">
+                            <span className="text-ellevee-deep-ink font-medium">
                               {formatCompactNumber(company.messagesUsed)} / {formatCompactNumber(company.messagesLimit)} msgs
                             </span>
                             <span className={usageStatus.textColor}>
@@ -316,7 +320,7 @@ export default function CompaniesTable({
                           </div>
 
                           {/* Linha 2: Barra de Progresso com Cor Condicional */}
-                          <div className="w-full bg-[#EAE8E1] h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-[#E5E5DF] h-1.5 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${usageStatus.barColor}`}
                               style={{ width: `${Math.min(usagePercent, 100)}%` }}
@@ -324,7 +328,7 @@ export default function CompaniesTable({
                           </div>
 
                           {/* Linha 3: 3,8M / 5M tokens */}
-                          <div className="text-[10px] text-ellevee-sage font-mono leading-none">
+                          <div className="text-[10px] text-ellevee-text-secondary font-mono leading-none">
                             {formatCompactNumber(company.tokensUsed)} / {formatCompactNumber(company.tokensLimit)} tokens
                           </div>
                         </div>
@@ -332,8 +336,8 @@ export default function CompaniesTable({
 
                       {/* 5. Agentes */}
                       <TableCell className="py-2.5 px-3">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-ellevee-ink font-mono">
-                          <Bot className="h-3.5 w-3.5 text-ellevee-sage" />
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-ellevee-deep-ink font-mono">
+                          <Bot className="h-3.5 w-3.5 text-ellevee-text-secondary" />
                           <span>
                             {company.agentsCount} / {company.maxAgents}
                           </span>
@@ -347,7 +351,7 @@ export default function CompaniesTable({
 
                       {/* 7. Cadastro */}
                       <TableCell className="py-2.5 px-3">
-                        <span className="text-xs text-ellevee-sage font-mono">
+                        <span className="text-xs text-ellevee-text-secondary font-mono">
                           {formatDate(company.createdAt)}
                         </span>
                       </TableCell>
@@ -356,26 +360,26 @@ export default function CompaniesTable({
                       <TableCell className="py-2.5 px-3 text-right">
                         <DropdownMenu
                           trigger={
-                            <button className="h-7 w-7 rounded border border-ellevee-stone bg-white text-ellevee-sage hover:text-ellevee-ink hover:bg-[#F8F8F5] inline-flex items-center justify-center transition-colors">
+                            <button className="h-7 w-7 rounded-lg border border-ellevee-border bg-white text-ellevee-text-secondary hover:text-ellevee-deep-ink hover:bg-ellevee-warm-ivory inline-flex items-center justify-center transition-colors shadow-2xs">
                               <MoreVertical className="h-3.5 w-3.5" />
                             </button>
                           }
                         >
                           <DropdownMenuLabel>Ações da Empresa</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => setActiveCompanyForPlan(company)}>
-                            <Award className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            <Award className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             Editar Plano
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setActiveCompanyForLimits(company)}>
-                            <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             Ajustar Limites
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setActiveCompanyForWorkflow(company)}>
-                            <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             Configurar Funil (Kanban)
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setActiveCompanyForUsers(company)}>
-                            <Users className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                            <Users className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             Gerenciar Equipe (Atendentes)
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -383,9 +387,9 @@ export default function CompaniesTable({
                             onClick={() => handleImpersonate(company)}
                           >
                             {impersonatingId === company.id ? (
-                              <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin text-ellevee-ink" />
+                              <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin text-ellevee-deep-ink" />
                             ) : (
-                              <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-ink" />
+                              <LogIn className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             )}
                             Acessar como (Impersonate)
                           </DropdownMenuItem>
@@ -417,10 +421,10 @@ export default function CompaniesTable({
         </div>
 
         {/* Rodapé da Tabela */}
-        <div className="px-4 py-2.5 border-t border-ellevee-stone bg-[#FBFBFA] flex items-center justify-between text-xs text-ellevee-sage">
+        <div className="px-4 py-2.5 border-t border-ellevee-border bg-[#F8F8F6] flex items-center justify-between text-xs text-ellevee-text-secondary">
           <span>
-            Exibindo <strong className="text-ellevee-ink font-mono">{filtered.length}</strong> de{" "}
-            <strong className="text-ellevee-ink font-mono">{companies.length}</strong> organizações
+            Exibindo <strong className="text-ellevee-deep-ink font-mono">{filtered.length}</strong> de{" "}
+            <strong className="text-ellevee-deep-ink font-mono">{companies.length}</strong> organizações
           </span>
           <div className="flex items-center gap-4 text-[11px] font-mono">
             <span className="flex items-center gap-1.5">

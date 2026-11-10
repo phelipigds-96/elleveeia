@@ -240,10 +240,10 @@ export default function PlatformTemplatesDialog({
       <div className="w-full max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <Kanban className="h-5 w-5 text-ellevee-ink" />
-            <DialogTitle>Biblioteca de Modelos de Funil (Kanban)</DialogTitle>
+            <Kanban className="h-5 w-5 text-ellevee-purple" />
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">Biblioteca de Modelos de Funil (Kanban)</DialogTitle>
           </div>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-ellevee-text-secondary">
             Crie, edite e personalize blueprints reutilizáveis de atendimento por nicho e segmento de mercado.
           </DialogDescription>
         </DialogHeader>
@@ -251,18 +251,18 @@ export default function PlatformTemplatesDialog({
         <div className="py-4 flex-1 overflow-y-auto space-y-4 pr-1">
           {/* Header com botão Criar quando na lista */}
           {!isEditing && (
-            <div className="flex items-center justify-between pb-3 border-b border-ellevee-stone/70">
-              <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-sage">
-                <Layers className="h-4 w-4 text-ellevee-ink" />
+            <div className="flex items-center justify-between pb-3 border-b border-ellevee-border">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-text-secondary">
+                <Layers className="h-4 w-4 text-ellevee-deep-ink" />
                 <span>{templates.length} modelos disponíveis na plataforma</span>
               </div>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleStartCreate}
-                className="gap-1.5 h-8 text-xs bg-ellevee-ink text-white hover:bg-black"
+                className="gap-1.5 h-8 text-xs bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm"
               >
-                <Plus className="h-3.5 w-3.5 text-ellevee-accent" />
+                <Plus className="h-3.5 w-3.5 text-white" />
                 <span>Novo Modelo de Funil</span>
               </Button>
             </div>
@@ -270,28 +270,28 @@ export default function PlatformTemplatesDialog({
 
           {/* Estado de Carregamento */}
           {loading ? (
-            <div className="h-48 flex items-center justify-center text-xs text-ellevee-sage gap-2">
-              <Loader2 className="h-5 w-5 animate-spin text-ellevee-ink" />
+            <div className="h-48 flex items-center justify-center text-xs text-ellevee-text-secondary gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-ellevee-purple" />
               <span>Carregando biblioteca de modelos...</span>
             </div>
           ) : isEditing ? (
             /* Formulário de Criação / Edição do Modelo */
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b">
-                <span className="font-bold text-sm text-ellevee-ink">
+              <div className="flex items-center justify-between pb-2 border-b border-ellevee-border">
+                <span className="font-bold text-sm text-ellevee-deep-ink font-display">
                   {editingId ? `Editar Modelo: ${label}` : "Novo Modelo de Funil"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="text-xs text-ellevee-sage hover:text-ellevee-ink transition-colors"
+                  className="text-xs text-ellevee-text-secondary hover:text-ellevee-deep-ink transition-colors"
                 >
                   Voltar para lista
                 </button>
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                   <span>{error}</span>
                 </div>
@@ -299,7 +299,7 @@ export default function PlatformTemplatesDialog({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="text-xs font-semibold text-ellevee-ink block mb-1">
+                  <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1">
                     Nome do Modelo
                   </label>
                   <Input
@@ -312,7 +312,7 @@ export default function PlatformTemplatesDialog({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-ellevee-ink block mb-1">
+                  <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1">
                     Segmento de Mercado
                   </label>
                   <Input
@@ -326,7 +326,7 @@ export default function PlatformTemplatesDialog({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-ellevee-ink block mb-1">
+                <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1">
                   Descrição do Funil
                 </label>
                 <textarea
@@ -334,18 +334,18 @@ export default function PlatformTemplatesDialog({
                   placeholder="Ex: Funil focado em teste grátis, envio de credenciais, pagamento via Pix e renovações periódicas."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full rounded-md border border-input bg-white p-2.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ellevee-accent"
+                  className="w-full rounded-lg border border-ellevee-border bg-white p-2.5 text-xs placeholder:text-ellevee-text-secondary/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ellevee-blue text-ellevee-deep-ink"
                 />
               </div>
 
               {/* Editor de Etapas */}
-              <div className="space-y-2 pt-2 border-t">
+              <div className="space-y-2 pt-2 border-t border-ellevee-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-bold text-ellevee-ink">
+                    <span className="text-xs font-bold text-ellevee-deep-ink font-display">
                       Etapas do Kanban ({stages.length})
                     </span>
-                    <p className="text-[11px] text-ellevee-sage">
+                    <p className="text-[11px] text-ellevee-text-secondary">
                       Configure o fluxo progressivo e defina quem atende cada fase.
                     </p>
                   </div>
@@ -354,7 +354,7 @@ export default function PlatformTemplatesDialog({
                     size="sm"
                     variant="outline"
                     onClick={handleAddStage}
-                    className="h-7 text-[11px] gap-1"
+                    className="h-7 text-[11px] gap-1 border-ellevee-border text-ellevee-deep-ink"
                   >
                     <Plus className="h-3 w-3" />
                     <span>Adicionar Etapa</span>
@@ -365,12 +365,12 @@ export default function PlatformTemplatesDialog({
                   {stages.map((st, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-lg border bg-white shadow-2xs space-y-2 border-ellevee-stone/80"
+                      className="p-3 rounded-lg border bg-white shadow-2xs space-y-2 border-ellevee-border"
                     >
                       <div className="flex items-center gap-2">
                         {/* Indicador de Posição & Botões de Ordem */}
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="h-6 w-6 rounded bg-[#F8F8F5] border border-ellevee-stone text-[11px] font-mono font-bold flex items-center justify-center text-ellevee-ink">
+                          <span className="h-6 w-6 rounded bg-[#F8F8F6] border border-ellevee-border text-[11px] font-mono font-bold flex items-center justify-center text-ellevee-deep-ink">
                             {idx + 1}
                           </span>
                           <div className="flex flex-col">
@@ -378,7 +378,7 @@ export default function PlatformTemplatesDialog({
                               type="button"
                               disabled={idx === 0}
                               onClick={() => handleMoveStage(idx, "up")}
-                              className="text-ellevee-sage hover:text-ellevee-ink disabled:opacity-30"
+                              className="text-ellevee-text-secondary hover:text-ellevee-deep-ink disabled:opacity-30"
                               title="Subir etapa"
                             >
                               <ArrowUp className="h-3 w-3" />
@@ -387,7 +387,7 @@ export default function PlatformTemplatesDialog({
                               type="button"
                               disabled={idx === stages.length - 1}
                               onClick={() => handleMoveStage(idx, "down")}
-                              className="text-ellevee-sage hover:text-ellevee-ink disabled:opacity-30"
+                              className="text-ellevee-text-secondary hover:text-ellevee-deep-ink disabled:opacity-30"
                               title="Descer etapa"
                             >
                               <ArrowDown className="h-3 w-3" />
@@ -413,7 +413,7 @@ export default function PlatformTemplatesDialog({
                           <select
                             value={st.color}
                             onChange={(e) => handleUpdateStage(idx, { color: e.target.value })}
-                            className="h-8 text-[11px] rounded border border-input bg-background px-1.5 font-mono"
+                            className="h-8 text-[11px] rounded border border-ellevee-border bg-white px-1.5 font-mono text-ellevee-deep-ink"
                           >
                             {COLOR_PRESETS.map((c) => (
                               <option key={c} value={c}>
@@ -427,17 +427,17 @@ export default function PlatformTemplatesDialog({
                         <button
                           type="button"
                           onClick={() => handleRemoveStage(idx)}
-                          className="p-1.5 text-ellevee-sage hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
+                          className="p-1.5 text-ellevee-text-secondary hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
                           title="Remover etapa"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-dashed">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-dashed border-ellevee-border">
                         {/* Quem atende? */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-semibold text-ellevee-sage uppercase tracking-wider">
+                          <span className="text-[10px] font-semibold text-ellevee-text-secondary uppercase tracking-wider">
                             Atendimento:
                           </span>
                           <select
@@ -445,7 +445,7 @@ export default function PlatformTemplatesDialog({
                             onChange={(e) =>
                               handleUpdateStage(idx, { handled_by: e.target.value as any })
                             }
-                            className="h-7 text-xs rounded border border-input bg-background px-2"
+                            className="h-7 text-xs rounded border border-ellevee-border bg-white px-2 text-ellevee-deep-ink"
                           >
                             <option value="ai">🤖 IA Autônoma</option>
                             <option value="human">👤 Operador Humano</option>
@@ -455,7 +455,7 @@ export default function PlatformTemplatesDialog({
 
                         {/* Tipo de Etapa */}
                         <div className="flex items-center gap-2 sm:justify-end">
-                          <span className="text-[10px] font-semibold text-ellevee-sage uppercase tracking-wider">
+                          <span className="text-[10px] font-semibold text-ellevee-text-secondary uppercase tracking-wider">
                             Fase:
                           </span>
                           <select
@@ -463,7 +463,7 @@ export default function PlatformTemplatesDialog({
                             onChange={(e) =>
                               handleUpdateStage(idx, { stage_type: e.target.value as any })
                             }
-                            className="h-7 text-xs rounded border border-input bg-background px-2"
+                            className="h-7 text-xs rounded border border-ellevee-border bg-white px-2 text-ellevee-deep-ink"
                           >
                             <option value="initial">Entrada (Inicial)</option>
                             <option value="in_progress">Em Andamento</option>
@@ -477,13 +477,13 @@ export default function PlatformTemplatesDialog({
               </div>
 
               {/* Ações do Formulário */}
-              <div className="flex justify-end gap-2 pt-3 border-t">
+              <div className="flex justify-end gap-2 pt-3 border-t border-ellevee-border">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsEditing(false)}
-                  className="text-xs h-8"
+                  className="text-xs h-8 border-ellevee-border text-ellevee-deep-ink"
                 >
                   Cancelar
                 </Button>
@@ -491,7 +491,7 @@ export default function PlatformTemplatesDialog({
                   type="submit"
                   disabled={isSubmitting}
                   size="sm"
-                  className="text-xs h-8 bg-ellevee-ink text-white hover:bg-black gap-1.5"
+                  className="text-xs h-8 bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm gap-1.5"
                 >
                   {isSubmitting ? (
                     <>
@@ -500,7 +500,7 @@ export default function PlatformTemplatesDialog({
                     </>
                   ) : (
                     <>
-                      <Check className="h-3.5 w-3.5 text-ellevee-accent" />
+                      <Check className="h-3.5 w-3.5 text-white" />
                       <span>Salvar Modelo de Funil</span>
                     </>
                   )}
@@ -513,15 +513,15 @@ export default function PlatformTemplatesDialog({
               {templates.map((tmpl) => (
                 <div
                   key={tmpl.key}
-                  className="p-4 rounded-xl border bg-white hover:border-ellevee-ink/30 transition-all space-y-3 border-ellevee-stone/80 shadow-2xs"
+                  className="p-4 rounded-xl border bg-white hover:border-ellevee-purple/40 transition-all space-y-3 border-ellevee-border shadow-card"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display font-bold text-sm text-ellevee-ink">
+                        <span className="font-display font-bold text-sm text-ellevee-deep-ink">
                           {tmpl.label}
                         </span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F4F8E8] text-[#3D5215] border border-[#D5E89B]/60">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                           {tmpl.segment}
                         </span>
                         {tmpl.isSystem ? (
@@ -530,13 +530,13 @@ export default function PlatformTemplatesDialog({
                             Blueprint Nativo
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
-                            <Sparkles className="h-2.5 w-2.5 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
+                            <Sparkles className="h-2.5 w-2.5 text-ellevee-purple" />
                             Modelo Personalizado
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-ellevee-sage mt-1 leading-snug">
+                      <p className="text-xs text-ellevee-text-secondary mt-1 leading-snug">
                         {tmpl.description}
                       </p>
                     </div>
@@ -548,10 +548,10 @@ export default function PlatformTemplatesDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => handleDuplicate(tmpl)}
-                        className="h-7 text-[11px] gap-1 px-2 text-ellevee-ink"
+                        className="h-7 text-[11px] gap-1 px-2 text-ellevee-deep-ink border-ellevee-border hover:bg-ellevee-warm-ivory/60"
                         title="Duplicar este modelo"
                       >
-                        <Copy className="h-3 w-3 text-ellevee-sage" />
+                        <Copy className="h-3 w-3 text-ellevee-text-secondary" />
                         <span>Clonar</span>
                       </Button>
                       <Button
@@ -559,9 +559,9 @@ export default function PlatformTemplatesDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => handleStartEdit(tmpl)}
-                        className="h-7 text-[11px] gap-1 px-2 text-ellevee-ink"
+                        className="h-7 text-[11px] gap-1 px-2 text-ellevee-deep-ink border-ellevee-border hover:bg-ellevee-warm-ivory/60"
                       >
-                        <Edit3 className="h-3 w-3 text-ellevee-sage" />
+                        <Edit3 className="h-3 w-3 text-ellevee-text-secondary" />
                         <span>Editar</span>
                       </Button>
                       {!tmpl.isSystem && (
@@ -569,7 +569,7 @@ export default function PlatformTemplatesDialog({
                           type="button"
                           disabled={deletingKey === tmpl.key}
                           onClick={() => handleDelete(tmpl)}
-                          className="p-1.5 text-ellevee-sage hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
+                          className="p-1.5 text-ellevee-text-secondary hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
                           title="Excluir modelo"
                         >
                           {deletingKey === tmpl.key ? (
@@ -583,7 +583,7 @@ export default function PlatformTemplatesDialog({
                   </div>
 
                   {/* Visualizador das Etapas (Mini Colunas do Kanban) */}
-                  <div className="pt-2 border-t border-ellevee-stone/50">
+                  <div className="pt-2 border-t border-ellevee-border">
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
                       {tmpl.stages.map((st, sIdx) => {
                         const isAi = st.handled_by === "ai"
@@ -592,16 +592,16 @@ export default function PlatformTemplatesDialog({
                         return (
                           <div
                             key={sIdx}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-md border bg-[#F8F8F5] shrink-0 border-ellevee-stone/80"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-md border bg-[#F8F8F6] shrink-0 border-ellevee-border"
                           >
                             <span
                               className="h-2 w-2 rounded-full shrink-0"
                               style={{ backgroundColor: st.color }}
                             />
-                            <span className="font-semibold text-ellevee-ink text-xs whitespace-nowrap">
+                            <span className="font-semibold text-ellevee-deep-ink text-xs whitespace-nowrap">
                               {st.name}
                             </span>
-                            <span className="text-[10px] text-ellevee-sage ml-1">
+                            <span className="text-[10px] text-ellevee-text-secondary ml-1">
                               {isAi ? "🤖" : isWaiting ? "⏳" : "👤"}
                             </span>
                           </div>

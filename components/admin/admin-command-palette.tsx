@@ -176,24 +176,24 @@ export default function AdminCommandPalette({
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4">
       {/* Backdrop suave */}
       <div
-        className="fixed inset-0 bg-ellevee-ink/60 backdrop-blur-sm transition-opacity animate-in fade-in"
+        className="fixed inset-0 bg-[#202520]/60 backdrop-blur-sm transition-opacity animate-in fade-in"
         onClick={onClose}
       />
 
       {/* Surface do Command Palette */}
-      <div className="relative z-50 w-full max-w-xl rounded-2xl border border-ellevee-stone/80 bg-white shadow-2xl overflow-hidden transition-all animate-in zoom-in-95">
+      <div className="relative z-50 w-full max-w-xl rounded-xl border border-ellevee-border bg-white shadow-modal overflow-hidden transition-all animate-in zoom-in-95">
         {/* Barra de Busca */}
-        <div className="flex items-center px-4 py-3.5 border-b border-ellevee-stone/60 gap-3 bg-[#FBFBFA]">
-          <Search className="w-4 h-4 text-ellevee-sage shrink-0" />
+        <div className="flex items-center px-4 py-3.5 border-b border-ellevee-border gap-3 bg-[#F8F8F6]">
+          <Search className="w-4 h-4 text-ellevee-text-secondary shrink-0" />
           <input
             type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="O que você deseja buscar ou acessar? (ex: empresas, planos, openai...)"
-            className="w-full text-xs bg-transparent text-ellevee-ink placeholder:text-ellevee-sage/70 focus:outline-none font-sans"
+            className="w-full text-xs bg-transparent text-ellevee-deep-ink placeholder:text-ellevee-text-secondary/70 focus:outline-none font-sans"
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-ellevee-sage bg-white border border-ellevee-stone px-1.5 py-0.5 rounded shadow-2xs">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-ellevee-text-secondary bg-white border border-ellevee-border px-1.5 py-0.5 rounded-md shadow-2xs">
             ESC
           </kbd>
         </div>
@@ -201,7 +201,7 @@ export default function AdminCommandPalette({
         {/* Lista de Destinos */}
         <div className="max-h-80 overflow-y-auto p-2 space-y-1">
           {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-ellevee-sage">
+            <div className="py-8 text-center text-xs text-ellevee-text-secondary">
               Nenhum comando ou página encontrada para &quot;{query}&quot;.
             </div>
           ) : (
@@ -214,25 +214,25 @@ export default function AdminCommandPalette({
                   key={item.id}
                   onClick={() => handleSelect(item.href)}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all text-xs ${
+                  className={`w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all text-xs ${
                     isSelected
-                      ? "bg-ellevee-ink text-white shadow-sm"
-                      : "text-ellevee-ink hover:bg-ellevee-ivory/60"
+                      ? "bg-ellevee-deep-ink text-white shadow-sm"
+                      : "text-ellevee-deep-ink hover:bg-ellevee-warm-ivory/60"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={`p-2 rounded-lg shrink-0 transition-colors ${
                         isSelected
-                          ? "bg-white/15 text-ellevee-accent"
-                          : "bg-ellevee-ivory border border-ellevee-stone/60 text-ellevee-ink"
+                          ? "bg-white/15 text-ellevee-cyan"
+                          : "bg-ellevee-warm-ivory border border-ellevee-border text-ellevee-deep-ink"
                       }`}
                     >
                       <Icon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs truncate">
+                        <span className="font-semibold text-xs truncate font-display">
                           {item.title}
                         </span>
                         {item.badge && (
@@ -240,7 +240,7 @@ export default function AdminCommandPalette({
                             className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border ${
                               isSelected
                                 ? "bg-white/10 text-white/80 border-white/20"
-                                : "bg-ellevee-ivory text-ellevee-sage border-ellevee-stone"
+                                : "bg-ellevee-warm-ivory text-ellevee-text-secondary border-ellevee-border"
                             }`}
                           >
                             {item.badge}
@@ -249,7 +249,7 @@ export default function AdminCommandPalette({
                       </div>
                       <span
                         className={`text-[11px] truncate mt-0.5 ${
-                          isSelected ? "text-white/70" : "text-ellevee-sage"
+                          isSelected ? "text-white/70" : "text-ellevee-text-secondary"
                         }`}
                       >
                         {item.subtitle}
@@ -260,8 +260,8 @@ export default function AdminCommandPalette({
                   <ArrowRight
                     className={`w-3.5 h-3.5 shrink-0 transition-transform ${
                       isSelected
-                        ? "text-ellevee-accent translate-x-0.5"
-                        : "text-ellevee-sage/40 opacity-0 group-hover:opacity-100"
+                        ? "text-ellevee-cyan translate-x-0.5"
+                        : "text-ellevee-text-secondary/40 opacity-0 group-hover:opacity-100"
                     }`}
                   />
                 </button>
@@ -271,19 +271,19 @@ export default function AdminCommandPalette({
         </div>
 
         {/* Rodapé do Menu com Atalhos */}
-        <div className="px-4 py-2.5 bg-[#FBFBFA] border-t border-ellevee-stone/60 flex items-center justify-between text-[11px] text-ellevee-sage">
+        <div className="px-4 py-2.5 bg-[#F8F8F6] border-t border-ellevee-border flex items-center justify-between text-[11px] text-ellevee-text-secondary">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-white border border-ellevee-stone rounded text-[10px] font-mono">
+              <kbd className="px-1 py-0.5 bg-white border border-ellevee-border rounded text-[10px] font-mono">
                 ↑
               </kbd>
-              <kbd className="px-1 py-0.5 bg-white border border-ellevee-stone rounded text-[10px] font-mono">
+              <kbd className="px-1 py-0.5 bg-white border border-ellevee-border rounded text-[10px] font-mono">
                 ↓
               </kbd>
               Navegar
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-ellevee-stone rounded text-[10px] font-mono">
+              <kbd className="px-1.5 py-0.5 bg-white border border-ellevee-border rounded text-[10px] font-mono">
                 ↵
               </kbd>
               Selecionar

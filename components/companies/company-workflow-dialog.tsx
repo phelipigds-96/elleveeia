@@ -274,16 +274,16 @@ export default function CompanyWorkflowDialog({
       {/* Header */}
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-ellevee-ink text-white flex items-center justify-center">
-            <Kanban className="h-4 w-4 text-ellevee-accent" />
+          <div className="h-8 w-8 rounded-lg bg-ellevee-deep-ink text-white flex items-center justify-center">
+            <Kanban className="h-4 w-4 text-ellevee-cyan" />
           </div>
           <div>
-            <DialogTitle className="text-base font-semibold text-ellevee-ink">
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">
               Configurar Funil de Atendimento (Kanban)
             </DialogTitle>
-            <DialogDescription className="text-xs text-ellevee-sage">
+            <DialogDescription className="text-xs text-ellevee-text-secondary">
               Personalize as etapas operacionais, cores e responsabilidade da IA para{" "}
-              <strong className="text-ellevee-ink">{company?.name || "Empresa"}</strong> (@{company?.slug || ""})
+              <strong className="text-ellevee-deep-ink">{company?.name || "Empresa"}</strong> (@{company?.slug || ""})
             </DialogDescription>
           </div>
         </div>
@@ -292,20 +292,20 @@ export default function CompanyWorkflowDialog({
       {/* Conteúdo rolável */}
       <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-6">
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3 text-ellevee-sage">
-            <Loader2 className="h-6 w-6 animate-spin text-ellevee-ink" />
+          <div className="py-20 flex flex-col items-center justify-center gap-3 text-ellevee-text-secondary">
+            <Loader2 className="h-6 w-6 animate-spin text-ellevee-purple" />
             <span className="text-xs font-mono">Carregando etapas do banco de dados...</span>
           </div>
         ) : (
           <>
             {/* Bloco 1: Templates Rápidos por Nicho */}
-            <div className="rounded-lg border border-ellevee-stone bg-[#FBFBFA] p-3.5 space-y-3">
+            <div className="rounded-xl border border-ellevee-border bg-[#F8F8F6] p-3.5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-ellevee-ink flex items-center gap-1.5 uppercase tracking-wider">
-                  <Sparkles className="h-3.5 w-3.5 text-ellevee-accent" />
+                <span className="text-xs font-semibold text-ellevee-deep-ink flex items-center gap-1.5 uppercase tracking-wider font-display">
+                  <Sparkles className="h-3.5 w-3.5 text-ellevee-purple" />
                   Templates Recomendados por Segmento (1-Clique)
                 </span>
-                <span className="text-[11px] text-ellevee-sage">
+                <span className="text-[11px] text-ellevee-text-secondary">
                   Substitui a grade abaixo pelo funil do nicho
                 </span>
               </div>
@@ -320,23 +320,23 @@ export default function CompanyWorkflowDialog({
                       onClick={() => handleApplyTemplate(tmpl.key)}
                       className={`text-left p-2.5 rounded-lg border transition-all text-xs flex flex-col justify-between gap-1.5 ${
                         isSelected
-                          ? "border-ellevee-ink bg-white shadow-sm ring-2 ring-ellevee-ink/10"
-                          : "border-ellevee-stone bg-white hover:border-ellevee-sage hover:bg-white"
+                          ? "border-ellevee-purple bg-white shadow-card ring-1 ring-ellevee-purple/30"
+                          : "border-ellevee-border bg-white hover:border-ellevee-purple/40 hover:bg-white"
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-1.5 font-medium text-ellevee-ink truncate">
+                        <div className="flex items-center gap-1.5 font-medium text-ellevee-deep-ink truncate font-display">
                           {TEMPLATE_ICONS[tmpl.key] || <Kanban className="h-3.5 w-3.5" />}
                           <span className="truncate">{tmpl.label.split(" (")[0]}</span>
                         </div>
                         {isSelected && <Check className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />}
                       </div>
-                      <span className="text-[10px] text-ellevee-sage line-clamp-2 leading-relaxed">
+                      <span className="text-[10px] text-ellevee-text-secondary line-clamp-2 leading-relaxed">
                         {tmpl.description}
                       </span>
-                      <div className="flex items-center justify-between pt-1 border-t border-ellevee-stone/50 text-[10px] text-ellevee-ink-muted">
+                      <div className="flex items-center justify-between pt-1 border-t border-ellevee-border/60 text-[10px] text-ellevee-deep-ink">
                         <span className="font-mono">{tmpl.stages.length} etapas</span>
-                        <span className="text-[9px] text-ellevee-sage font-medium">{tmpl.badgeText}</span>
+                        <span className="text-[9px] text-ellevee-text-secondary font-medium">{tmpl.badgeText}</span>
                       </div>
                     </button>
                   )
@@ -348,10 +348,10 @@ export default function CompanyWorkflowDialog({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-semibold text-ellevee-ink uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-ellevee-deep-ink uppercase tracking-wider font-display">
                     Grade de Etapas do Kanban ({stages.length})
                   </h3>
-                  <p className="text-[11px] text-ellevee-sage">
+                  <p className="text-[11px] text-ellevee-text-secondary">
                     Defina o nome, a cor visual do cabeçalho da coluna e quem atua na etapa.
                   </p>
                 </div>
@@ -364,10 +364,10 @@ export default function CompanyWorkflowDialog({
                       setTemplateNameInput(company?.name ? `Modelo ${company.name}` : "")
                       setShowSaveTemplateModal(true)
                     }}
-                    className="h-7 text-xs border-ellevee-stone hover:border-ellevee-ink gap-1"
+                    className="h-7 text-xs border-ellevee-border hover:border-ellevee-purple gap-1 text-ellevee-deep-ink"
                     title="Salvar esta configuração como um novo modelo reutilizável"
                   >
-                    <BookmarkPlus className="h-3.5 w-3.5 text-ellevee-ink" />
+                    <BookmarkPlus className="h-3.5 w-3.5 text-ellevee-deep-ink" />
                     <span>Salvar como Modelo</span>
                   </Button>
 
@@ -375,7 +375,7 @@ export default function CompanyWorkflowDialog({
                     size="sm"
                     variant="outline"
                     onClick={handleAddStage}
-                    className="h-7 text-xs border-dashed border-ellevee-stone hover:border-ellevee-ink"
+                    className="h-7 text-xs border-dashed border-ellevee-border hover:border-ellevee-purple text-ellevee-deep-ink"
                   >
                     <Plus className="h-3.5 w-3.5 mr-1" />
                     Adicionar Etapa
@@ -385,21 +385,21 @@ export default function CompanyWorkflowDialog({
 
               {/* Modal Inline: Salvar Funil como Novo Modelo */}
               {showSaveTemplateModal && (
-                <div className="p-3.5 rounded-lg border border-ellevee-ink bg-emerald-50/60 space-y-2.5 animate-in fade-in">
+                <div className="p-3.5 rounded-xl border border-ellevee-purple/40 bg-emerald-50/60 space-y-2.5 animate-in fade-in">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ellevee-ink flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-ellevee-deep-ink flex items-center gap-1.5 font-display">
                       <BookmarkPlus className="h-4 w-4 text-emerald-700" />
                       Salvar este Funil como Novo Modelo Global
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowSaveTemplateModal(false)}
-                      className="text-xs text-ellevee-sage hover:text-ellevee-ink"
+                      className="text-xs text-ellevee-text-secondary hover:text-ellevee-deep-ink"
                     >
                       Cancelar
                     </button>
                   </div>
-                  <p className="text-[11px] text-ellevee-sage">
+                  <p className="text-[11px] text-ellevee-text-secondary">
                     O funil configurado acima ficará disponível como blueprint para ser selecionado em novos clientes.
                   </p>
                   <div className="flex items-center gap-2">
@@ -407,14 +407,14 @@ export default function CompanyWorkflowDialog({
                       placeholder="Nome do Modelo (ex: Varejo Especial, Streaming IPTV)"
                       value={templateNameInput}
                       onChange={(e) => setTemplateNameInput(e.target.value)}
-                      className="h-8 text-xs bg-white flex-1"
+                      className="h-8 text-xs bg-white flex-1 border-ellevee-border text-ellevee-deep-ink"
                     />
                     <Button
                       type="button"
                       size="sm"
                       disabled={isSavingAsTemplate || !templateNameInput.trim()}
                       onClick={handleSaveAsTemplate}
-                      className="h-8 text-xs bg-ellevee-ink text-white hover:bg-black shrink-0"
+                      className="h-8 text-xs bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm shrink-0"
                     >
                       {isSavingAsTemplate ? (
                         <>
@@ -434,7 +434,7 @@ export default function CompanyWorkflowDialog({
                 {stages.map((stage, idx) => (
                   <div
                     key={idx}
-                    className="flex flex-col sm:flex-row sm:items-center gap-2.5 p-3 rounded-lg border border-ellevee-stone bg-white shadow-xs hover:border-ellevee-sage transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center gap-2.5 p-3 rounded-xl border border-ellevee-border bg-white shadow-2xs hover:border-ellevee-purple/40 transition-colors"
                   >
                     {/* Botões Reordenar */}
                     <div className="flex items-center gap-1">
@@ -442,7 +442,7 @@ export default function CompanyWorkflowDialog({
                         type="button"
                         disabled={idx === 0}
                         onClick={() => handleMoveStage(idx, "up")}
-                        className="h-6 w-6 rounded border border-ellevee-stone hover:bg-ellevee-ivory disabled:opacity-30 flex items-center justify-center text-ellevee-sage hover:text-ellevee-ink transition-colors"
+                        className="h-6 w-6 rounded border border-ellevee-border hover:bg-ellevee-warm-ivory disabled:opacity-30 flex items-center justify-center text-ellevee-text-secondary hover:text-ellevee-deep-ink transition-colors"
                         title="Subir etapa"
                       >
                         <ArrowUp className="h-3 w-3" />
@@ -451,7 +451,7 @@ export default function CompanyWorkflowDialog({
                         type="button"
                         disabled={idx === stages.length - 1}
                         onClick={() => handleMoveStage(idx, "down")}
-                        className="h-6 w-6 rounded border border-ellevee-stone hover:bg-ellevee-ivory disabled:opacity-30 flex items-center justify-center text-ellevee-sage hover:text-ellevee-ink transition-colors"
+                        className="h-6 w-6 rounded border border-ellevee-border hover:bg-ellevee-warm-ivory disabled:opacity-30 flex items-center justify-center text-ellevee-text-secondary hover:text-ellevee-deep-ink transition-colors"
                         title="Descer etapa"
                       >
                         <ArrowDown className="h-3 w-3" />
@@ -470,7 +470,7 @@ export default function CompanyWorkflowDialog({
                         title="Alterar cor da etapa"
                       />
                       {activeColorPickerIdx === idx && (
-                        <div className="absolute left-0 top-9 z-30 p-2 bg-white rounded-lg border border-ellevee-stone shadow-lg flex gap-1.5 animate-in fade-in zoom-in-95">
+                        <div className="absolute left-0 top-9 z-30 p-2 bg-white rounded-lg border border-ellevee-border shadow-lg flex gap-1.5 animate-in fade-in zoom-in-95">
                           {COLOR_PRESETS.map((c) => (
                             <button
                               key={c.hex}
@@ -494,7 +494,7 @@ export default function CompanyWorkflowDialog({
                         value={stage.name}
                         onChange={(e) => handleUpdateStage(idx, { name: e.target.value })}
                         placeholder="Nome da etapa..."
-                        className="h-8 text-xs font-medium"
+                        className="h-8 text-xs font-medium border-ellevee-border text-ellevee-deep-ink"
                       />
                     </div>
 
@@ -504,7 +504,7 @@ export default function CompanyWorkflowDialog({
                         value={stage.description || ""}
                         onChange={(e) => handleUpdateStage(idx, { description: e.target.value })}
                         placeholder="Descrição (ex: Envio de Pix)..."
-                        className="h-8 text-xs text-ellevee-sage"
+                        className="h-8 text-xs text-ellevee-text-secondary border-ellevee-border"
                       />
                     </div>
 
@@ -517,7 +517,7 @@ export default function CompanyWorkflowDialog({
                             handled_by: e.target.value as "ai" | "human" | "waiting",
                           })
                         }
-                        className="h-8 rounded-md border border-ellevee-stone bg-[#FBFBFA] px-2 text-xs font-medium text-ellevee-ink focus:outline-none focus:ring-1 focus:ring-ellevee-ink"
+                        className="h-8 rounded-lg border border-ellevee-border bg-[#F8F8F6] px-2 text-xs font-medium text-ellevee-deep-ink focus:outline-none focus:ring-1 focus:ring-ellevee-blue"
                       >
                         <option value="ai">🤖 IA Responde</option>
                         <option value="human">👤 Humano Atende</option>
@@ -534,7 +534,7 @@ export default function CompanyWorkflowDialog({
                             stage_type: e.target.value as "initial" | "in_progress" | "final",
                           })
                         }
-                        className="h-8 rounded-md border border-ellevee-stone bg-[#FBFBFA] px-2 text-xs text-ellevee-sage focus:outline-none"
+                        className="h-8 rounded-lg border border-ellevee-border bg-[#F8F8F6] px-2 text-xs text-ellevee-text-secondary focus:outline-none"
                       >
                         <option value="initial">Entrada (Inicial)</option>
                         <option value="in_progress">Em Andamento</option>
@@ -547,7 +547,7 @@ export default function CompanyWorkflowDialog({
                       type="button"
                       onClick={() => handleRemoveStage(idx)}
                       disabled={stages.length <= 1}
-                      className="h-8 w-8 rounded text-ellevee-sage hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 flex items-center justify-center transition-colors"
+                      className="h-8 w-8 rounded-lg text-ellevee-text-secondary hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 flex items-center justify-center transition-colors"
                       title="Remover etapa"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -558,40 +558,40 @@ export default function CompanyWorkflowDialog({
             </div>
 
             {/* Bloco 3: Mini Prévia Visual do Funil Kanban */}
-            <div className="rounded-lg border border-ellevee-stone bg-[#F8F8F5] p-3 space-y-2">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-ellevee-sage font-semibold">
+            <div className="rounded-xl border border-ellevee-border bg-[#F8F8F6] p-3 space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-ellevee-text-secondary font-semibold">
                 Pré-Visualização do Quadro Kanban
               </span>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {stages.map((st, i) => (
                   <div
                     key={i}
-                    className="min-w-[140px] flex-1 rounded-lg border border-ellevee-stone bg-white p-2.5 flex flex-col justify-between shadow-2xs"
+                    className="min-w-[140px] flex-1 rounded-xl border border-ellevee-border bg-white p-2.5 flex flex-col justify-between shadow-2xs"
                     style={{ borderTopColor: st.color, borderTopWidth: 3 }}
                   >
                     <div>
-                      <div className="flex items-center justify-between text-[11px] font-semibold text-ellevee-ink">
-                        <span className="truncate">{st.name || "Sem nome"}</span>
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-ellevee-deep-ink">
+                        <span className="truncate font-display">{st.name || "Sem nome"}</span>
                       </div>
                       <div className="mt-1 flex items-center gap-1 text-[10px]">
                         {st.handled_by === "ai" && (
-                          <span className="inline-flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1 py-0.2 rounded font-medium">
+                          <span className="inline-flex items-center gap-0.5 text-amber-700 bg-amber-50 px-1 py-0.2 rounded font-medium">
                             <Bot className="h-2.5 w-2.5" /> IA
                           </span>
                         )}
                         {st.handled_by === "human" && (
-                          <span className="inline-flex items-center gap-0.5 text-blue-600 bg-blue-50 px-1 py-0.2 rounded font-medium">
+                          <span className="inline-flex items-center gap-0.5 text-blue-700 bg-blue-50 px-1 py-0.2 rounded font-medium">
                             <User className="h-2.5 w-2.5" /> Humano
                           </span>
                         )}
                         {st.handled_by === "waiting" && (
-                          <span className="inline-flex items-center gap-0.5 text-purple-600 bg-purple-50 px-1 py-0.2 rounded font-medium">
+                          <span className="inline-flex items-center gap-0.5 text-purple-700 bg-purple-50 px-1 py-0.2 rounded font-medium">
                             <Clock className="h-2.5 w-2.5" /> Espera
                           </span>
                         )}
                       </div>
                     </div>
-                    <span className="text-[9px] text-ellevee-sage mt-2 font-mono">
+                    <span className="text-[9px] text-ellevee-text-secondary mt-2 font-mono">
                       {st.stage_type === "initial"
                         ? "Entrada"
                         : st.stage_type === "final"
@@ -607,14 +607,14 @@ export default function CompanyWorkflowDialog({
       </div>
 
       {/* Footer */}
-      <DialogFooter className="border-t border-ellevee-stone pt-4">
-        <Button variant="outline" onClick={onClose} disabled={isSaving} className="text-xs">
+      <DialogFooter className="border-t border-ellevee-border pt-4">
+        <Button variant="outline" onClick={onClose} disabled={isSaving} className="text-xs border-ellevee-border text-ellevee-deep-ink">
           Cancelar
         </Button>
         <Button
           onClick={handleSave}
           disabled={loading || isSaving || stages.length === 0}
-          className="text-xs bg-ellevee-ink text-white hover:bg-black"
+          className="text-xs bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm"
         >
           {isSaving ? (
             <>
