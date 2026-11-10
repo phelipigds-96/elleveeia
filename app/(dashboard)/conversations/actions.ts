@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
 import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
@@ -105,6 +106,17 @@ async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
         if (profile.role) role = profile.role
         if (profile.full_name) userName = profile.full_name
       }
+    }
+
+    // Suporte ao Impersonate do SuperAdmin
+    try {
+      const cookieStore = cookies()
+      const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
+      if (impersonateId) {
+        companyId = impersonateId
+      }
+    } catch {
+      // cookies() pode não estar disponível em certos contextos SSR
     }
   } catch {
     // Ignora erros de contexto em ambiente de pré-visualização estática
