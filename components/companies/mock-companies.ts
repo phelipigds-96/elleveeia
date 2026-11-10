@@ -14,6 +14,7 @@ export interface CompanyMock {
   aiProvider: "openai" | "gemini" | "hybrid"
   createdAt: string
   adminEmail: string
+  requireCloseReason?: boolean
 }
 
 export const INITIAL_MOCK_COMPANIES: CompanyMock[] = [

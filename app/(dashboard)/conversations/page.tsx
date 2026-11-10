@@ -1,5 +1,10 @@
 import PainelClient from "./components/painel-client"
-import { getConversationsList, getConversationMessages, getAgentProfileContext } from "./actions"
+import {
+  getConversationsList,
+  getConversationMessages,
+  getAgentProfileContext,
+  getChatOperationsContextAction,
+} from "./actions"
 
 export const dynamic = 'force-dynamic'
 
@@ -9,10 +14,11 @@ export const metadata = {
 }
 
 export default async function ConversationsPage() {
-  // Carga base inicial realizada no servidor (RSC) com perfil do atendente e conversas filtradas por RBAC
-  const [currentUser, initialConversations] = await Promise.all([
+  // Carga base inicial realizada no servidor (RSC) com perfil do atendente, conversas, motivos de finalização e respostas rápidas
+  const [currentUser, initialConversations, chatOps] = await Promise.all([
     getAgentProfileContext(),
     getConversationsList(),
+    getChatOperationsContextAction(),
   ])
   const initialSelectedId = initialConversations.length > 0 ? initialConversations[0].id : null
   const initialMessages = initialSelectedId ? await getConversationMessages(initialSelectedId) : []
@@ -24,6 +30,9 @@ export default async function ConversationsPage() {
         initialMessages={initialMessages}
         initialSelectedId={initialSelectedId}
         currentUser={currentUser}
+        initialCloseReasons={chatOps.closeReasons}
+        requireCloseReason={chatOps.requireCloseReason}
+        initialQuickReplies={chatOps.quickReplies}
       />
     </div>
   )

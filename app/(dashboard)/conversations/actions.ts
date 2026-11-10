@@ -8,6 +8,21 @@ import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
 import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
 import { assignDefaultWorkflowStages } from "@/lib/services/workflows/conversation-workflow"
 import { getBrazilianPhoneVariants } from "@/lib/services/phone-normalization"
+import {
+  getCompanyClosePolicy,
+  getCompanyCloseReasons,
+  getCompanyQuickReplies,
+  CloseReason,
+  QuickReply,
+} from "@/lib/services/chat-operations"
+
+export type { CloseReason, QuickReply }
+
+export interface CloseConversationOptions {
+  reasonId?: string | null
+  reasonText?: string | null
+  closedNotes?: string | null
+}
 
 export interface CustomerData {
   id?: string
@@ -650,11 +665,42 @@ export async function returnToAIAction(
 }
 
 /**
+ * Server Action para consultar motivos de finalização e respostas rápidas no contexto da conversa
+ */
+export async function getChatOperationsContextAction(): Promise<{
+  requireCloseReason: boolean
+  closeReasons: CloseReason[]
+  quickReplies: QuickReply[]
+}> {
+  try {
+    const { companyId } = await getAuthenticatedAgentContext()
+    const [policy, reasons, replies] = await Promise.all([
+      getCompanyClosePolicy(companyId),
+      getCompanyCloseReasons(companyId, true),
+      getCompanyQuickReplies(companyId, true),
+    ])
+    return {
+      requireCloseReason: policy.requireCloseReason,
+      closeReasons: reasons,
+      quickReplies: replies,
+    }
+  } catch (err: any) {
+    console.warn("[ChatOperations] Erro ao carregar contexto de operações:", err?.message)
+    return {
+      requireCloseReason: false,
+      closeReasons: [],
+      quickReplies: [],
+    }
+  }
+}
+
+/**
  * Server Action para encerrar o atendimento (concluir ticket)
  */
 export async function closeConversationAction(
-  conversationId: string
-): Promise<{ success: boolean; status?: string; error?: string }> {
+  conversationId: string,
+  options?: CloseConversationOptions
+): Promise<{ success: boolean; status?: string; error?: string; reasonText?: string }> {
   try {
     if (!conversationId) {
       return { success: false, error: "Identificador da conversa inválido." }
@@ -664,37 +710,89 @@ export async function closeConversationAction(
     const adminClient = createAdminClient()
     const now = new Date().toISOString()
 
-    // 1. Atualizar status para 'closed' e preencher closed_at
-    const { error: updErr } = await adminClient
+    // 0. Verifica política de obrigatoriedade de motivo para a organização
+    const { data: comp } = await adminClient
+      .from("companies")
+      .select("require_close_reason")
+      .eq("id", companyId)
+      .maybeSingle()
+
+    const isRequired = Boolean(comp?.require_close_reason)
+    if (isRequired && !options?.reasonId && !options?.reasonText) {
+      return {
+        success: false,
+        error: "Esta organização exige a seleção de um motivo de finalização para encerrar o atendimento.",
+      }
+    }
+
+    // 1. Atualizar status para 'closed' e preencher closed_at com motivo e notas
+    const updatePayload: Record<string, any> = {
+      status: "closed",
+      closed_at: now,
+      updated_at: now,
+      last_message_at: now,
+    }
+
+    if (options?.reasonId && !options.reasonId.startsWith("default-")) {
+      updatePayload.close_reason_id = options.reasonId
+    }
+    if (options?.reasonText) {
+      updatePayload.close_reason_text = options.reasonText
+    }
+    if (options?.closedNotes) {
+      updatePayload.closed_notes = options.closedNotes
+    }
+
+    let updErr: any = null
+    const { error: fullErr } = await adminClient
       .from("conversations")
-      .update({
-        status: "closed",
-        closed_at: now,
-        updated_at: now,
-        last_message_at: now,
-      })
+      .update(updatePayload)
       .eq("id", conversationId)
       .eq("company_id", companyId)
+
+    if (fullErr) {
+      // Fallback gracioso caso colunas de close_reason ainda não tenham sido migradas
+      console.warn("[Chat] Fallback de encerramento sem colunas estendidas:", fullErr.message)
+      const { error: fallbackErr } = await adminClient
+        .from("conversations")
+        .update({
+          status: "closed",
+          closed_at: now,
+          updated_at: now,
+          last_message_at: now,
+        })
+        .eq("id", conversationId)
+        .eq("company_id", companyId)
+
+      updErr = fallbackErr
+    }
 
     if (updErr) {
       console.error("[Chat] Erro ao encerrar conversa:", updErr)
       return { success: false, error: `Falha ao encerrar conversa: ${updErr.message}` }
     }
 
-    // 3. Sincronizar o funil (etapa) com o novo status operacional
+    // 2. Sincronizar o funil (etapa) com o novo status operacional
     await syncWorkflowStage(conversationId, "final")
 
-    // 4. Gravar evento de sistema na timeline
+    // 3. Gravar evento de sistema na timeline com o motivo do encerramento
+    const reasonText = options?.reasonText || null
+    const reasonSuffix = reasonText ? ` • Motivo: ${reasonText}` : ""
+    const notesSuffix = options?.closedNotes ? ` (${options.closedNotes})` : ""
+
     await adminClient.from("messages").insert({
       company_id: companyId,
       conversation_id: conversationId,
       sender_type: "system",
-      content: `Atendimento encerrado por ${userName || "operador"}.`,
+      content: `Atendimento encerrado por ${userName || "operador"}${reasonSuffix}${notesSuffix}.`,
       message_type: "event",
       metadata: {
         event: "conversation.closed",
         operator_id: userId,
         operator_name: userName,
+        close_reason_id: options?.reasonId || null,
+        close_reason: reasonText,
+        closed_notes: options?.closedNotes || null,
       },
     })
 
@@ -703,6 +801,7 @@ export async function closeConversationAction(
     return {
       success: true,
       status: "closed",
+      reasonText: reasonText || undefined,
     }
   } catch (error: any) {
     console.error("[Chat] Exceção em closeConversationAction:", error)

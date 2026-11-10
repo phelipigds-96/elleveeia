@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Sliders, Zap, Bot, MessageSquare } from "lucide-react"
+import { Sliders, Zap, Bot, MessageSquare, CheckCircle2 } from "lucide-react"
 import { CompanyMock } from "./mock-companies"
 import { updateCompanyLimitsAction } from "@/app/(admin)/companies/actions"
 import { toast } from "@/components/ui/toast"
@@ -30,6 +30,7 @@ export default function CompanyLimitsDialog({
   const [allowOpenAI, setAllowOpenAI] = useState(true)
   const [allowGemini, setAllowGemini] = useState(true)
   const [allowAnthropic, setAllowAnthropic] = useState(false)
+  const [requireCloseReason, setRequireCloseReason] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function CompanyLimitsDialog({
       setAllowOpenAI(company.aiProvider === "openai" || company.aiProvider === "hybrid")
       setAllowGemini(company.aiProvider === "gemini" || company.aiProvider === "hybrid")
       setAllowAnthropic(false)
+      setRequireCloseReason(Boolean(company.requireCloseReason))
     }
   }, [company])
 
@@ -59,6 +61,7 @@ export default function CompanyLimitsDialog({
         maxAgents: maxAgents,
         allowedLlmProviders: allowedProviders,
         tokensLimit: tokensLimit,
+        requireCloseReason,
       })
 
       if (result.success) {
@@ -79,6 +82,7 @@ export default function CompanyLimitsDialog({
             tokensLimit,
             maxAgents,
             aiProvider: providerUI,
+            requireCloseReason,
           })
         }
 
@@ -217,6 +221,29 @@ export default function CompanyLimitsDialog({
               Anthropic
             </label>
           </div>
+        </div>
+
+        {/* Política de Atendimento & Governança */}
+        <div className="rounded-xl border border-ellevee-border p-3.5 bg-[#F8F8F6] space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-ellevee-deep-ink">
+              <CheckCircle2 className="h-3.5 w-3.5 text-ellevee-purple" />
+              <span>Exigir Motivo de Finalização de Atendimento</span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={requireCloseReason}
+                onChange={(e) => setRequireCloseReason(e.target.checked)}
+                className="sr-only peer"
+                disabled={isSaving}
+              />
+              <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ellevee-purple"></div>
+            </label>
+          </div>
+          <p className="text-[11px] text-ellevee-text-secondary">
+            Quando ativo, os atendentes desta empresa são obrigados a escolher um motivo cadastrado para concluir qualquer conversa no chat.
+          </p>
         </div>
       </div>
 

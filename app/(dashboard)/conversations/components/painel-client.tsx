@@ -48,7 +48,10 @@ import {
   Play,
   Pause,
   Download,
-  ExternalLink
+  ExternalLink,
+  Zap,
+  HelpCircle,
+  ShieldCheck
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/components/ui/toast"
@@ -63,6 +66,8 @@ import {
   MessageData, 
   UserProfileContext,
   UploadMediaResult,
+  CloseReason,
+  QuickReply,
   getConversationMessages,
   getConversationsList,
   sendMessageAction,
@@ -87,6 +92,9 @@ interface PainelClientProps {
   initialMessages: MessageData[]
   initialSelectedId?: string | null
   currentUser?: UserProfileContext | null
+  initialCloseReasons?: CloseReason[]
+  requireCloseReason?: boolean
+  initialQuickReplies?: QuickReply[]
 }
 
 function timeAgo(isoString: string): string {
@@ -391,11 +399,27 @@ export default function PainelClient({
   initialMessages,
   initialSelectedId = null,
   currentUser = null,
+  initialCloseReasons = [],
+  requireCloseReason = false,
+  initialQuickReplies = [],
 }: PainelClientProps) {
   // 1. Estados locais de conversas e mensagens
   const [conversations, setConversations] = useState<ConversationData[]>(initialConversations)
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId)
   const [messages, setMessages] = useState<MessageData[]>(initialMessages)
+
+  // 1.1. Motivos de Finalização (Close Reasons)
+  const [closeReasons, setCloseReasons] = useState<CloseReason[]>(initialCloseReasons)
+  const [companyRequireCloseReason, setCompanyRequireCloseReason] = useState<boolean>(Boolean(requireCloseReason))
+  const [isCloseReasonModalOpen, setIsCloseReasonModalOpen] = useState(false)
+  const [selectedReasonId, setSelectedReasonId] = useState<string | null>(null)
+  const [closeNotes, setCloseNotes] = useState("")
+
+  // 1.2. Mensagens Rápidas (Quick Replies)
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>(initialQuickReplies)
+  const [isQuickRepliesOpen, setIsQuickRepliesOpen] = useState(false)
+  const [quickReplySearch, setQuickReplySearch] = useState("")
+  const [selectedQuickCategory, setSelectedQuickCategory] = useState<string>("TODAS")
   
   // 2. Estados de navegação e filtros (Nova Taxonomia corporativa)
   const isMasterOrAdmin = currentUser?.role === "master" || currentUser?.role === "admin"
@@ -1465,6 +1489,19 @@ export default function PainelClient({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      // Expansão instantânea de atalho de mensagem rápida (/pix, /horario, etc)
+      if (inputContent.startsWith("/")) {
+        const query = inputContent.slice(1).trim().toLowerCase()
+        const matched = quickReplies.find(
+          (q) => q.isActive && q.shortcut && q.shortcut.toLowerCase() === query
+        )
+        if (matched) {
+          e.preventDefault()
+          setInputContent(matched.content)
+          return
+        }
+      }
+
       e.preventDefault()
       if (selectedFile) {
         handleSendAttachedFile()
@@ -1572,17 +1609,33 @@ export default function PainelClient({
   // =========================================================================
   // CICLO DE VIDA: 3. ENCERRAR ATENDIMENTO (FINALIZAR TICKET)
   // =========================================================================
-  const handleCloseConversation = async () => {
+  const handleCloseConversation = async (reasonIdParam?: string, notesParam?: string) => {
     if (!selectedId || isClosing) return
+
+    const targetReasonId = reasonIdParam !== undefined ? reasonIdParam : selectedReasonId
+    const reasonObj = closeReasons.find((r) => r.id === targetReasonId)
+    const reasonTitle = reasonObj?.title || null
+    const notes = notesParam !== undefined ? notesParam : closeNotes
+
+    if (companyRequireCloseReason && !targetReasonId && !reasonTitle) {
+      toast.error("Motivo Obrigatório", "Por favor, selecione um motivo para finalizar este atendimento.")
+      return
+    }
 
     setIsClosing(true)
     try {
-      const result = await closeConversationAction(selectedId)
+      const result = await closeConversationAction(selectedId, {
+        reasonId: targetReasonId || null,
+        reasonText: reasonTitle,
+        closedNotes: notes || null,
+      })
 
       if (result?.success) {
         toast.success(
           "Atendimento Encerrado",
-          "A conversa foi finalizada com sucesso e movida para Finalizados."
+          reasonTitle
+            ? `Conversa finalizada • Motivo: "${reasonTitle}".`
+            : "A conversa foi finalizada com sucesso e movida para Finalizados."
         )
 
         setConversations((prev) =>
@@ -1593,18 +1646,26 @@ export default function PainelClient({
           )
         )
 
+        const reasonSuffix = reasonTitle ? ` • Motivo: ${reasonTitle}` : ""
+        const notesSuffix = notes ? ` (${notes})` : ""
+
         const closeEventMsg: MessageData = {
           id: `temp-close-${Date.now()}`,
           conversation_id: selectedId,
           sender_type: "system",
-          content: `Atendimento encerrado por ${currentUser?.userName || "operador"}.`,
+          content: `Atendimento encerrado por ${currentUser?.userName || "operador"}${reasonSuffix}${notesSuffix}.`,
           message_type: "event",
-          metadata: { event: "conversation.closed" },
+          metadata: {
+            event: "conversation.closed",
+            close_reason: reasonTitle,
+            closed_notes: notes,
+          },
           created_at: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, closeEventMsg])
         scrollToBottom(true)
         setConfirmClose(false)
+        setIsCloseReasonModalOpen(false)
       } else {
         toast.error("Erro ao encerrar", result?.error || "Falha ao finalizar conversa.")
       }
@@ -1735,6 +1796,14 @@ export default function PainelClient({
   // expira sozinho para não deixar o atendente em dúvida.
   // =========================================================================
   const requestClose = () => {
+    // Se a organização exige motivo OU se existem motivos cadastrados, abre o diálogo de seleção
+    if (companyRequireCloseReason || closeReasons.length > 0) {
+      setSelectedReasonId(null)
+      setCloseNotes("")
+      setIsCloseReasonModalOpen(true)
+      return
+    }
+
     if (confirmClose) {
       setConfirmClose(false)
       void handleCloseConversation()
@@ -2769,8 +2838,69 @@ export default function PainelClient({
                           <Paperclip className="h-5 w-5" />
                         </button>
 
+                        {/* Botão Mensagens Rápidas */}
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickRepliesOpen(true)}
+                          disabled={isSending || isSendingInternalNote || isUploadingMedia || isUploadingAudio}
+                          className="p-2 text-[#54656f] hover:text-ellevee-purple hover:bg-purple-50 rounded-full transition-colors shrink-0 disabled:opacity-40"
+                          title="Mensagens rápidas (respostas prontas) ou digite /"
+                        >
+                          <Zap className="h-5 w-5" />
+                        </button>
+
                         {/* Input de Mensagem */}
                         <div className="flex-1 relative">
+                          {/* Sugestões de Atalhos Flutuantes ao digitar / */}
+                          {inputContent.startsWith("/") && (
+                            <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white rounded-xl border border-ellevee-border shadow-xl z-30 p-2 space-y-1">
+                              <div className="flex items-center justify-between px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                <span>Mensagens Rápidas</span>
+                                <span>Enter para inserir</span>
+                              </div>
+                              <div className="max-h-40 overflow-y-auto scroll-slim space-y-0.5">
+                                {quickReplies
+                                  .filter(
+                                    (q) =>
+                                      q.isActive &&
+                                      (!inputContent.slice(1).trim() ||
+                                        (q.shortcut &&
+                                          q.shortcut
+                                            .toLowerCase()
+                                            .includes(inputContent.slice(1).toLowerCase())) ||
+                                        q.title
+                                          .toLowerCase()
+                                          .includes(inputContent.slice(1).toLowerCase()))
+                                  )
+                                  .slice(0, 5)
+                                  .map((qr) => (
+                                    <button
+                                      key={qr.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setInputContent(qr.content)
+                                        textareaRef.current?.focus()
+                                      }}
+                                      className="w-full text-left p-1.5 rounded-lg hover:bg-purple-50 transition-colors flex items-center justify-between gap-2"
+                                    >
+                                      <div className="min-w-0">
+                                        <span className="text-xs font-semibold text-ellevee-deep-ink block truncate">
+                                          {qr.title}
+                                        </span>
+                                        <span className="text-[11px] text-slate-500 block truncate">
+                                          {qr.content}
+                                        </span>
+                                      </div>
+                                      {qr.shortcut && (
+                                        <span className="text-[10px] font-mono font-semibold bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded shrink-0">
+                                          /{qr.shortcut}
+                                        </span>
+                                      )}
+                                    </button>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
                           <textarea
                             ref={textareaRef}
                             rows={1}
@@ -3270,6 +3400,294 @@ export default function PainelClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: MOTIVO DE FINALIZAÇÃO DE ATENDIMENTO                                */}
+      {/* ========================================================================= */}
+      {isCloseReasonModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-ellevee-border space-y-4">
+            <div className="flex items-start justify-between border-b border-ellevee-border pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <h3 className="text-base font-bold text-ellevee-deep-ink">
+                    Finalizar Atendimento
+                  </h3>
+                  {companyRequireCloseReason ? (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full">
+                      Obrigatório
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      Opcional
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-ellevee-text-secondary mt-1">
+                  Selecione o motivo de conclusão para enriquecer as métricas operacionais e histórico do cliente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCloseReasonModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-ellevee-deep-ink hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Lista de Motivos Disponíveis */}
+            <div className="space-y-2 max-h-60 overflow-y-auto scroll-slim pr-1">
+              <label className="block text-xs font-semibold text-ellevee-deep-ink">
+                Motivo do Encerramento {companyRequireCloseReason && <span className="text-rose-500">*</span>}
+              </label>
+
+              {closeReasons.filter((r) => r.isActive).length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                  Nenhum motivo cadastrado pela administração.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {closeReasons
+                    .filter((r) => r.isActive)
+                    .map((r) => {
+                      const isSelected = selectedReasonId === r.id
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setSelectedReasonId(r.id)}
+                          className={`w-full text-left p-3 rounded-xl border transition-all flex items-start gap-3 ${
+                            isSelected
+                              ? "border-emerald-600 bg-emerald-50/50 shadow-2xs"
+                              : "border-ellevee-border hover:bg-slate-50"
+                          }`}
+                        >
+                          <span
+                            className={`h-3 w-3 rounded-full mt-0.5 shrink-0 ${
+                              r.color === "emerald"
+                                ? "bg-emerald-500"
+                                : r.color === "blue"
+                                ? "bg-blue-500"
+                                : r.color === "violet"
+                                ? "bg-purple-500"
+                                : r.color === "amber"
+                                ? "bg-amber-500"
+                                : r.color === "rose"
+                                ? "bg-rose-500"
+                                : r.color === "cyan"
+                                ? "bg-cyan-500"
+                                : "bg-slate-500"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-semibold text-ellevee-deep-ink block">
+                              {r.title}
+                            </span>
+                            {r.description && (
+                              <span className="text-[11px] text-ellevee-text-secondary line-clamp-1 mt-0.5">
+                                {r.description}
+                              </span>
+                            )}
+                          </div>
+                          {isSelected && (
+                            <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          )}
+                        </button>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* Observações Opcionais */}
+            <div>
+              <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
+                Observações de Encerramento <span className="text-slate-400 font-normal">(opcional)</span>
+              </label>
+              <textarea
+                value={closeNotes}
+                onChange={(e) => setCloseNotes(e.target.value)}
+                rows={2}
+                placeholder="Ex: Cliente fechou pedido de R$ 500, comprovante recebido..."
+                className="w-full text-xs p-2.5 rounded-xl border border-ellevee-border bg-slate-50/50 text-ellevee-deep-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-emerald-600 resize-none"
+              />
+            </div>
+
+            {/* Rodapé de Ações */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-ellevee-border">
+              <button
+                type="button"
+                onClick={() => setIsCloseReasonModalOpen(false)}
+                disabled={isClosing}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 hover:text-ellevee-deep-ink hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCloseConversation()}
+                disabled={isClosing || (companyRequireCloseReason && !selectedReasonId)}
+                className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all flex items-center gap-1.5 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isClosing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Finalizando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirmar Encerramento
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: MENSAGENS RÁPIDAS (RESPOSTAS PRONTAS)                              */}
+      {/* ========================================================================= */}
+      {isQuickRepliesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-ellevee-border space-y-4">
+            <div className="flex items-start justify-between border-b border-ellevee-border pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-ellevee-purple" />
+                  <h3 className="text-base font-bold text-ellevee-deep-ink">
+                    Mensagens Rápidas
+                  </h3>
+                </div>
+                <p className="text-xs text-ellevee-text-secondary mt-1">
+                  Selecione uma resposta rápida para inserir instantaneamente no campo de mensagem.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickRepliesOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-ellevee-deep-ink hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Busca & Filtro de Categorias */}
+            <div className="space-y-2.5">
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={quickReplySearch}
+                  onChange={(e) => setQuickReplySearch(e.target.value)}
+                  placeholder="Pesquisar por título, atalho (/pix) ou texto..."
+                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-ellevee-border rounded-lg text-xs text-ellevee-deep-ink placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-ellevee-purple"
+                  autoFocus
+                />
+              </div>
+
+              {/* Categorias */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scroll-slim pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedQuickCategory("TODAS")}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors shrink-0 ${
+                    selectedQuickCategory === "TODAS"
+                      ? "bg-ellevee-deep-ink text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Todas
+                </button>
+                {Array.from(new Set(quickReplies.map((q) => q.category))).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedQuickCategory(cat)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors shrink-0 ${
+                      selectedQuickCategory.toLowerCase() === cat.toLowerCase()
+                        ? "bg-ellevee-purple text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lista de Respostas */}
+            <div className="max-h-72 overflow-y-auto scroll-slim space-y-2 pr-1">
+              {quickReplies
+                .filter((q) => {
+                  if (!q.isActive) return false
+                  const matchSearch =
+                    q.title.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+                    q.content.toLowerCase().includes(quickReplySearch.toLowerCase()) ||
+                    (q.shortcut && q.shortcut.toLowerCase().includes(quickReplySearch.toLowerCase()))
+                  const matchCat =
+                    selectedQuickCategory === "TODAS" ||
+                    q.category.toLowerCase() === selectedQuickCategory.toLowerCase()
+                  return matchSearch && matchCat
+                })
+                .map((qr) => (
+                  <div
+                    key={qr.id}
+                    onClick={() => {
+                      setInputContent((prev) => (prev ? `${prev}\n${qr.content}` : qr.content))
+                      setIsQuickRepliesOpen(false)
+                      setTimeout(() => textareaRef.current?.focus(), 100)
+                    }}
+                    className="p-3 rounded-xl border border-ellevee-border hover:border-ellevee-purple/60 hover:bg-purple-50/30 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-ellevee-deep-ink group-hover:text-ellevee-purple transition-colors">
+                          {qr.title}
+                        </span>
+                        {qr.shortcut && (
+                          <span className="text-[10px] font-mono font-semibold bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded">
+                            /{qr.shortcut}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {qr.category}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 font-sans whitespace-pre-wrap line-clamp-2 mt-1 leading-relaxed">
+                      {qr.content}
+                    </p>
+                  </div>
+                ))}
+
+              {quickReplies.filter((q) => q.isActive).length === 0 && (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Nenhuma mensagem rápida ativa disponível.
+                </div>
+              )}
+            </div>
+
+            {/* Dica de Atalho */}
+            <div className="pt-2 border-t border-ellevee-border flex items-center justify-between text-[11px] text-slate-500">
+              <span className="flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                Dica: Digite <kbd className="font-mono bg-slate-100 px-1 py-0.5 rounded text-[10px] border border-slate-200">/atalho</kbd> no chat para inserir instantaneamente.
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsQuickRepliesOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
