@@ -51,22 +51,22 @@ export function MetricCard({
 
   return (
     <div
-      className={`group relative bg-white rounded-2xl border border-gray-200/90 p-5 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col justify-between ${c.glow}`}
+      className={`group relative bg-white rounded-xl border border-ellevee-border p-5 shadow-card hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between ${c.glow}`}
     >
       <div>
         <div className="flex items-center justify-between pb-3">
-          <span className="text-xs font-semibold text-gray-500 tracking-tight uppercase">
+          <span className="text-xs font-semibold text-ellevee-text-secondary tracking-tight uppercase">
             {title}
           </span>
           <div
-            className={`h-9 w-9 rounded-xl ${c.bg} ${c.text} ${c.border} border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105`}
+            className={`h-9 w-9 rounded-lg ${c.bg} ${c.text} ${c.border} border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105`}
           >
             <Icon className="h-4 w-4" />
           </div>
         </div>
 
         <div className="flex items-baseline gap-2">
-          <div className="text-3xl font-bold font-display tracking-tight text-gray-900">
+          <div className="text-3xl font-bold font-display tracking-tight text-ellevee-deep-ink">
             {value}
           </div>
           {trend && (
@@ -78,10 +78,10 @@ export function MetricCard({
         </div>
       </div>
 
-      <div className="pt-3 mt-2 border-t border-gray-100 flex items-center justify-between">
-        <p className="text-xs text-gray-500 font-medium">{description}</p>
+      <div className="pt-3 mt-2 border-t border-ellevee-border/60 flex items-center justify-between">
+        <p className="text-xs text-ellevee-text-secondary font-medium">{description}</p>
         {badge && (
-          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-ellevee-warm-ivory text-ellevee-text-secondary border border-ellevee-border">
             {badge}
           </span>
         )}
