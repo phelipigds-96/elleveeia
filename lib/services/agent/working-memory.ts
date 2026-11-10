@@ -321,15 +321,14 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
 
       if (incomingProducts.length > 0) {
         const existingList = next.discoveredProducts ? [...next.discoveredProducts] : []
-        for (const inc of incomingProducts) {
-          const idx = existingList.findIndex(e => e.id === inc.id)
-          if (idx >= 0) {
-            existingList[idx] = { ...existingList[idx], ...inc }
-          } else {
-            existingList.push(inc)
-          }
-        }
-        next.discoveredProducts = existingList.slice(-15)
+        const mergedIncoming: DiscoveredProduct[] = incomingProducts.map(inc => {
+          const old = existingList.find(e => e.id === inc.id)
+          return old ? { ...old, ...inc } : inc
+        })
+        const incomingIds = new Set(mergedIncoming.map(p => p.id))
+        const remaining = existingList.filter(e => !incomingIds.has(e.id))
+        // Produtos recém-apresentados ou atualizados sempre no topo (mais recentes primeiro)
+        next.discoveredProducts = [...mergedIncoming, ...remaining].slice(0, 20)
       }
 
 

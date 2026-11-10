@@ -8,8 +8,8 @@ export const consultarPrecoTool: ToolDefinition = {
   description: 'Consulta o preco unitario base de um produto. Use calcular_preco_produto para regras de quantidade.',
   metadata: { category: 'pricing', capabilities: ['price.search'] },
   schema: z.object({
-    product_id: z.string().optional().describe('ID do produto (UUID cadastrado no catálogo). Use o ID de [PRODUTOS APRESENTADOS RECENTEMENTE]'),
-    product_name: z.string().optional().describe('Nome ou termo do produto para identificação caso não tenha certeza do ID exato'),
+    product_id: z.string().optional().describe('ID do produto (UUID exato de [PRODUTOS APRESENTADOS RECENTEMENTE] ou do catálogo). Preencha preferencialmente junto com product_name.'),
+    product_name: z.string().optional().describe('Nome ou termo do produto (ex: "LEITE CONDENSADO SEMIDESNATADO TIROL 395G"). Preencha SEMPRE para identificação precisa.'),
     price_type: z.string().optional().describe('Tipo preco (retail/wholesale/club)')
   }),
   execute: async (input, context) => {
@@ -17,12 +17,24 @@ export const consultarPrecoTool: ToolDefinition = {
 
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     let targetProductId = product_id && UUID_REGEX.test(product_id.trim()) ? product_id.trim() : null
+    let resolvedProductName: string | undefined = product_name?.trim() || undefined
 
-    // 1. Fallback de busca por nome se ID for ausente ou inválido
-    if (!targetProductId && product_name) {
-      const searchRes = await searchProducts(context.companyId, product_name.trim(), 1)
+    // 1. Tenta identificar o nome nos produtos descobertos recentemente ou contexto ativo
+    if (targetProductId && context.workingMemory?.discoveredProducts) {
+      const found = context.workingMemory.discoveredProducts.find((p: any) => p.id === targetProductId)
+      if (found && !resolvedProductName) resolvedProductName = found.name
+    }
+    if (targetProductId && !resolvedProductName && context.workingMemory?.activeProduct?.id === targetProductId) {
+      resolvedProductName = context.workingMemory.activeProduct.name
+    }
+
+    // 2. Fallback de busca por nome se ID for ausente ou inválido
+    if (!targetProductId && (product_name || resolvedProductName)) {
+      const term = (product_name || resolvedProductName)!.trim()
+      const searchRes = await searchProducts(context.companyId, term, 1)
       if (searchRes.matches && searchRes.matches.length > 0) {
         targetProductId = searchRes.matches[0].id
+        resolvedProductName = searchRes.matches[0].name
       }
     }
 
@@ -43,14 +55,19 @@ export const consultarPrecoTool: ToolDefinition = {
           }
         }
       } catch (error: any) {
-        // Fallback por nome se a busca por ID falhar
-        if (product_name) {
+        // Fallback se precificação por ID falhar
+        const candidateTerm = product_name?.trim() || resolvedProductName || 
+          context.workingMemory?.activeProduct?.name ||
+          (context.workingMemory?.discoveredProducts?.length === 1 ? context.workingMemory.discoveredProducts[0].name : undefined)
+
+        if (candidateTerm) {
           try {
-            const fallbackSearch = await searchProducts(context.companyId, product_name.trim(), 1)
-            if (fallbackSearch.matches && fallbackSearch.matches.length > 0 && fallbackSearch.matches[0].id !== targetProductId) {
+            const fallbackSearch = await searchProducts(context.companyId, candidateTerm, 3)
+            const validMatch = fallbackSearch.matches?.find(m => m.id !== targetProductId) || fallbackSearch.matches?.[0]
+            if (validMatch && validMatch.id !== targetProductId) {
               const fallbackResult = await resolveProductPrice({
                 companyId: context.companyId,
-                productId: fallbackSearch.matches[0].id,
+                productId: validMatch.id,
                 quantity: 1,
                 priceType: price_type
               })
