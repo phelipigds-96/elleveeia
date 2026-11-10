@@ -19,6 +19,7 @@ import {
   Activity,
   Sliders,
   CheckCircle2,
+  QrCode,
 } from "lucide-react"
 import { Toaster } from "@/components/ui/toast"
 import AdminCommandPalette from "./admin-command-palette"
@@ -51,6 +52,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     title: "GESTÃO",
     items: [
       { name: "Empresas", href: "/companies", icon: Building2 },
+      { name: "Instâncias WhatsApp", href: "/instances", icon: QrCode },
       { name: "Planos e limites", href: "/plans", icon: Layers },
       { name: "Agentes", href: "/agents", icon: Bot },
       { name: "Provedores", href: "/providers", icon: Cpu },
@@ -84,6 +86,9 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   // Dynamic breadcrumb calculation
   const getBreadcrumb = () => {
+    if (pathname.startsWith("/instances")) {
+      return { section: "Gestão", page: "Instâncias WhatsApp" }
+    }
     if (pathname.startsWith("/plans")) {
       return { section: "Gestão", page: "Planos e Limites" }
     }

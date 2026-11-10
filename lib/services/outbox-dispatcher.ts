@@ -1,6 +1,7 @@
 import 'server-only'
 import crypto from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/service'
+import { resolveEvolutionContext } from '@/lib/services/whatsapp-evolution'
 
 export interface OutboxProcessOptions {
   batchSize?: number
@@ -83,24 +84,17 @@ export async function sendToGateway(
   let apiKey = process.env.EVOLUTION_API_KEY || ''
   let instance = process.env.EVOLUTION_INSTANCE_NAME || 'default'
 
-  if (!rawUrl || rawUrl.trim() === '') {
-    try {
-      const { data: evoIntegration } = await supabase
-        .from('integrations')
-        .select('config, credentials')
-        .eq('company_id', row.company_id)
-        .eq('type', 'whatsapp_evolution')
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (evoIntegration?.config?.api_url && evoIntegration?.credentials?.api_key) {
-        rawUrl = evoIntegration.config.api_url
-        apiKey = evoIntegration.credentials.api_key
-        instance = evoIntegration.config.instance_name || instance
+  try {
+    const evoCtx = await resolveEvolutionContext(row.company_id)
+    if (evoCtx.apiUrl && evoCtx.apiKey) {
+      rawUrl = evoCtx.apiUrl
+      apiKey = evoCtx.apiKey
+      if (evoCtx.instanceName) {
+        instance = evoCtx.instanceName
       }
-    } catch {
-      // Ignora falha de lookup
     }
+  } catch {
+    // Ignora falha de lookup e usa env se presente
   }
 
   if (rawUrl && rawUrl.trim() !== '') {
