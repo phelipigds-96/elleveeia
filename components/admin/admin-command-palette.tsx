@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Sparkles,
   Command,
+  QrCode,
 } from "lucide-react"
 
 interface CommandItem {
@@ -45,6 +46,15 @@ const COMMANDS: CommandItem[] = [
     icon: Building2,
     category: "Navegação",
     badge: "Multi-tenant",
+  },
+  {
+    id: "nav-instances",
+    title: "Instâncias WhatsApp (Evolution API)",
+    subtitle: "Gateway central, status de conexão e QR Code de todos os clientes",
+    href: "/instances",
+    icon: QrCode,
+    category: "Navegação",
+    badge: "WhatsApp",
   },
   {
     id: "nav-plans",

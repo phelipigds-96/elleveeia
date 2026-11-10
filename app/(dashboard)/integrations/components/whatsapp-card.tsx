@@ -12,10 +12,7 @@ import {
   Smartphone,
   X,
   ExternalLink,
-  ShieldCheck,
-  Check,
-  Settings,
-  Server
+  MessageSquare
 } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import {
@@ -23,8 +20,6 @@ import {
   getWhatsAppQrCodeAction,
   disconnectWhatsAppAction,
   restartWhatsAppAction,
-  getEvolutionConfigAction,
-  saveEvolutionConfigAction,
 } from '../actions'
 
 interface WhatsAppCardProps {
@@ -53,13 +48,6 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
   const [isLoadingQr, setIsLoadingQr] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [isRestarting, setIsRestarting] = useState(false)
-
-  // Estados do Modal de Configuração do Servidor
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
-  const [serverUrl, setServerUrl] = useState('')
-  const [serverApiKey, setServerApiKey] = useState('')
-  const [serverInstance, setServerInstance] = useState('default')
-  const [isSavingConfig, setIsSavingConfig] = useState(false)
 
   // 1. Checagem de status no backend
   const checkStatus = useCallback(async () => {
@@ -96,10 +84,10 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
       }
 
       if (!res.base64 && !res.pairingCode && res.error) {
-        toast.error('Erro ao gerar QR Code', res.error)
+        toast.error('Aviso de Conexão', res.error)
       }
     } catch (err: any) {
-      toast.error('Erro no servidor', err?.message || 'Falha ao solicitar QR Code.')
+      toast.error('Erro na solicitação', err?.message || 'Falha ao solicitar QR Code. Tente novamente.')
     } finally {
       setIsLoadingQr(false)
     }
@@ -126,50 +114,7 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
     }
   }, [isModalOpen, fetchQrCode, checkStatus])
 
-  // 4. Carregar configurações salvas ao abrir modal de config
-  const handleOpenConfigModal = async () => {
-    try {
-      const cfg = await getEvolutionConfigAction()
-      if (cfg.apiUrl) setServerUrl(cfg.apiUrl)
-      if (cfg.apiKey) setServerApiKey(cfg.apiKey)
-      if (cfg.instanceName) setServerInstance(cfg.instanceName)
-    } catch {
-      // Ignora falha de leitura
-    }
-    setIsConfigModalOpen(true)
-  }
-
-  // 5. Salvar Configuração do Servidor Evolution
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!serverUrl.trim() || !serverApiKey.trim()) {
-      toast.error('Campos obrigatórios', 'Informe a URL e a API Key da Evolution API.')
-      return
-    }
-
-    setIsSavingConfig(true)
-    try {
-      const res = await saveEvolutionConfigAction({
-        apiUrl: serverUrl.trim(),
-        apiKey: serverApiKey.trim(),
-        instanceName: serverInstance.trim() || 'default',
-      })
-
-      if (res.success) {
-        toast.success('Configuração Salva!', 'Servidor Evolution API configurado com sucesso.')
-        setIsConfigModalOpen(false)
-        await checkStatus()
-      } else {
-        toast.error('Erro ao salvar', res.error || 'Falha na persistência.')
-      }
-    } catch (err: any) {
-      toast.error('Erro', err?.message || 'Falha na comunicação.')
-    } finally {
-      setIsSavingConfig(false)
-    }
-  }
-
-  // 6. Desconectar Sessão
+  // 4. Desconectar Sessão
   const handleDisconnect = async () => {
     if (
       !confirm(
@@ -198,7 +143,7 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
     }
   }
 
-  // 7. Reiniciar Conexão / Instância
+  // 5. Reiniciar Conexão
   const handleRestart = async () => {
     setIsRestarting(true)
     try {
@@ -251,21 +196,12 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                 <h3 className="font-semibold text-gray-900 text-base leading-tight">
                   WhatsApp (QR Code)
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">Conexão Rápida • Evolution API</p>
+                <p className="text-xs text-gray-500 mt-0.5">Conexão Rápida • Aparelho Conectado</p>
               </div>
             </div>
 
-            {/* Badges e Botão de Configuração */}
+            {/* Badges de Status */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleOpenConfigModal}
-                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Configurações do Servidor Evolution"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                   isConnected
@@ -287,7 +223,7 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                 {isConnected
                   ? 'Conectado'
                   : isNotConfigured
-                  ? 'Não Configurado'
+                  ? 'Aguardando Ativação'
                   : 'Desconectado'}
               </span>
             </div>
@@ -307,19 +243,9 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                 <span className="text-[11px] text-emerald-600 font-medium">Sessão Ativa</span>
               </div>
             ) : isNotConfigured ? (
-              <div className="space-y-2">
-                <p className="text-amber-800 leading-relaxed font-medium">
-                  Servidor Evolution API ainda não configurado para esta conta.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOpenConfigModal}
-                  className="w-full py-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
-                >
-                  <Server className="h-3.5 w-3.5" />
-                  Configurar Servidor Evolution
-                </button>
-              </div>
+              <p className="text-amber-800 leading-relaxed font-medium">
+                A sincronização do WhatsApp está em processo de ativação pela equipe de suporte da Ellevee. Assim que liberada, o QR Code de conexão estará disponível aqui.
+              </p>
             ) : (
               <p className="leading-relaxed">
                 Escaneie o QR Code com a câmera do seu celular para sincronizar o WhatsApp e permitir o envio e recepção automática de mensagens.
@@ -362,35 +288,30 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                 Desconectar
               </button>
             </>
+          ) : isNotConfigured ? (
+            <a
+              href="https://wa.me/5547991718483?text=Ol%C3%A1!%20Gostaria%20de%20ativar%20meu%20canal%20de%20WhatsApp%20na%20plataforma%20Ellevee."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-2xs transition-colors"
+            >
+              <MessageSquare className="h-4 w-4 text-amber-700" />
+              Solicitar Ativação ao Suporte
+            </a>
           ) : (
             <button
               type="button"
-              onClick={() => {
-                if (isNotConfigured) {
-                  handleOpenConfigModal()
-                } else {
-                  setIsModalOpen(true)
-                }
-              }}
+              onClick={() => setIsModalOpen(true)}
               className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-medium flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-[0.98]"
             >
-              {isNotConfigured ? (
-                <>
-                  <Settings className="h-4 w-4" />
-                  Configurar Servidor Evolution
-                </>
-              ) : (
-                <>
-                  <QrCode className="h-4 w-4" />
-                  Conectar WhatsApp via QR Code
-                </>
-              )}
+              <QrCode className="h-4 w-4" />
+              Conectar WhatsApp via QR Code
             </button>
           )}
         </div>
       </div>
 
-      {/* MODAL 1: CONEXÃO COM QR CODE */}
+      {/* MODAL: CONEXÃO COM QR CODE */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -439,27 +360,15 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                   <div className="flex flex-col items-center gap-3 p-4 text-center">
                     <AlertCircle className="h-8 w-8 text-amber-500" />
                     <span className="text-xs text-gray-600">
-                      Não foi possível carregar a imagem do QR Code. Verifique se o servidor da Evolution API está ativo e configurado.
+                      Não foi possível carregar a imagem do QR Code. A sessão pode estar inicializando no servidor.
                     </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={fetchQrCode}
-                        className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg font-medium hover:bg-emerald-700 transition-colors"
-                      >
-                        Tentar Novamente
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsModalOpen(false)
-                          handleOpenConfigModal()
-                        }}
-                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-lg font-medium transition-colors"
-                      >
-                        Ver Configurações
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchQrCode}
+                      className="px-4 py-2 bg-emerald-600 text-white text-xs rounded-lg font-medium hover:bg-emerald-700 transition-colors"
+                    >
+                      Tentar Novamente
+                    </button>
                   </div>
                 )}
               </div>
@@ -498,119 +407,6 @@ export function WhatsAppCard({ initialStatus }: WhatsAppCardProps) {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: CONFIGURAÇÃO DO SERVIDOR EVOLUTION API */}
-      {isConfigModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => !isSavingConfig && setIsConfigModalOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header Modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#005d4b] text-white">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-full bg-white/10 text-white">
-                  <Server className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-white">Configurar Evolution API</h3>
-                  <p className="text-xs text-white/80">Endereço e chave do servidor gateway</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => !isSavingConfig && setIsConfigModalOpen(false)}
-                className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-                title="Fechar"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Formulário de Configuração */}
-            <form onSubmit={handleSaveConfig} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  URL da Evolution API <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="https://evolution.seudominio.com.br"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
-                />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Endereço público onde a sua Evolution API está hospedada.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  API Key Global <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={serverApiKey}
-                  onChange={(e) => setServerApiKey(e.target.value)}
-                  placeholder="AUTHENTICATION_API_KEY da Evolution"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
-                />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Chave mestra configurada no .env da sua Evolution API.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Nome da Instância <span className="text-gray-400 font-normal">(padrão: default)</span>
-                </label>
-                <input
-                  type="text"
-                  value={serverInstance}
-                  onChange={(e) => setServerInstance(e.target.value)}
-                  placeholder="default"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
-                />
-              </div>
-
-              {/* Botões de Ação */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  disabled={isSavingConfig}
-                  onClick={() => setIsConfigModalOpen(false)}
-                  className="px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingConfig || !serverUrl.trim() || !serverApiKey.trim()}
-                  className="px-5 py-2 text-xs sm:text-sm bg-[#005d4b] hover:bg-[#004738] text-white rounded-lg transition-colors font-medium flex items-center gap-2 shadow-xs disabled:opacity-50"
-                >
-                  {isSavingConfig ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4" />
-                      Salvar e Conectar
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
