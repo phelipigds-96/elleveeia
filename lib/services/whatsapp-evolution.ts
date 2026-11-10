@@ -83,6 +83,110 @@ async function resolveEvolutionContext() {
 }
 
 /**
+ * Retorna as configurações atuais da Evolution API para exibição no formulário.
+ */
+export async function getEvolutionConfig() {
+  const ctx = await resolveEvolutionContext()
+  return {
+    apiUrl: ctx.apiUrl,
+    apiKey: ctx.apiKey,
+    instanceName: ctx.instanceName,
+    isConfigured: Boolean(ctx.apiUrl && ctx.apiKey),
+  }
+}
+
+/**
+ * Salva as configurações da Evolution API para a empresa na tabela integrations.
+ */
+export async function saveEvolutionConfig(params: {
+  apiUrl: string
+  apiKey: string
+  instanceName?: string
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: 'Usuário não autenticado.' }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_id, role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.company_id) {
+      return { success: false, error: 'Perfil de empresa não localizado.' }
+    }
+
+    const companyId = profile.company_id
+    const adminClient = createAdminClient()
+
+    const cleanUrl = params.apiUrl.trim().replace(/\/+$/, '')
+    const cleanKey = params.apiKey.trim()
+    const cleanInstance = params.instanceName?.trim() || 'default'
+
+    if (!cleanUrl || !cleanKey) {
+      return { success: false, error: 'URL e API Key da Evolution API são obrigatórias.' }
+    }
+
+    const { data: existing } = await adminClient
+      .from('integrations')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('type', 'whatsapp_evolution')
+      .maybeSingle()
+
+    if (existing) {
+      const { error: updErr } = await adminClient
+        .from('integrations')
+        .update({
+          status: 'active',
+          config: {
+            api_url: cleanUrl,
+            instance_name: cleanInstance,
+          },
+          credentials: {
+            api_key: cleanKey,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+
+      if (updErr) {
+        return { success: false, error: `Falha ao atualizar: ${updErr.message}` }
+      }
+    } else {
+      const { error: insErr } = await adminClient
+        .from('integrations')
+        .insert({
+          company_id: companyId,
+          type: 'whatsapp_evolution',
+          name: 'WhatsApp Evolution API',
+          status: 'active',
+          config: {
+            api_url: cleanUrl,
+            instance_name: cleanInstance,
+          },
+          credentials: {
+            api_key: cleanKey,
+          },
+        })
+
+      if (insErr) {
+        return { success: false, error: `Falha ao salvar: ${insErr.message}` }
+      }
+    }
+
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao salvar configuração da Evolution API.' }
+  }
+}
+
+/**
  * Consulta o status atual da conexão do WhatsApp na Evolution API.
  */
 export async function getEvolutionWhatsAppStatus(): Promise<WhatsAppStatusResult> {
