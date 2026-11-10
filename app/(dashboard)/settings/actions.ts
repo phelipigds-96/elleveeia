@@ -222,3 +222,165 @@ export async function deleteCompanyUserAction(userId: string): Promise<ActionRes
     return { success: false, error: `Erro interno: ${err?.message || "Falha desconhecida"}` }
   }
 }
+
+// ============================================================================
+// GESTÃO DE MOTIVOS DE FINALIZAÇÃO (CLOSE REASONS)
+// ============================================================================
+
+import {
+  getCompanyCloseReasons,
+  saveCompanyCloseReason,
+  deleteCompanyCloseReason,
+  toggleCompanyCloseReason,
+  getCompanyClosePolicy,
+  getCompanyQuickReplies,
+  saveCompanyQuickReply,
+  deleteCompanyQuickReply,
+  toggleCompanyQuickReply,
+  CloseReason,
+  QuickReply,
+  SaveCloseReasonInput,
+  SaveQuickReplyInput,
+} from "@/lib/services/chat-operations"
+
+export type { CloseReason, QuickReply, SaveCloseReasonInput, SaveQuickReplyInput }
+
+export async function getCompanyClosePolicyAction(): Promise<{ requireCloseReason: boolean }> {
+  const currentProfile = await requireCompanyAdmin()
+  if (!currentProfile.company_id) return { requireCloseReason: false }
+  return await getCompanyClosePolicy(currentProfile.company_id)
+}
+
+export async function getCloseReasonsAction(): Promise<CloseReason[]> {
+  const currentProfile = await requireCompanyAdmin()
+  if (!currentProfile.company_id) return []
+  return await getCompanyCloseReasons(currentProfile.company_id, false)
+}
+
+export async function saveCloseReasonAction(
+  input: SaveCloseReasonInput
+): Promise<ActionResult<CloseReason>> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await saveCompanyCloseReason(currentProfile.company_id, input)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao salvar motivo." }
+  }
+}
+
+export async function deleteCloseReasonAction(id: string): Promise<ActionResult> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await deleteCompanyCloseReason(currentProfile.company_id, id)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao excluir motivo." }
+  }
+}
+
+export async function toggleCloseReasonAction(
+  id: string,
+  isActive: boolean
+): Promise<ActionResult> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await toggleCompanyCloseReason(currentProfile.company_id, id, isActive)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao alterar status do motivo." }
+  }
+}
+
+// ============================================================================
+// GESTÃO DE MENSAGENS RÁPIDAS (QUICK REPLIES)
+// ============================================================================
+
+export async function getQuickRepliesAction(): Promise<QuickReply[]> {
+  const currentProfile = await requireCompanyAdmin()
+  if (!currentProfile.company_id) return []
+  return await getCompanyQuickReplies(currentProfile.company_id, false)
+}
+
+export async function saveQuickReplyAction(
+  input: SaveQuickReplyInput
+): Promise<ActionResult<QuickReply>> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await saveCompanyQuickReply(currentProfile.company_id, input)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao salvar mensagem rápida." }
+  }
+}
+
+export async function deleteQuickReplyAction(id: string): Promise<ActionResult> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await deleteCompanyQuickReply(currentProfile.company_id, id)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao excluir mensagem rápida." }
+  }
+}
+
+export async function toggleQuickReplyAction(
+  id: string,
+  isActive: boolean
+): Promise<ActionResult> {
+  try {
+    const currentProfile = await requireCompanyAdmin()
+    if (!currentProfile.company_id) {
+      return { success: false, error: "Organização não identificada." }
+    }
+
+    const res = await toggleCompanyQuickReply(currentProfile.company_id, id, isActive)
+    if (res.success) {
+      revalidatePath("/settings")
+      revalidatePath("/conversations")
+    }
+    return res
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao alterar status da mensagem rápida." }
+  }
+}

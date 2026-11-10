@@ -72,7 +72,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
   try {
     const adminClient = createAdminClient()
 
-    // 1. Tenta consultar empresas com colunas de cnpj e contact_email
+    // 1. Tenta consultar empresas com colunas de cnpj, contact_email e require_close_reason
     let rows: any[] = []
     const { data: rowsWithCols, error: compErr } = await adminClient
       .from("companies")
@@ -86,6 +86,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         updated_at,
         cnpj,
         contact_email,
+        require_close_reason,
         company_limits (
           max_agents,
           max_monthly_messages,
@@ -110,6 +111,8 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
           plan_tier,
           created_at,
           updated_at,
+          cnpj,
+          contact_email,
           company_limits (
             max_agents,
             max_monthly_messages,
@@ -120,11 +123,35 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         `)
         .order("created_at", { ascending: false })
 
-      if (fallbackErr) {
-        console.error("[SuperAdmin] Erro ao listar empresas do banco:", fallbackErr.message)
-        rows = []
+      if (!fallbackErr && fallbackRows) {
+        rows = fallbackRows
       } else {
-        rows = fallbackRows || []
+        const { data: minimalRows, error: minErr } = await adminClient
+          .from("companies")
+          .select(`
+            id,
+            name,
+            slug,
+            status,
+            plan_tier,
+            created_at,
+            updated_at,
+            company_limits (
+              max_agents,
+              max_monthly_messages,
+              max_monthly_quotes,
+              max_catalog_items,
+              allowed_llm_providers
+            )
+          `)
+          .order("created_at", { ascending: false })
+
+        if (minErr) {
+          console.error("[SuperAdmin] Erro ao listar empresas do banco:", minErr.message)
+          rows = []
+        } else {
+          rows = minimalRows || []
+        }
       }
     }
 
@@ -256,6 +283,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       aiProvider: providerUI,
       createdAt: c.created_at ? c.created_at.split("T")[0] : new Date().toISOString().split("T")[0],
       adminEmail: resolvedEmail,
+      requireCloseReason: Boolean(c.require_close_reason),
     }
   })
 
@@ -846,6 +874,7 @@ export interface UpdateLimitsInput {
   maxMonthlyQuotes?: number
   maxCatalogItems?: number
   tokensLimit?: number
+  requireCloseReason?: boolean
 }
 
 /**
@@ -933,6 +962,21 @@ export async function updateCompanyLimitsAction(
         return { success: false, error: `Falha ao salvar limites: ${error.message}` }
       }
       limitsResult = data
+    }
+
+    // 2.1. Atualizar política de motivo de encerramento da empresa se especificado
+    if (newLimits.requireCloseReason !== undefined) {
+      try {
+        await adminClient
+          .from("companies")
+          .update({
+            require_close_reason: Boolean(newLimits.requireCloseReason),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", companyId)
+      } catch (policyErr: any) {
+        console.warn("[SuperAdmin] Aviso ao atualizar require_close_reason:", policyErr?.message)
+      }
     }
 
     // 3. Registrar auditoria em platform_audit_logs
