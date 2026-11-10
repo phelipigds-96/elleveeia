@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
 import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
 import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
+import { assignDefaultWorkflowStages } from "@/lib/services/workflows/conversation-workflow"
 
 export interface CustomerData {
   id?: string
@@ -1199,5 +1200,145 @@ export async function sendMediaMessageAction(params: {
       success: false,
       error: `Erro ao enviar mídia: ${error.message || "Erro desconhecido"}`,
     }
+  }
+}
+
+export interface StartNewConversationResult {
+  success: boolean
+  conversationId?: string
+  error?: string
+}
+
+/**
+ * Inicia uma conversa ativa do painel diretamente para um número de WhatsApp.
+ * Cria ou localiza o cliente, inicia a conversa em modo 'human' (assumida pelo atendente),
+ * e despacha a primeira mensagem caso fornecida.
+ */
+export async function startNewConversationAction(params: {
+  phone: string
+  name?: string
+  initialMessage?: string
+}): Promise<StartNewConversationResult> {
+  try {
+    const { userId, companyId } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+
+    // 1. Limpeza e normalização do número de telefone
+    let cleanPhone = (params.phone || "").replace(/\D/g, "")
+    if (!cleanPhone || cleanPhone.length < 8) {
+      return { success: false, error: "Informe um número de telefone válido com DDD." }
+    }
+
+    // Se tiver 10 ou 11 dígitos (DDD + número), assume padrão Brasil (+55)
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+      cleanPhone = `55${cleanPhone}`
+    }
+
+    const cleanName = params.name?.trim() || `Cliente (${cleanPhone.slice(-4)})`
+
+    // 2. Localiza ou cadastra o cliente no Supabase
+    let customerId: string
+    const { data: existingCust } = await adminClient
+      .from("customers")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .eq("phone", cleanPhone)
+      .maybeSingle()
+
+    if (existingCust) {
+      customerId = existingCust.id
+      if (params.name?.trim() && existingCust.name !== params.name.trim()) {
+        await adminClient
+          .from("customers")
+          .update({ name: params.name.trim() })
+          .eq("id", customerId)
+          .eq("company_id", companyId)
+      }
+    } else {
+      const { data: newCust, error: custErr } = await adminClient
+        .from("customers")
+        .insert({
+          company_id: companyId,
+          name: cleanName,
+          phone: cleanPhone,
+        })
+        .select("id")
+        .single()
+
+      if (custErr || !newCust) {
+        return { success: false, error: `Falha ao cadastrar cliente: ${custErr?.message || "Erro desconhecido"}` }
+      }
+      customerId = newCust.id
+    }
+
+    // 3. Verifica se já existe conversa para este cliente no WhatsApp
+    const { data: existingConv } = await adminClient
+      .from("conversations")
+      .select("id, status")
+      .eq("company_id", companyId)
+      .eq("customer_id", customerId)
+      .eq("channel", "whatsapp")
+      .order("last_message_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let conversationId: string
+    const now = new Date().toISOString()
+
+    if (existingConv) {
+      conversationId = existingConv.id
+      // Garante que a conversa esteja como 'human' atribuída ao atendente atual
+      await adminClient
+        .from("conversations")
+        .update({
+          status: "human",
+          assigned_to: userId,
+          closed_at: null,
+          updated_at: now,
+        })
+        .eq("id", conversationId)
+        .eq("company_id", companyId)
+    } else {
+      const { data: newConv, error: convErr } = await adminClient
+        .from("conversations")
+        .insert({
+          company_id: companyId,
+          customer_id: customerId,
+          channel: "whatsapp",
+          status: "human",
+          assigned_to: userId,
+          unread_count: 0,
+          started_at: now,
+          last_message_at: now,
+        })
+        .select("id")
+        .single()
+
+      if (convErr || !newConv) {
+        return { success: false, error: `Falha ao iniciar conversa: ${convErr?.message || "Erro desconhecido"}` }
+      }
+      conversationId = newConv.id
+
+      // Atribui funil padrão
+      await assignDefaultWorkflowStages(adminClient, companyId, conversationId)
+    }
+
+    // 4. Se informou mensagem inicial, envia diretamente
+    if (params.initialMessage?.trim()) {
+      const sendRes = await sendMessageAction(conversationId, params.initialMessage.trim())
+      if (!sendRes?.success) {
+        return {
+          success: true,
+          conversationId,
+          error: sendRes?.error || "Conversa criada, mas houve falha no envio da mensagem inicial.",
+        }
+      }
+    }
+
+    revalidatePath("/conversations")
+    return { success: true, conversationId }
+  } catch (err: any) {
+    console.error("[startNewConversationAction] Exceção:", err)
+    return { success: false, error: err?.message || "Erro interno ao iniciar conversa." }
   }
 }

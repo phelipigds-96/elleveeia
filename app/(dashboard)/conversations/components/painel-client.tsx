@@ -74,7 +74,8 @@ import {
   updateCustomerProfileAction,
   createInternalNoteAction,
   uploadChatMediaAction,
-  sendMediaMessageAction
+  sendMediaMessageAction,
+  startNewConversationAction
 } from "../actions"
 import {
   StatusChip,
@@ -445,6 +446,13 @@ export default function PainelClient({
 
   // Lightbox Modal para visualização ampliada de imagem na mesma página (estilo WhatsApp Web)
   const [previewImage, setPreviewImage] = useState<{ url: string; fileName?: string } | null>(null)
+
+  // Modal de Nova Conversa Ativa
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false)
+  const [newChatPhone, setNewChatPhone] = useState("")
+  const [newChatName, setNewChatName] = useState("")
+  const [newChatMessage, setNewChatMessage] = useState("")
+  const [isStartingNewChat, setIsStartingNewChat] = useState(false)
 
   // Fecha o lightbox modal ao pressionar a tecla Escape
   useEffect(() => {
@@ -1658,6 +1666,43 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // CICLO DE VIDA: 5. INICIAR NOVA CONVERSA ATIVA (DO PAINEL PARA O WHATSAPP)
+  // =========================================================================
+  const handleStartNewChat = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newChatPhone.trim() || isStartingNewChat) return
+
+    setIsStartingNewChat(true)
+    try {
+      const res = await startNewConversationAction({
+        phone: newChatPhone.trim(),
+        name: newChatName.trim() || undefined,
+        initialMessage: newChatMessage.trim() || undefined,
+      })
+
+      if (res?.success && res?.conversationId) {
+        toast.success("Conversa Iniciada!", "Atendimento aberto com sucesso.")
+        setIsNewChatModalOpen(false)
+        setNewChatPhone("")
+        setNewChatName("")
+        setNewChatMessage("")
+
+        const updatedList = await getConversationsList()
+        if (updatedList && updatedList.length > 0) {
+          setConversations(updatedList)
+        }
+        setSelectedId(res.conversationId)
+      } else {
+        toast.error("Erro ao iniciar conversa", res?.error || "Não foi possível abrir o atendimento.")
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado", err?.message || "Falha ao iniciar conversa.")
+    } finally {
+      setIsStartingNewChat(false)
+    }
+  }
+
+  // =========================================================================
   // FASE 1 — NAVEGACAO MOBILE EM PILHA (Padrao WhatsApp Web)
   // Abaixo de `lg` o painel funciona como app de celular: uma tela por vez.
   // Sem selecao -> so a lista; com selecao -> so a conversa. O botao de voltar
@@ -1854,10 +1899,11 @@ export default function PainelClient({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="p-1.5 text-[#54656f] hover:text-[#111827] hover:bg-[#f0f2f5] rounded-md transition-colors"
+              onClick={() => setIsNewChatModalOpen(true)}
+              className="p-1.5 text-[#54656f] hover:text-[#005d4b] hover:bg-[#005d4b]/10 rounded-md transition-colors"
               title="Nova conversa / contato"
             >
-              <Edit className="h-4 w-4" />
+              <SquarePen className="h-4 w-4" />
             </button>
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8696a0]" />
@@ -3102,6 +3148,128 @@ export default function PainelClient({
               className="max-h-[85vh] max-w-[92vw] object-contain rounded-lg shadow-2xl transition-transform"
               onClick={(e) => e.stopPropagation()}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Iniciar Nova Conversa Ativa */}
+      {isNewChatModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => !isStartingNewChat && setIsNewChatModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho do Modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#005d4b] text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-full bg-white/10 text-white">
+                  <SquarePen className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">Nova Conversa</h3>
+                  <p className="text-xs text-white/80">Envie uma mensagem pelo WhatsApp</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isStartingNewChat && setIsNewChatModalOpen(false)}
+                className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Formulário */}
+            <form onSubmit={handleStartNewChat} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Telefone WhatsApp <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="tel"
+                    required
+                    value={newChatPhone}
+                    onChange={(e) => setNewChatPhone(e.target.value)}
+                    placeholder="Ex: 51 99999-9999 ou 5551999999999"
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  DDI +55 (Brasil) será aplicado automaticamente caso não informado.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Nome do Contato <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={newChatName}
+                    onChange={(e) => setNewChatName(e.target.value)}
+                    placeholder="Ex: Maria Silva"
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Primeira Mensagem <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={newChatMessage}
+                  onChange={(e) => setNewChatMessage(e.target.value)}
+                  placeholder="Olá! Como posso ajudar você hoje?"
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#005d4b]/20 focus:border-[#005d4b] resize-none"
+                />
+              </div>
+
+              <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-lg text-xs text-emerald-800 flex items-start gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>
+                  O atendimento será iniciado como <strong>Em Atendimento (Com você)</strong>, garantindo que você converse diretamente sem interferência da IA.
+                </span>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isStartingNewChat}
+                  onClick={() => setIsNewChatModalOpen(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isStartingNewChat || !newChatPhone.trim()}
+                  className="px-5 py-2 text-sm bg-[#005d4b] hover:bg-[#004738] text-white rounded-lg transition-colors font-medium flex items-center gap-2 shadow-xs disabled:opacity-50"
+                >
+                  {isStartingNewChat ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Iniciando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Iniciar Conversa
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
