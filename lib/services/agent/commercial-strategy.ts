@@ -8,6 +8,12 @@ export type CommercialResponseStrategy =
   | 'ambiguous_product'
   | 'not_found'
 
+export const KNOWN_MARKET_BRANDS = [
+  'moca', 'leite moca', 'garoto', 'lacta', 'melken', 'harald', 'sicao', 
+  'barry', 'callebaut', 'mavalerio', 'piracanjuba', 'itambe', 'tirol', 
+  'italac', 'nestle', 'nestlé', 'parmalat', 'elege'
+]
+
 export function extractUniqueBrands(matches: ProductSearchResult[]): string[] {
   const brandMap = new Map<string, string>() // lowercase -> original
   for (const match of matches) {
@@ -16,6 +22,19 @@ export function extractUniqueBrands(matches: ProductSearchResult[]): string[] {
       const lower = original.toLowerCase()
       if (!brandMap.has(lower)) {
         brandMap.set(lower, original)
+      }
+    } else if (match.name) {
+      // Se a coluna brand for nula (comum em ERPs como Sumel), extrai marca conhecida do nome do produto
+      const nameNorm = match.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      for (const b of KNOWN_MARKET_BRANDS) {
+        const bNorm = b.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        const regex = new RegExp(`\\b${bNorm}\\b`, 'i')
+        if (regex.test(nameNorm)) {
+          const cap = b.charAt(0).toUpperCase() + b.slice(1).toLowerCase()
+          if (!brandMap.has(bNorm)) {
+            brandMap.set(bNorm, cap)
+          }
+        }
       }
     }
   }
@@ -113,9 +132,15 @@ export function applyCommercialStrategy(
 
   // 3. BRAND SPECIFIC DISCOVERY
   if (mentionedBrand) {
-    const brandMatches = searchResult.matches.filter(m => 
-      m.brand && m.brand.toLowerCase() === mentionedBrand.toLowerCase()
-    )
+    const bNorm = mentionedBrand.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const brandMatches = searchResult.matches.filter(m => {
+      if (m.brand && m.brand.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(bNorm)) return true
+      if (m.name) {
+        const nNorm = m.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        return new RegExp(`\\b${bNorm}\\b`, 'i').test(nNorm)
+      }
+      return false
+    })
     const targetMatches = brandMatches.length > 0 ? brandMatches : searchResult.matches
 
     // Se o filtro de marca desambiguou para exatamente 1 produto
@@ -219,9 +244,18 @@ export function applyCommercialStrategy(
   }
 
   // Verifica se o cliente buscou uma marca de mercado não disponível, mas temos opções equivalentes
-  const KNOWN_MARKET_BRANDS = ['moca', 'leite moca', 'garoto', 'lacta', 'melken', 'harald', 'sicao', 'barry', 'callebaut', 'mavalerio', 'piracanjuba', 'itambe', 'tirol', 'italac', 'nestle', 'parmalat', 'elege']
-  const askedBrand = KNOWN_MARKET_BRANDS.find(b => normalizedQuery.includes(b))
-  const foundAskedBrand = askedBrand ? uniqueBrands.some(ub => ub.toLowerCase().includes(askedBrand)) : true
+  const askedBrand = KNOWN_MARKET_BRANDS.find(b => {
+    const bNorm = b.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    return normalizedQuery.includes(bNorm)
+  })
+  const foundAskedBrand = askedBrand 
+    ? (uniqueBrands.some(ub => ub.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(askedBrand)) ||
+       searchResult.matches.some(m => {
+         const mNorm = (m.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+         const bNorm = askedBrand.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+         return new RegExp(`\\b${bNorm}\\b`, 'i').test(mNorm)
+       }))
+    : true
 
   if (askedBrand && !foundAskedBrand && searchResult.matches.length > 0) {
     payload.is_alternative_brand_recommendation = true
