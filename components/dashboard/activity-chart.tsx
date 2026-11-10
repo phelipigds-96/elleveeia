@@ -33,12 +33,12 @@ export function ActivityChart({ data = [] }: { data?: ChartDataPoint[] }) {
     <div className="flex flex-col w-full h-full justify-between space-y-4">
       {/* Mini resumo do gráfico */}
       <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 text-gray-500">
-          <span className="h-2 w-2 rounded-full bg-[#005d4b]" />
+        <div className="flex items-center gap-1.5 text-ellevee-text-secondary">
+          <span className="h-2 w-2 rounded-full bg-ellevee-blue" />
           <span>Volume por dia</span>
         </div>
         {peakPoint && peakPoint.value > 0 && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
             <Sparkles className="h-3 w-3 text-emerald-600" />
             Pico: {peakPoint.value} convs ({peakPoint.label})
           </span>
@@ -64,9 +64,9 @@ export function ActivityChart({ data = [] }: { data?: ChartDataPoint[] }) {
                   isHovered ? 'opacity-100 scale-100 -translate-y-1' : 'opacity-0 scale-95'
                 }`}
               >
-                <div className="bg-gray-900 text-white text-[11px] font-medium py-1 px-2.5 rounded-lg shadow-lg whitespace-nowrap">
-                  <span className="font-bold text-emerald-400">{item.value}</span> conversas
-                  <span className="text-gray-400 text-[10px] block font-mono">{item.dateStr}</span>
+                <div className="bg-ellevee-deep-ink text-white text-[11px] font-medium py-1 px-2.5 rounded-lg shadow-lg whitespace-nowrap">
+                  <span className="font-bold text-ellevee-cyan">{item.value}</span> conversas
+                  <span className="text-white/60 text-[10px] block font-mono">{item.dateStr}</span>
                 </div>
               </div>
 
@@ -76,9 +76,9 @@ export function ActivityChart({ data = [] }: { data?: ChartDataPoint[] }) {
                   className={`w-full max-w-[38px] rounded-t-lg transition-all duration-300 relative overflow-hidden ${
                     item.value > 0
                       ? item.isPeak
-                        ? 'bg-gradient-to-t from-[#005d4b] to-emerald-500 shadow-sm shadow-emerald-500/20'
-                        : 'bg-gradient-to-t from-[#005d4b]/90 to-emerald-600/80 hover:to-emerald-500'
-                      : 'bg-gray-100 group-hover:bg-gray-200'
+                        ? 'bg-gradient-to-t from-[#7028D9] via-[#087BEA] to-[#16BCE0] shadow-sm shadow-[#087BEA]/20'
+                        : 'bg-gradient-to-t from-[#7028D9]/90 to-[#087BEA] hover:opacity-90'
+                      : 'bg-ellevee-warm-ivory group-hover:bg-ellevee-border'
                   }`}
                   style={{ height: `${heightPercentage}%` }}
                 >
@@ -92,7 +92,7 @@ export function ActivityChart({ data = [] }: { data?: ChartDataPoint[] }) {
               {/* Rótulo inferior */}
               <span
                 className={`text-[11px] mt-2 truncate w-full text-center transition-colors font-medium ${
-                  isHovered || item.isPeak ? 'text-gray-900 font-bold' : 'text-gray-500'
+                  isHovered || item.isPeak ? 'text-ellevee-deep-ink font-bold' : 'text-ellevee-text-secondary'
                 }`}
               >
                 {item.label}

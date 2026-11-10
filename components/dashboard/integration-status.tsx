@@ -66,18 +66,18 @@ export function IntegrationStatus({ items = [] }: Props) {
           <Link
             key={item.key}
             href={item.href}
-            className="flex items-center justify-between p-3 rounded-xl bg-gray-50/70 hover:bg-white border border-gray-100 hover:border-gray-200 transition-all group"
+            className="flex items-center justify-between p-3 rounded-lg bg-ellevee-warm-ivory/40 hover:bg-white border border-ellevee-border hover:border-ellevee-border-focus transition-all group shadow-2xs hover:shadow-card"
           >
             <div className="flex items-center gap-3 min-w-0">
               {getIcon(item.key)}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-semibold text-gray-900 truncate">
+                  <p className="text-xs font-semibold text-ellevee-deep-ink truncate font-display">
                     {item.name}
                   </p>
-                  <ArrowUpRight className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ArrowUpRight className="h-3 w-3 text-ellevee-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <p className="text-[11px] text-gray-500 truncate max-w-[210px] sm:max-w-xs">
+                <p className="text-[11px] text-ellevee-text-secondary truncate max-w-[210px] sm:max-w-xs">
                   {item.description}
                 </p>
               </div>
@@ -87,8 +87,8 @@ export function IntegrationStatus({ items = [] }: Props) {
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                   isConnected
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                    : 'bg-gray-100 text-gray-500 border border-gray-200'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-ellevee-warm-ivory text-ellevee-text-secondary border border-ellevee-border'
                 }`}
               >
                 <span
