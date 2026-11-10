@@ -6,6 +6,8 @@ import {
   getEvolutionWhatsAppQrCode,
   disconnectEvolutionWhatsApp,
   restartEvolutionWhatsApp,
+  getEvolutionConfig,
+  saveEvolutionConfig,
   type WhatsAppStatusResult,
   type WhatsAppQrCodeResult,
 } from "@/lib/services/whatsapp-evolution"
@@ -16,6 +18,20 @@ export async function getWhatsAppStatusAction(): Promise<WhatsAppStatusResult> {
 
 export async function getWhatsAppQrCodeAction(): Promise<WhatsAppQrCodeResult> {
   return await getEvolutionWhatsAppQrCode()
+}
+
+export async function getEvolutionConfigAction() {
+  return await getEvolutionConfig()
+}
+
+export async function saveEvolutionConfigAction(params: {
+  apiUrl: string
+  apiKey: string
+  instanceName?: string
+}): Promise<{ success: boolean; error?: string }> {
+  const result = await saveEvolutionConfig(params)
+  revalidatePath("/integrations")
+  return result
 }
 
 export async function disconnectWhatsAppAction(): Promise<{ success: boolean; error?: string }> {

@@ -78,11 +78,32 @@ export async function sendToGateway(
     }
   }
 
-  // 2. Rota Prioritária A: Direct Evolution API se configurada via env
-  const rawUrl = process.env.EVOLUTION_API_URL
+  // 2. Rota Prioritária A: Direct Evolution API se configurada via env ou no banco
+  let rawUrl = process.env.EVOLUTION_API_URL || ''
+  let apiKey = process.env.EVOLUTION_API_KEY || ''
+  let instance = process.env.EVOLUTION_INSTANCE_NAME || 'default'
+
+  if (!rawUrl || rawUrl.trim() === '') {
+    try {
+      const { data: evoIntegration } = await supabase
+        .from('integrations')
+        .select('config, credentials')
+        .eq('company_id', row.company_id)
+        .eq('type', 'whatsapp_evolution')
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (evoIntegration?.config?.api_url && evoIntegration?.credentials?.api_key) {
+        rawUrl = evoIntegration.config.api_url
+        apiKey = evoIntegration.credentials.api_key
+        instance = evoIntegration.config.instance_name || instance
+      }
+    } catch {
+      // Ignora falha de lookup
+    }
+  }
+
   if (rawUrl && rawUrl.trim() !== '') {
-    const apiKey = process.env.EVOLUTION_API_KEY || ''
-    const instance = process.env.EVOLUTION_INSTANCE_NAME || 'default'
 
     const mediaUrl = row.payload?.media_url
     const mediaType = row.payload?.media_type || 'image'
