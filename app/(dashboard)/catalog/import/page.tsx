@@ -109,7 +109,7 @@ export default function CatalogImportPage() {
         <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
           <div className="flex flex-col space-y-1.5 p-6">
             <h3 className="font-semibold leading-none tracking-tight">Etapa 1: Enviar Arquivo</h3>
-            <p className="text-sm text-muted-foreground">O arquivo deve estar no formato CSV, separado por ponto-e-vírgula (;).</p>
+            <p className="text-sm text-muted-foreground">Envie seu arquivo CSV (padrão ou exportado diretamente do seu ERP). O sistema detecta colunas, codificação e preços automaticamente com leitura de alta performance.</p>
           </div>
           <div className="p-6 pt-0 space-y-4">
             <div className="grid w-full max-w-sm items-center gap-1.5">
