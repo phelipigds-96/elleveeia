@@ -179,10 +179,10 @@ export default function CompanyUsersDialog({
       <div className="w-full max-w-xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-ellevee-ink" />
-            <DialogTitle>Equipe e Atendentes</DialogTitle>
+            <Users className="h-5 w-5 text-ellevee-purple" />
+            <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">Equipe e Atendentes</DialogTitle>
           </div>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-ellevee-text-secondary">
             Gerencie os operadores e administradores de <strong>{company.name}</strong>.
           </DialogDescription>
         </DialogHeader>
@@ -190,17 +190,17 @@ export default function CompanyUsersDialog({
         <div className="py-4 space-y-4">
           {/* Header da lista com botão Novo */}
           {!isCreating && (
-            <div className="flex items-center justify-between pb-2 border-b">
-              <span className="text-xs font-semibold text-muted-foreground">
+            <div className="flex items-center justify-between pb-2 border-b border-ellevee-border">
+              <span className="text-xs font-semibold text-ellevee-text-secondary">
                 {users.length} {users.length === 1 ? "usuário cadastrado" : "usuários cadastrados"}
               </span>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleStartCreate}
-                className="gap-1.5 h-8 text-xs bg-ellevee-ink text-white hover:bg-black"
+                className="gap-1.5 h-8 text-xs bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm"
               >
-                <UserPlus className="h-3.5 w-3.5 text-ellevee-accent" />
+                <UserPlus className="h-3.5 w-3.5 text-white" />
                 <span>Novo Atendente</span>
               </Button>
             </div>
@@ -208,38 +208,38 @@ export default function CompanyUsersDialog({
 
           {/* Estado de Carregando */}
           {loading ? (
-            <div className="h-36 flex items-center justify-center text-xs text-muted-foreground gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="h-36 flex items-center justify-center text-xs text-ellevee-text-secondary gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-ellevee-purple" />
               <span>Carregando membros...</span>
             </div>
           ) : isCreating ? (
             /* Formulário de Criação ou Confirmação */
             createdCredentials ? (
               <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-3">
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-3">
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
                     <Check className="h-4 w-4 text-emerald-600" />
                     Atendente criado e credenciais ativadas!
                   </div>
 
-                  <div className="bg-white/90 p-3 rounded-md border border-emerald-200 text-xs font-mono space-y-1.5">
+                  <div className="bg-white/90 p-3 rounded-lg border border-emerald-200 text-xs font-mono space-y-1.5">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Nome:</span>
-                      <span className="font-semibold text-ellevee-ink font-sans">{createdCredentials.fullName}</span>
+                      <span className="text-ellevee-text-secondary">Nome:</span>
+                      <span className="font-semibold text-ellevee-deep-ink font-sans">{createdCredentials.fullName}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">E-mail:</span>
-                      <span className="font-semibold text-ellevee-ink">{createdCredentials.email}</span>
+                      <span className="text-ellevee-text-secondary">E-mail:</span>
+                      <span className="font-semibold text-ellevee-deep-ink">{createdCredentials.email}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Senha:</span>
+                      <span className="text-ellevee-text-secondary">Senha:</span>
                       <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                         {createdCredentials.password}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Perfil:</span>
-                      <span className="font-semibold text-ellevee-ink font-sans">
+                      <span className="text-ellevee-text-secondary">Perfil:</span>
+                      <span className="font-semibold text-ellevee-deep-ink font-sans">
                         {createdCredentials.role === "admin" ? "Administrador" : "Atendente (Apenas Chat)"}
                       </span>
                     </div>
@@ -250,16 +250,16 @@ export default function CompanyUsersDialog({
                   <Button
                     type="button"
                     onClick={handleCopyCredentials}
-                    className="flex-1 gap-2 bg-ellevee-ink text-white hover:bg-black text-xs"
+                    className="flex-1 gap-2 bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm text-xs"
                   >
                     {copied ? (
                       <>
-                        <Check className="h-3.5 w-3.5 text-ellevee-accent" />
+                        <Check className="h-3.5 w-3.5 text-white" />
                         <span>Copiado com sucesso!</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3.5 w-3.5 text-ellevee-accent" />
+                        <Copy className="h-3.5 w-3.5 text-white" />
                         <span>Copiar Dados de Acesso</span>
                       </>
                     )}
@@ -271,64 +271,64 @@ export default function CompanyUsersDialog({
                       setIsCreating(false)
                       setCreatedCredentials(null)
                     }}
-                    className="text-xs"
+                    className="text-xs border-ellevee-border text-ellevee-deep-ink"
                   >
                     Voltar à Lista
                   </Button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-3.5 border rounded-lg p-4 bg-muted/20">
-                <div className="flex items-center justify-between pb-2 border-b">
-                  <span className="text-xs font-bold text-ellevee-ink">Cadastrar Novo Acesso</span>
+              <form onSubmit={handleSubmit} className="space-y-3.5 border border-ellevee-border rounded-xl p-4 bg-[#F8F8F6]">
+                <div className="flex items-center justify-between pb-2 border-b border-ellevee-border">
+                  <span className="text-xs font-bold text-ellevee-deep-ink font-display">Cadastrar Novo Acesso</span>
                   <button
                     type="button"
                     onClick={() => setIsCreating(false)}
-                    className="text-xs text-muted-foreground hover:text-black"
+                    className="text-xs text-ellevee-text-secondary hover:text-black"
                   >
                     Cancelar
                   </button>
                 </div>
 
                 {error && (
-                  <div className="flex items-center gap-1.5 p-2 rounded bg-rose-50 text-rose-800 text-xs">
+                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-50 text-rose-800 text-xs border border-rose-200">
                     <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-xs font-semibold text-ellevee-ink block mb-1">Nome Completo</label>
+                  <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1">Nome Completo</label>
                   <Input
                     required
                     placeholder="Ex: João Silva"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="h-8.5 text-xs bg-white"
+                    className="h-8.5 text-xs bg-white border-ellevee-border text-ellevee-deep-ink"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-ellevee-ink block mb-1">E-mail</label>
+                  <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1">E-mail</label>
                   <Input
                     type="email"
                     required
                     placeholder="joao@sumel.com.br"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-8.5 text-xs bg-white"
+                    className="h-8.5 text-xs bg-white border-ellevee-border text-ellevee-deep-ink"
                   />
                 </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs font-semibold text-ellevee-ink">Senha de Acesso</label>
+                    <label className="text-xs font-semibold text-ellevee-deep-ink">Senha de Acesso</label>
                     <button
                       type="button"
                       onClick={handleGeneratePassword}
-                      className="text-[11px] text-muted-foreground hover:text-black flex items-center gap-1"
+                      className="text-[11px] text-ellevee-text-secondary hover:text-black flex items-center gap-1"
                     >
-                      <Sparkles className="h-3 w-3 text-ellevee-accent" />
+                      <Sparkles className="h-3 w-3 text-ellevee-purple" />
                       <span>Gerar nova</span>
                     </button>
                   </div>
@@ -336,43 +336,43 @@ export default function CompanyUsersDialog({
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="h-8.5 text-xs font-mono bg-white"
+                    className="h-8.5 text-xs font-mono bg-white border-ellevee-border text-ellevee-deep-ink"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-ellevee-ink block mb-1.5">Permissão (RBAC)</label>
+                  <label className="text-xs font-semibold text-ellevee-deep-ink block mb-1.5">Permissão (RBAC)</label>
                   <div className="grid grid-cols-2 gap-2">
                     <div
                       onClick={() => setRole("attendant")}
-                      className={`p-2.5 rounded border text-left cursor-pointer transition-colors ${
+                      className={`p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${
                         role === "attendant"
                           ? "border-emerald-600 bg-emerald-50/70"
-                          : "border-border bg-white hover:bg-muted/30"
+                          : "border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/50"
                       }`}
                     >
                       <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
                         <MessageSquare className="h-3 w-3 text-emerald-600" />
                         Atendente
                       </span>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-[10px] text-ellevee-text-secondary mt-0.5">
                         Acesso <strong>somente ao Chat</strong> de mensagens.
                       </p>
                     </div>
 
                     <div
                       onClick={() => setRole("admin")}
-                      className={`p-2.5 rounded border text-left cursor-pointer transition-colors ${
+                      className={`p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${
                         role === "admin"
-                          ? "border-slate-800 bg-slate-50"
-                          : "border-border bg-white hover:bg-muted/30"
+                          ? "border-ellevee-deep-ink bg-white shadow-2xs"
+                          : "border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/50"
                       }`}
                     >
-                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
-                        <ShieldCheck className="h-3 w-3 text-slate-800" />
+                      <span className="text-xs font-bold text-ellevee-deep-ink flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3 text-ellevee-deep-ink" />
                         Administrador
                       </span>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-[10px] text-ellevee-text-secondary mt-0.5">
                         Acesso total à empresa.
                       </p>
                     </div>
@@ -385,7 +385,7 @@ export default function CompanyUsersDialog({
                     variant="outline"
                     size="sm"
                     onClick={() => setIsCreating(false)}
-                    className="text-xs h-8"
+                    className="text-xs h-8 border-ellevee-border text-ellevee-deep-ink"
                   >
                     Voltar
                   </Button>
@@ -393,7 +393,7 @@ export default function CompanyUsersDialog({
                     type="submit"
                     disabled={isSubmitting}
                     size="sm"
-                    className="text-xs h-8 bg-ellevee-ink text-white hover:bg-black gap-1.5"
+                    className="text-xs h-8 bg-ellevee-gradient hover:opacity-95 text-white font-semibold rounded-lg shadow-sm gap-1.5"
                   >
                     {isSubmitting ? (
                       <>
@@ -402,7 +402,7 @@ export default function CompanyUsersDialog({
                       </>
                     ) : (
                       <>
-                        <UserPlus className="h-3 w-3 text-ellevee-accent" />
+                        <UserPlus className="h-3 w-3 text-white" />
                         <span>Cadastrar Operador</span>
                       </>
                     )}
@@ -414,7 +414,7 @@ export default function CompanyUsersDialog({
             /* Lista de Usuários */
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {users.length === 0 ? (
-                <div className="text-center py-6 text-xs text-muted-foreground">
+                <div className="text-center py-6 text-xs text-ellevee-text-secondary">
                   Nenhum usuário cadastrado nesta empresa.
                 </div>
               ) : (
@@ -426,23 +426,23 @@ export default function CompanyUsersDialog({
                   return (
                     <div
                       key={u.id}
-                      className="flex items-center justify-between p-2.5 rounded-lg border bg-white hover:bg-muted/20 transition-colors"
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-ellevee-border bg-white hover:bg-ellevee-warm-ivory/40 transition-colors shadow-2xs"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div
                           className={`h-7 w-7 rounded-full flex items-center justify-center font-display font-bold text-xs shrink-0 ${
                             isAttendant
                               ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : "bg-ellevee-ink text-white"
+                              : "bg-ellevee-deep-ink text-white"
                           }`}
                         >
                           {monogram}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-xs text-ellevee-ink truncate">
+                          <span className="font-semibold text-xs text-ellevee-deep-ink truncate font-display">
                             {u.fullName}
                           </span>
-                          <span className="text-[11px] text-muted-foreground truncate font-mono">
+                          <span className="text-[11px] text-ellevee-text-secondary truncate font-mono">
                             {u.email}
                           </span>
                         </div>
@@ -471,7 +471,7 @@ export default function CompanyUsersDialog({
                             type="button"
                             disabled={deletingId === u.id}
                             onClick={() => handleDelete(u.id, u.fullName)}
-                            className="p-1 text-muted-foreground hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                            className="p-1 text-ellevee-text-secondary hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
                             title="Remover acesso"
                           >
                             {deletingId === u.id ? (

@@ -129,12 +129,12 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-md bg-[#F3F2ED] border border-ellevee-stone text-ellevee-ink flex items-center justify-center">
-              <Building2 className="h-4 w-4" />
+            <div className="h-8 w-8 rounded-lg bg-ellevee-warm-ivory border border-ellevee-border text-ellevee-deep-ink flex items-center justify-center">
+              <Building2 className="h-4 w-4 text-ellevee-cyan" />
             </div>
             <div>
-              <DialogTitle>Nova Empresa / Tenant</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="font-display text-base font-bold text-ellevee-deep-ink">Nova Empresa / Tenant</DialogTitle>
+              <DialogDescription className="text-xs text-ellevee-text-secondary">
                 Provisione uma nova organização com isolamento de dados e limites no banco.
               </DialogDescription>
             </div>
@@ -142,7 +142,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         </DialogHeader>
 
         {errorMessage && (
-          <div className="mt-3 p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 animate-in fade-in">
+          <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 animate-in fade-in">
             <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
@@ -150,20 +150,20 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
         {success ? (
           <div className="py-6 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="h-12 w-12 rounded-full bg-[#F4F8E8] border border-[#D5E89B] text-[#3D5215] flex items-center justify-center animate-in zoom-in">
+            <div className="h-12 w-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center animate-in zoom-in">
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div>
-              <h4 className="font-display text-base font-bold text-ellevee-ink">Empresa Provisionada com Sucesso</h4>
-              <p className="text-xs text-ellevee-sage mt-0.5">
+              <h4 className="font-display text-base font-bold text-ellevee-deep-ink">Empresa Provisionada com Sucesso</h4>
+              <p className="text-xs text-ellevee-text-secondary mt-0.5">
                 Organização, limites, funil e conta de acesso foram criados no Supabase.
               </p>
             </div>
 
             {createdCredentials && (
-              <div className="w-full text-left bg-[#FBFBFA] border border-ellevee-stone rounded-lg p-4 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-ellevee-stone/60">
-                  <span className="font-semibold text-ellevee-ink font-display">Credenciais de Acesso da Loja</span>
+              <div className="w-full text-left bg-[#F8F8F6] border border-ellevee-border rounded-xl p-4 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-ellevee-border">
+                  <span className="font-semibold text-ellevee-deep-ink font-display">Credenciais de Acesso da Loja</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -172,7 +172,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-ellevee-ink hover:text-emerald-700 bg-white border border-ellevee-stone px-2 py-0.5 rounded shadow-2xs transition-colors"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-ellevee-deep-ink hover:text-emerald-700 bg-white border border-ellevee-border px-2 py-0.5 rounded-lg shadow-2xs transition-colors"
                   >
                     {copied ? (
                       <>
@@ -190,24 +190,24 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div>
-                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">Organização</span>
-                    <span className="font-semibold text-ellevee-ink">{createdCredentials.name}</span>
-                    <span className="text-ellevee-sage font-mono text-[10px] block">@{createdCredentials.slug}</span>
+                    <span className="text-ellevee-text-secondary block text-[10px] uppercase font-mono">Organização</span>
+                    <span className="font-semibold text-ellevee-deep-ink font-display">{createdCredentials.name}</span>
+                    <span className="text-ellevee-text-secondary font-mono text-[10px] block">@{createdCredentials.slug}</span>
                   </div>
 
                   <div>
-                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">E-mail do Administrador</span>
-                    <span className="font-mono font-medium text-ellevee-ink truncate block">
+                    <span className="text-ellevee-text-secondary block text-[10px] uppercase font-mono">E-mail do Administrador</span>
+                    <span className="font-mono font-medium text-ellevee-deep-ink truncate block">
                       {createdCredentials.email || "Não informado"}
                     </span>
                   </div>
                 </div>
 
                 {createdCredentials.password && (
-                  <div className="pt-2 border-t border-ellevee-stone/40">
-                    <span className="text-ellevee-sage block text-[10px] uppercase font-mono">Senha Inicial</span>
-                    <div className="inline-flex items-center gap-1.5 bg-white border border-ellevee-stone px-2 py-1 rounded font-mono text-xs font-bold text-ellevee-ink mt-0.5">
-                      <Key className="h-3.5 w-3.5 text-ellevee-sage" />
+                  <div className="pt-2 border-t border-ellevee-border">
+                    <span className="text-ellevee-text-secondary block text-[10px] uppercase font-mono">Senha Inicial</span>
+                    <div className="inline-flex items-center gap-1.5 bg-white border border-ellevee-border px-2 py-1 rounded-lg font-mono text-xs font-bold text-ellevee-deep-ink mt-0.5">
+                      <Key className="h-3.5 w-3.5 text-ellevee-text-secondary" />
                       {createdCredentials.password}
                     </div>
                   </div>
@@ -218,6 +218,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
             <div className="w-full pt-2 flex justify-end">
               <Button
                 type="button"
+                variant="primary"
                 onClick={() => {
                   setSuccess(false);
                   setName("");
@@ -239,7 +240,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
         ) : (
           <div className="space-y-4 py-4">
             <div>
-              <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+              <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                 Nome da Empresa <span className="text-rose-500">*</span>
               </label>
               <Input
@@ -253,7 +254,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                   Slug do Tenant (Identificador Único)
                 </label>
                 <Input
@@ -266,11 +267,11 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                   required
                   className="font-mono text-xs"
                 />
-                <span className="text-[10px] text-ellevee-sage font-mono">Identificador único no banco de dados.</span>
+                <span className="text-[10px] text-ellevee-text-secondary font-mono">Identificador único no banco de dados.</span>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                   CNPJ / Documento Fiscal
                 </label>
                 <Input
@@ -284,7 +285,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                   Email do Responsável <span className="text-rose-500">*</span>
                 </label>
                 <Input
@@ -299,10 +300,10 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-ellevee-ink">
+                  <label className="text-xs font-semibold text-ellevee-deep-ink">
                     Senha Inicial
                   </label>
-                  <span className="text-[10px] text-ellevee-sage font-medium">Opcional</span>
+                  <span className="text-[10px] text-ellevee-text-secondary font-medium">Opcional</span>
                 </div>
                 <Input
                   type="password"
@@ -316,7 +317,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                   Plano Contratado
                 </label>
                 <Select
@@ -331,7 +332,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ellevee-ink mb-1">
+                <label className="block text-xs font-semibold text-ellevee-deep-ink mb-1">
                   Provedor de IA Padrão
                 </label>
                 <Select
@@ -347,11 +348,11 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-ellevee-ink flex items-center gap-1.5">
-                  <Kanban className="h-3.5 w-3.5 text-ellevee-ink" />
+                <label className="text-xs font-semibold text-ellevee-deep-ink flex items-center gap-1.5">
+                  <Kanban className="h-3.5 w-3.5 text-ellevee-deep-ink" />
                   Funil de Atendimento (Kanban)
                 </label>
-                <span className="text-[10px] text-ellevee-sage font-medium">Opcional</span>
+                <span className="text-[10px] text-ellevee-text-secondary font-medium">Opcional</span>
               </div>
               <Select
                 value={workflowTemplateKey}
@@ -364,7 +365,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
                   </option>
                 ))}
               </Select>
-              <p className="text-[10px] text-ellevee-sage mt-1">
+              <p className="text-[10px] text-ellevee-text-secondary mt-1">
                 {workflowTemplateKey === "none"
                   ? "Provisiona o funil padrão com 3 etapas. Poderá ser personalizado a qualquer momento pelo Super Admin."
                   : (dynamicTemplates.find((t) => t.key === workflowTemplateKey)?.description ||
@@ -372,10 +373,10 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
               </p>
             </div>
 
-            <div className="rounded-md bg-[#FBFBFA] border border-ellevee-stone p-3 flex items-start gap-2 text-xs text-ellevee-ink">
-              <Shield className="h-4 w-4 text-ellevee-sage shrink-0 mt-0.5" />
-              <p className="text-[11px] text-ellevee-sage">
-                A criação é atômica no Supabase: vincula limites padrão em <code className="font-mono text-ellevee-ink">company_limits</code> e gera trilha de auditoria.
+            <div className="rounded-xl bg-[#F8F8F6] border border-ellevee-border p-3 flex items-start gap-2 text-xs text-ellevee-deep-ink">
+              <Shield className="h-4 w-4 text-ellevee-text-secondary shrink-0 mt-0.5" />
+              <p className="text-[11px] text-ellevee-text-secondary">
+                A criação é atômica no Supabase: vincula limites padrão em <code className="font-mono text-ellevee-deep-ink">company_limits</code> e gera trilha de auditoria.
               </p>
             </div>
           </div>
@@ -386,7 +387,7 @@ export default function CompanyForm({ open, onClose, onSave }: CompanyFormProps)
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit" variant="default" disabled={isSubmitting || !name.trim()}>
+            <Button type="submit" variant="primary" disabled={isSubmitting || !name.trim()}>
               {isSubmitting ? "Provisionando..." : "Criar Empresa"}
             </Button>
           </DialogFooter>
