@@ -326,6 +326,61 @@ export async function getConversationMessages(
   }
 }
 
+const CONVERSATION_UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Zera o contador de mensagens não lidas (unread_count) de uma conversa aberta pelo atendente,
+ * respeitando isolamento multi-tenant, suporte a impersonate e filtro RBAC.
+ */
+export async function markConversationAsReadAction(
+  conversationId: string
+): Promise<{ success: boolean; updated?: boolean; error?: string }> {
+  try {
+    if (typeof conversationId !== "string" || !CONVERSATION_UUID_REGEX.test(conversationId.trim())) {
+      return { success: false, error: "Identificador da conversa inválido." }
+    }
+
+    const cleanId = conversationId.trim()
+    const { userId, companyId, role } = await getAuthenticatedAgentContext()
+    const adminClient = createAdminClient()
+
+    let query = adminClient
+      .from("conversations")
+      .update({
+        unread_count: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", cleanId)
+      .eq("company_id", companyId)
+      .gt("unread_count", 0)
+
+    if (role !== "admin" && role !== "master") {
+      query = query.or(`assigned_to.is.null,assigned_to.eq.${userId}`)
+    }
+
+    const { data, error } = await query.select("id")
+
+    if (error) {
+      console.error("[Conversations] Erro ao zerar unread_count:", error)
+      return { success: false, error: error.message }
+    }
+
+    const updated = Boolean(data && data.length > 0)
+    if (updated) {
+      revalidatePath("/conversations")
+    }
+
+    return { success: true, updated }
+  } catch (error: any) {
+    console.error("[Conversations] Exceção em markConversationAsReadAction:", error)
+    return {
+      success: false,
+      error: `Erro ao marcar conversa como lida: ${error?.message || "Falha desconhecida"}`,
+    }
+  }
+}
+
 /**
  * Mantém a etapa do funil (workflow_stages) coerente com o status operacional
  * da conversa. Falhas não bloqueiam a ação principal: o status já foi salvo.
@@ -484,14 +539,16 @@ export async function sendMessageAction(
       }
     }
 
-    // 6. Atualização do timestamp de última mensagem da conversa
+    // 6. Atualização do timestamp de última mensagem da conversa e limpeza de não lidas
     await adminClient
       .from("conversations")
       .update({
+        unread_count: 0,
         last_message_at: createdMsg.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", conversationId)
+      .eq("company_id", companyId)
 
     revalidatePath("/conversations")
 
@@ -531,6 +588,7 @@ export async function takeoverConversationAction(
       .update({
         status: "human",
         assigned_to: userId,
+        unread_count: 0,
         updated_at: now,
         last_message_at: now,
       })
@@ -621,6 +679,7 @@ export async function returnToAIAction(
       .update({
         status: "open",
         assigned_to: null,
+        unread_count: 0,
         updated_at: now,
         last_message_at: now,
       })
@@ -729,6 +788,7 @@ export async function closeConversationAction(
     const updatePayload: Record<string, any> = {
       status: "closed",
       closed_at: now,
+      unread_count: 0,
       updated_at: now,
       last_message_at: now,
     }
@@ -758,6 +818,7 @@ export async function closeConversationAction(
         .update({
           status: "closed",
           closed_at: now,
+          unread_count: 0,
           updated_at: now,
           last_message_at: now,
         })
@@ -834,6 +895,7 @@ export async function reopenConversationAction(
         status: "human",
         assigned_to: userId,
         closed_at: null,
+        unread_count: 0,
         updated_at: now,
         last_message_at: now,
       })
@@ -1293,10 +1355,12 @@ export async function sendMediaMessageAction(params: {
     await adminClient
       .from("conversations")
       .update({
+        unread_count: 0,
         last_message_at: createdMsg.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", conversationId)
+      .eq("company_id", companyId)
 
     revalidatePath("/conversations")
 

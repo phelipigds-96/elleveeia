@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useMemo } from "react"
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { 
   Search, 
@@ -80,7 +80,8 @@ import {
   createInternalNoteAction,
   uploadChatMediaAction,
   sendMediaMessageAction,
-  startNewConversationAction
+  startNewConversationAction,
+  markConversationAsReadAction
 } from "../actions"
 import {
   StatusChip,
@@ -439,6 +440,8 @@ export default function PainelClient({
       if (window.innerWidth < 1024) {
         const params = new URLSearchParams(window.location.search)
         if (!params.get("id")) {
+          shouldSkipInitialMobileAutoReadRef.current = true
+          selectedIdRef.current = null
           setSelectedId(null)
           isMobileMountDoneRef.current = true
           return
@@ -525,9 +528,31 @@ export default function PainelClient({
   const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<string | null>(null)
   const [isRealtimeActive, setIsRealtimeActive] = useState(false)
 
-  // Referências para scroll automático e foco no textarea
+  // Referências para scroll automático, foco no textarea e sincronização de leitura
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const selectedIdRef = useRef<string | null>(selectedId)
+  const conversationsRef = useRef<ConversationData[]>(conversations)
+  const messagesRef = useRef<MessageData[]>(messages)
+  const markReadSeqRef = useRef(0)
+  const convLastMarkedSeqRef = useRef<Record<string, number>>({})
+  const inFlightMarkReadRef = useRef<Record<string, number>>({})
+  const needsReMarkReadRef = useRef<Record<string, boolean>>({})
+  const lastHandledSelectionRef = useRef<string | null>(null)
+  const shouldSkipInitialMobileAutoReadRef = useRef(false)
+  const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
+
+  useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) || null,
@@ -543,6 +568,92 @@ export default function PainelClient({
 
   // Cliente público do navegador para subscrição WebSocket (sem chave service_role)
   const supabase = useMemo(() => createClient(), [])
+
+  const markConversationAsRead = useCallback((convId: string) => {
+    if (!convId) return
+
+    if (inFlightMarkReadRef.current[convId]) {
+      if (selectedIdRef.current === convId && (typeof document === "undefined" || !document.hidden)) {
+        needsReMarkReadRef.current[convId] = true
+      }
+      return
+    }
+
+    const run = async (targetId: string) => {
+      const seqStart = ++markReadSeqRef.current
+      inFlightMarkReadRef.current[targetId] = seqStart
+      convLastMarkedSeqRef.current[targetId] = seqStart
+
+      setConversations((prev) => {
+        const target = prev.find((c) => c.id === targetId)
+        if (!target || (target.unread_count || 0) === 0) return prev
+        return prev.map((c) => (c.id === targetId ? { ...c, unread_count: 0 } : c))
+      })
+
+      try {
+        await markConversationAsReadAction(targetId)
+      } catch (err) {
+        console.error("[Chat] Falha ao marcar conversa como lida:", err)
+      } finally {
+        const seqEnd = ++markReadSeqRef.current
+        convLastMarkedSeqRef.current[targetId] = seqEnd
+        if (inFlightMarkReadRef.current[targetId] === seqStart) {
+          delete inFlightMarkReadRef.current[targetId]
+        }
+        if (
+          needsReMarkReadRef.current[targetId] &&
+          selectedIdRef.current === targetId &&
+          (typeof document === "undefined" || !document.hidden)
+        ) {
+          delete needsReMarkReadRef.current[targetId]
+          void run(targetId)
+        } else {
+          delete needsReMarkReadRef.current[targetId]
+        }
+      }
+    }
+
+    void run(convId)
+  }, [])
+
+  // Marca a conversa automaticamente como lida na abertura inicial (desktop / ?id=) e ao iniciar nova conversa
+  useEffect(() => {
+    if (!selectedId) return
+
+    if (shouldSkipInitialMobileAutoReadRef.current) {
+      shouldSkipInitialMobileAutoReadRef.current = false
+      return
+    }
+
+    if (lastHandledSelectionRef.current === selectedId) {
+      return
+    }
+
+    if (typeof document !== "undefined" && document.hidden) return
+
+    lastHandledSelectionRef.current = selectedId
+    markConversationAsRead(selectedId)
+  }, [selectedId, markConversationAsRead])
+
+  // Se o operador voltar para a aba/janela com uma conversa aberta que recebeu mensagens em segundo plano
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.hidden) return
+      const currentId = selectedIdRef.current
+      if (!currentId) return
+      const currentConv = conversationsRef.current.find((c) => c.id === currentId)
+      if (currentConv && (currentConv.unread_count || 0) > 0) {
+        markConversationAsRead(currentId)
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus)
+    window.addEventListener("focus", handleVisibilityOrFocus)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus)
+      window.removeEventListener("focus", handleVisibilityOrFocus)
+    }
+  }, [markConversationAsRead])
 
   const scrollToBottom = (smooth = true) => {
     setTimeout(() => {
@@ -635,6 +746,9 @@ export default function PainelClient({
             return [...filtered, newMsg]
           })
 
+          const isTabVisible = typeof document === "undefined" || !document.hidden
+          const shouldClearUnreadNow = newMsg.sender_type === "customer" && isTabVisible
+
           setConversations((prev) =>
             prev.map((c) =>
               c.id === selectedId
@@ -642,6 +756,7 @@ export default function PainelClient({
                     ...c,
                     last_message_at: newMsg.created_at || new Date().toISOString(),
                     last_message_preview: newMsg.content || c.last_message_preview,
+                    unread_count: shouldClearUnreadNow ? 0 : c.unread_count,
                   }
                 : c
             ).sort(
@@ -650,6 +765,10 @@ export default function PainelClient({
                 new Date(a.last_message_at || 0).getTime()
             )
           )
+
+          if (shouldClearUnreadNow) {
+            markConversationAsRead(selectedId)
+          }
 
           scrollToBottom(true)
         }
@@ -678,7 +797,7 @@ export default function PainelClient({
     return () => {
       supabase.removeChannel(messagesChannel)
     }
-  }, [selectedId, supabase])
+  }, [selectedId, supabase, markConversationAsRead])
 
   // =========================================================================
   // SUB-SCRIÇÃO REALTIME: Lista de Conversas (Atualizações de status / nova msg)
@@ -695,22 +814,58 @@ export default function PainelClient({
         },
         (payload) => {
           const updated = payload.new as Partial<ConversationData> & { id: string }
-          
-          setRecentlyUpdatedId(updated.id)
-          setTimeout(() => setRecentlyUpdatedId(null), 3000)
+          const prevConv = conversationsRef.current.find((c) => c.id === updated.id)
+          const isActiveAndVisible =
+            updated.id === selectedIdRef.current &&
+            (typeof document === "undefined" || !document.hidden)
+          const isPendingMarkRead = Boolean(inFlightMarkReadRef.current[updated.id])
+
+          const isMarkReadOnlyUpdate =
+            Boolean(prevConv) &&
+            updated.unread_count === 0 &&
+            prevConv?.unread_count !== 0 &&
+            updated.last_message_at === prevConv?.last_message_at &&
+            updated.status === prevConv?.status &&
+            updated.assigned_to === prevConv?.assigned_to
+
+          // Evita pulsar verde quando for apenas confirmação do próprio markAsRead ou conversa aberta na tela
+          if (!isActiveAndVisible && !isMarkReadOnlyUpdate) {
+            setRecentlyUpdatedId(updated.id)
+            if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current)
+            pulseTimeoutRef.current = setTimeout(() => setRecentlyUpdatedId(null), 3000)
+          }
+
+          const shouldZeroOnActive =
+            isActiveAndVisible && typeof updated.unread_count === "number" && updated.unread_count > 0
+
+          const sanitizedUnread =
+            isActiveAndVisible || isPendingMarkRead ? 0 : updated.unread_count
 
           setConversations((prev) => {
             const exists = prev.some((c) => c.id === updated.id)
             if (!exists) return prev
 
             return prev
-              .map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+              .map((c) =>
+                c.id === updated.id
+                  ? {
+                      ...c,
+                      ...updated,
+                      unread_count:
+                        typeof sanitizedUnread === "number" ? sanitizedUnread : c.unread_count,
+                    }
+                  : c
+              )
               .sort(
                 (a, b) =>
                   new Date(b.last_message_at || 0).getTime() -
                   new Date(a.last_message_at || 0).getTime()
               )
           })
+
+          if (shouldZeroOnActive) {
+            markConversationAsRead(updated.id)
+          }
         }
       )
       .on(
@@ -735,9 +890,13 @@ export default function PainelClient({
       .subscribe()
 
     return () => {
+      if (pulseTimeoutRef.current) {
+        clearTimeout(pulseTimeoutRef.current)
+        pulseTimeoutRef.current = null
+      }
       supabase.removeChannel(convChannel)
     }
-  }, [supabase])
+  }, [supabase, markConversationAsRead])
 
   // =========================================================================
   // RECONCILIAÇÃO REALTIME CONTÍNUA: Polling em Segundo Plano (Zero F5)
@@ -754,6 +913,11 @@ export default function PainelClient({
       try {
         const latestMsgs = await getConversationMessages(selectedId)
         if (!isMounted || !latestMsgs) return
+
+        const prevMsgs = messagesRef.current
+        const hasNewCustomerMsg = latestMsgs.some(
+          (m) => m.sender_type === "customer" && !prevMsgs.some((p) => p.id === m.id)
+        )
 
         setMessages((prev) => {
           // Se lista vazia ou idêntica, evita recriar estado
@@ -772,6 +936,10 @@ export default function PainelClient({
 
           return latestMsgs
         })
+
+        if (hasNewCustomerMsg && typeof document !== "undefined" && !document.hidden) {
+          markConversationAsRead(selectedId)
+        }
       } catch {
         // Silencioso em caso de oscilação momentânea
       }
@@ -781,7 +949,7 @@ export default function PainelClient({
       isMounted = false
       clearInterval(pollMessagesInterval)
     }
-  }, [selectedId])
+  }, [selectedId, markConversationAsRead])
 
   // 2. Sincroniza a lista de conversas e contadores das abas a cada 8 segundos
   useEffect(() => {
@@ -791,15 +959,40 @@ export default function PainelClient({
       if (typeof document !== "undefined" && document.hidden) return
 
       try {
+        const pollStartVersion = markReadSeqRef.current
         const updatedList = await getConversationsList()
         if (!isMounted || !updatedList || updatedList.length === 0) return
 
+        const activeId = selectedIdRef.current
+        const isVisible = typeof document === "undefined" || !document.hidden
+        let shouldMarkActiveRead = false
+
+        const normalizedList = updatedList.map((u) => {
+          const isActiveAndVisible = Boolean(activeId && u.id === activeId && isVisible)
+          if (isActiveAndVisible && (u.unread_count || 0) > 0) {
+            shouldMarkActiveRead = true
+          }
+
+          const markedDuringOrAfterPoll =
+            Boolean(inFlightMarkReadRef.current[u.id]) ||
+            (convLastMarkedSeqRef.current[u.id] || 0) > pollStartVersion
+
+          if (isActiveAndVisible || markedDuringOrAfterPoll) {
+            return { ...u, unread_count: 0 }
+          }
+          return u
+        })
+
+        if (shouldMarkActiveRead && activeId) {
+          markConversationAsRead(activeId)
+        }
+
         setConversations((prev) => {
           const hasDiff =
-            updatedList.length !== prev.length ||
-            updatedList[0]?.id !== prev[0]?.id ||
-            updatedList[0]?.last_message_at !== prev[0]?.last_message_at ||
-            updatedList.some((u) => {
+            normalizedList.length !== prev.length ||
+            normalizedList[0]?.id !== prev[0]?.id ||
+            normalizedList[0]?.last_message_at !== prev[0]?.last_message_at ||
+            normalizedList.some((u) => {
               const p = prev.find((x) => x.id === u.id)
               return (
                 !p ||
@@ -813,7 +1006,7 @@ export default function PainelClient({
             })
 
           if (!hasDiff) return prev
-          return updatedList
+          return normalizedList
         })
       } catch {
         // Silencioso
@@ -824,29 +1017,42 @@ export default function PainelClient({
       isMounted = false
       clearInterval(pollListInterval)
     }
-  }, [])
+  }, [markConversationAsRead])
 
   // =========================================================================
   // TROCA DE CONVERSA
   // =========================================================================
   const handleSelectConversation = async (convId: string) => {
-    if (convId === selectedId) return
+    if (convId === selectedId) {
+      const current = conversationsRef.current.find((c) => c.id === convId)
+      if (current && (current.unread_count || 0) > 0) {
+        markConversationAsRead(convId)
+      }
+      return
+    }
 
+    lastHandledSelectionRef.current = convId
+    selectedIdRef.current = convId
     setSelectedId(convId)
     setIsListOpen(false)
     setConfirmClose(false)
     setIsProfileOpen(false)
     setLoadingMessages(true)
+    markConversationAsRead(convId)
 
     try {
       const msgs = await getConversationMessages(convId)
-      setMessages(msgs)
-      scrollToBottom(false)
+      if (selectedIdRef.current === convId) {
+        setMessages(msgs)
+        scrollToBottom(false)
+      }
     } catch (err: any) {
       console.error("[Chat] Falha ao carregar mensagens:", err)
       toast.error("Erro ao carregar mensagens", "Não foi possível sincronizar o histórico.")
     } finally {
-      setLoadingMessages(false)
+      if (selectedIdRef.current === convId) {
+        setLoadingMessages(false)
+      }
     }
   }
 
@@ -895,6 +1101,13 @@ export default function PainelClient({
       const result = await sendMessageAction(selectedId, trimmed, clientMessageId)
 
       if (result?.success) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedId && (c.unread_count || 0) > 0
+              ? { ...c, unread_count: 0 }
+              : c
+          )
+        )
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -1540,7 +1753,7 @@ export default function PainelClient({
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
-              ? { ...c, status: "human", assigned_to: currentUser?.userId || null }
+              ? { ...c, status: "human", assigned_to: currentUser?.userId || null, unread_count: 0 }
               : c
           )
         )
@@ -1588,7 +1801,7 @@ export default function PainelClient({
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
-              ? { ...c, status: "open", assigned_to: null, agent_name: resolvedName }
+              ? { ...c, status: "open", assigned_to: null, agent_name: resolvedName, unread_count: 0 }
               : c
           )
         )
@@ -1649,7 +1862,7 @@ export default function PainelClient({
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedId
-              ? { ...c, status: "closed", closed_at: new Date().toISOString() }
+              ? { ...c, status: "closed", closed_at: new Date().toISOString(), unread_count: 0 }
               : c
           )
         )
@@ -1708,6 +1921,7 @@ export default function PainelClient({
                   status: "human",
                   assigned_to: currentUser?.userId || null,
                   closed_at: null,
+                  unread_count: 0,
                 }
               : c
           )
@@ -1794,6 +2008,8 @@ export default function PainelClient({
   }, [])
 
   const handleBackToList = () => {
+    lastHandledSelectionRef.current = null
+    selectedIdRef.current = null
     setSelectedId(null)
     setConfirmClose(false)
     setIsProfileOpen(false)
