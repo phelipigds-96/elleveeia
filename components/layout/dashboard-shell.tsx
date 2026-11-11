@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -63,6 +63,22 @@ export function DashboardShell({
   const pathname = usePathname()
   const isConversationsChat = pathname === "/conversations"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [hasActiveMobileChat, setHasActiveMobileChat] = useState(false)
+
+  useEffect(() => {
+    const handleSelectionChange = (event: Event) => {
+      const custom = event as CustomEvent<{ hasSelection?: boolean }>
+      setHasActiveMobileChat(Boolean(custom.detail?.hasSelection))
+    }
+    window.addEventListener("ellevee:chat-selection-change", handleSelectionChange)
+    return () => window.removeEventListener("ellevee:chat-selection-change", handleSelectionChange)
+  }, [])
+
+  useEffect(() => {
+    if (!isConversationsChat) {
+      setHasActiveMobileChat(false)
+    }
+  }, [isConversationsChat])
 
   const displayName = userDisplayName || "Atendente"
   const userInitials = displayName.slice(0, 2).toUpperCase()
@@ -265,8 +281,8 @@ export function DashboardShell({
   // =========================================================================
   return (
     <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden bg-[#efeae2] relative">
-      {/* 1. TOP BAR TEAL ESTILO WHATSAPP BUSINESS COM MENU MOBILE */}
-      <header className="h-14 bg-[#005d4b] text-white px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-sm z-30 select-none">
+      {/* 1. TOP BAR TEAL ESTILO WHATSAPP BUSINESS COM MENU MOBILE (Oculta em smartphones quando uma conversa está aberta) */}
+      <header className={`${hasActiveMobileChat ? "hidden lg:flex" : "flex"} h-14 bg-[#005d4b] text-white px-3 sm:px-4 items-center justify-between shrink-0 shadow-sm z-30 select-none`}>
         {/* Esquerda: Botão Menu Mobile + Identidade da Empresa e Canal WhatsApp Conectado */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button

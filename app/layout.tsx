@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 // As fontes são resolvidas via stack local (variáveis CSS em globals.css) para
@@ -6,6 +6,14 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Ellevee IA',
   description: 'Inteligência que conecta. Resultados que evoluem.',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({
