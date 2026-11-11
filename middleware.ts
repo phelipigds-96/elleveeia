@@ -5,6 +5,10 @@ export async function middleware(request: NextRequest) {
   // 1. Permite acesso aos webhooks e crons sem exigir sessão de usuário
   // 2. Permite acesso às rotas do SuperAdmin e Chat durante homologação visual
   if (
+    request.nextUrl.pathname === '/sw.js' ||
+    request.nextUrl.pathname === '/manifest.webmanifest' ||
+    request.nextUrl.pathname.startsWith('/icons/') ||
+    request.nextUrl.pathname.startsWith('/api/push') ||
     request.nextUrl.pathname.startsWith('/api/webhooks') ||
     request.nextUrl.pathname.startsWith('/api/cron') ||
     request.nextUrl.pathname.startsWith('/api/outbox') ||

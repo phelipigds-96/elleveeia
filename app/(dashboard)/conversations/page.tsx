@@ -13,14 +13,24 @@ export const metadata = {
   description: "Painel de atendimento e conversas em tempo real via Supabase Realtime",
 }
 
-export default async function ConversationsPage() {
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams?: { id?: string }
+}) {
   // Carga base inicial realizada no servidor (RSC) com perfil do atendente, conversas, motivos de finalização e respostas rápidas
   const [currentUser, initialConversations, chatOps] = await Promise.all([
     getAgentProfileContext(),
     getConversationsList(),
     getChatOperationsContextAction(),
   ])
-  const initialSelectedId = initialConversations.length > 0 ? initialConversations[0].id : null
+  const requestedId = typeof searchParams?.id === 'string' ? searchParams.id.trim() : ''
+  const matchedRequested = requestedId
+    ? initialConversations.find((c: any) => c.id === requestedId)
+    : undefined
+  const initialSelectedId =
+    matchedRequested?.id ??
+    (initialConversations.length > 0 ? initialConversations[0].id : null)
   const initialMessages = initialSelectedId ? await getConversationMessages(initialSelectedId) : []
 
   return (

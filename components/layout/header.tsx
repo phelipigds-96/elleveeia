@@ -3,6 +3,7 @@ import { User, LogOut, Search, Building2, Headphones, ChevronRight } from 'lucid
 import { createClient } from '@/lib/supabase/server'
 import { logout } from '@/app/(auth)/actions'
 import { ElleveeLogo } from '@/components/ui/ellevee-logo'
+import { PushNotificationsButton } from '@/components/notifications/push-notifications-button'
 
 interface HeaderProps {
   userRole?: string
@@ -92,6 +93,9 @@ export async function Header({ userRole = 'admin' }: HeaderProps) {
         </div>
 
         <div className="h-4 w-px bg-ellevee-border" />
+
+        {/* Controle de Notificações Push */}
+        <PushNotificationsButton variant="light" />
 
         {/* Botão Logout */}
         <form action={logout}>
