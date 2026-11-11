@@ -180,7 +180,25 @@ export async function POST(request: Request) {
       return { executed: false, dispatched: false, reason: 'unhandled_cycle_error', error: err.message }
     })
     
-    // 6. Logging Seguro de Servidor (Sem vazar segredos)
+    // 6. Disparo seletivo de Push Notification (silencioso enquanto IA atende; notifica apenas humano/fila)
+    if (body?.message?.sender_type === 'customer') {
+      const { notifyPushForInboundCustomerMessage } = await import('@/lib/services/push-notifications')
+      await Promise.race([
+        notifyPushForInboundCustomerMessage({
+          companyId,
+          conversationId: result.conversation_id,
+          senderType: body.message.sender_type,
+          messageContent: body.message.content,
+          messageType: body.message.message_type,
+          cycleReason: cycleResult.reason,
+        }),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]).catch((pushErr: any) => {
+        console.warn(`[Webhook push warn req:${requestId}]`, pushErr?.message || pushErr)
+      })
+    }
+
+    // 7. Logging Seguro de Servidor (Sem vazar segredos)
     const statusLabel = cycleResult.dispatched ? 'dispatched' : (cycleResult.reason || 'skipped')
     console.log(`[Webhook success req:${requestId}] company:${companyId} event:${result.event_id} autonomous:${statusLabel} details:${JSON.stringify(cycleResult)} - ${Date.now() - startTime}ms`)
 

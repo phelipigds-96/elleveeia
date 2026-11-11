@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { PushNotificationsButton } from "@/components/notifications/push-notifications-button"
 import {
   MessageSquare,
   Users,
@@ -13,7 +14,6 @@ import {
   Settings,
   HelpCircle,
   Sun,
-  Bell,
   ChevronDown,
   Building2,
   Headphones,
@@ -326,14 +326,8 @@ export function DashboardShell({
             <Sun className="h-4 w-4" />
           </button>
 
-          {/* Notificações (Bell) */}
-          <button
-            type="button"
-            className="p-1.5 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors relative"
-            title="Notificações"
-          >
-            <Bell className="h-4 w-4" />
-          </button>
+          {/* Notificações (Bell / Web Push PWA) */}
+          <PushNotificationsButton variant="dark" />
 
           {/* Avatar / Perfil do Operador */}
           <div className="flex items-center gap-2 pl-1 border-l border-white/20">
