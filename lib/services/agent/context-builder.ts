@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import type { OpenAIMessage } from './openai'
-import type { WorkingMemory } from './working-memory'
+import { isWorkingMemoryExpired, expireWorkingMemory, type WorkingMemory } from './working-memory'
 import { isPlausibleHumanName, sanitizeCustomerName } from '@/lib/services/customer-name'
 
 interface ContextBuilderParams {
@@ -156,9 +156,12 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   // 4. Extrair Working Memory Operacional
   let workingMemory: WorkingMemory | null = null
+  let workingMemoryTimestamp: string | null = null
+
   for (const msg of rawHistory) {
     if (msg.sender_type === 'agent' && msg.metadata?.working_memory) {
       workingMemory = msg.metadata.working_memory
+      workingMemoryTimestamp = workingMemory?.updatedAt || msg.created_at || null
       break
     }
   }
@@ -183,7 +186,24 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
         console.warn('[buildAgentContext] Falha ao buscar working_memory duravel:', wmLookupError)
       } else if (Array.isArray(wmRows) && wmRows[0]?.metadata?.working_memory) {
         workingMemory = wmRows[0].metadata.working_memory
+        workingMemoryTimestamp = workingMemory?.updatedAt || wmRows[0].created_at || null
       }
+    }
+  }
+
+  // 4.1 Validação de TTL e Inatividade (Expiração Automática de Carrinho)
+  if (workingMemory) {
+    const isExpiredByTime = isWorkingMemoryExpired(workingMemoryTimestamp)
+
+    // Se a conversa foi fechada anteriormente ou se a memória é anterior ao closed_at
+    const isClosedSession = Boolean(
+      conversation.closed_at &&
+      workingMemoryTimestamp &&
+      new Date(workingMemoryTimestamp).getTime() <= new Date(conversation.closed_at).getTime()
+    )
+
+    if (isExpiredByTime || isClosedSession) {
+      workingMemory = expireWorkingMemory(workingMemory)
     }
   }
 

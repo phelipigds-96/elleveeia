@@ -34,6 +34,8 @@ export interface WorkingMemory {
     status: string
   }
   discoveredProducts?: DiscoveredProduct[]
+  updatedAt?: string
+  expiredAt?: string
 }
 
 export interface AddCartItemParams {
@@ -133,6 +135,7 @@ export function addItemToCart(
   }
 
   next.activeCart = currentCart
+  next.updatedAt = new Date().toISOString()
   return next
 }
 
@@ -169,6 +172,7 @@ export function updateCartItemQuantity(
   updatedCart[index] = updatedItem
 
   next.activeCart = updatedCart
+  next.updatedAt = new Date().toISOString()
   return next
 }
 
@@ -212,6 +216,7 @@ export function updateCartItemPrice(
   }
 
   next.activeCart = updatedCart
+  next.updatedAt = new Date().toISOString()
   return next
 }
 
@@ -227,6 +232,7 @@ export function removeCartItem(
 
   const pId = productId.trim()
   next.activeCart = next.activeCart.filter(item => item.productId !== pId)
+  next.updatedAt = new Date().toISOString()
   return next
 }
 
@@ -264,11 +270,71 @@ export function calculateCartTotal(memory: WorkingMemory | null | undefined): Ca
 }
 
 /**
+ * Constante padrão de expiração (TTL) da Working Memory Operacional (24 horas)
+ */
+export const DEFAULT_WORKING_MEMORY_TTL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Obtém o TTL configurado para o carrinho e memória de trabalho em milissegundos.
+ * Permite customização por variável de ambiente AGENT_CART_TTL_HOURS (default: 24h).
+ */
+export function getConfiguredCartTtlMs(): number {
+  const envHours = process.env.AGENT_CART_TTL_HOURS ? Number(process.env.AGENT_CART_TTL_HOURS) : null
+  if (typeof envHours === 'number' && !isNaN(envHours) && envHours > 0) {
+    return envHours * 60 * 60 * 1000
+  }
+  return DEFAULT_WORKING_MEMORY_TTL_MS
+}
+
+/**
+ * Verifica se a Working Memory expirou devido a inatividade prolongada (> TTL).
+ * Aceita timestamp ISO, Date ou milissegundos. Retorna false para timestamps inválidos ou ausentes.
+ */
+export function isWorkingMemoryExpired(
+  timestamp: string | Date | number | null | undefined,
+  now: number = Date.now(),
+  ttlMs: number = getConfiguredCartTtlMs()
+): boolean {
+  if (!timestamp) return false
+  const timeMs = typeof timestamp === 'number'
+    ? timestamp
+    : new Date(timestamp).getTime()
+  if (isNaN(timeMs)) return false
+  return (now - timeMs) > ttlMs
+}
+
+/**
+ * Reseta deterministicamente os dados voláteis da Working Memory (carrinho não finalizado,
+ * produto em foco e buffer de buscas anteriores), preservando apenas histórico
+ * estritamente permanente.
+ */
+export function expireWorkingMemory(
+  memory: WorkingMemory | null | undefined,
+  nowIso: string = new Date().toISOString()
+): WorkingMemory {
+  if (!memory) return {}
+  const next: WorkingMemory = { ...memory }
+  delete next.activeCart
+  delete next.activeProduct
+  delete next.activePrice
+  delete next.activeQuantity
+  delete next.discoveredProducts
+  // Se o orçamento era um rascunho (draft) não finalizado, expira junto com o carrinho
+  if (next.activeQuote?.status === 'draft') {
+    delete next.activeQuote
+  }
+  next.expiredAt = nowIso
+  next.updatedAt = nowIso
+  return next
+}
+
+/**
  * Limpa todos os itens do carrinho em memória.
  */
 export function clearCart(memory: WorkingMemory | null | undefined): WorkingMemory {
   const next: WorkingMemory = { ...(memory || {}) }
   next.activeCart = []
+  next.updatedAt = new Date().toISOString()
   return next
 }
 
@@ -277,9 +343,11 @@ export function clearCart(memory: WorkingMemory | null | undefined): WorkingMemo
  */
 export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefined, toolResults: any[]): WorkingMemory {
   let next: WorkingMemory = { ...(previous || {}) }
+  let hasValidToolResult = false
 
   for (const res of toolResults) {
     if (!res || !res.success || !res.data) continue
+    hasValidToolResult = true
 
     const toolName = res.toolName
     
@@ -475,6 +543,10 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
         next.activeCart = quoteItems
       }
     }
+  }
+
+  if (hasValidToolResult) {
+    next.updatedAt = new Date().toISOString()
   }
   
   return next
