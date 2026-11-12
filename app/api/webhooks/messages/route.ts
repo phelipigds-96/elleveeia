@@ -173,7 +173,11 @@ export async function POST(request: Request) {
         mediaType: rawMediaTypeHint,
         base64: rawBase64,
         mediaUrl: rawMediaUrl,
-        currentContent: body.message?.content
+        currentContent: body.message?.content,
+        instanceName: body?.metadata?.instance,
+        messageExternalId:
+          body?.message?.external_id ||
+          (body?.event_id ? String(body.event_id).replace(/^evolution-/, '') : undefined),
       })
 
       const resolvedMediaType = mediaResult.mediaType || rawMediaTypeHint || 'audio'
