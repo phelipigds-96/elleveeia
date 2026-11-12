@@ -10,6 +10,11 @@ import {
   removeCartItem,
   clearCart
 } from '@/lib/services/agent/working-memory'
+import {
+  isGenericProductQuery,
+  extractAvailableSizes,
+  applyCommercialStrategy
+} from '@/lib/services/agent/commercial-strategy'
 
 test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil', async (t) => {
   await t.test('1. isWorkingMemoryExpired lida com valores vazios e inválidos sem explodir', () => {
@@ -148,5 +153,54 @@ test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil
     const next = applyWorkingMemoryUpdate(previous, toolResults)
     assert.ok(next.updatedAt)
     assert.strictEqual(next.activePrice?.unitPrice, 61.49)
+  })
+
+  await t.test('8. isGenericProductQuery detecta perguntas amplas vs específicas', () => {
+    const brands = ['Sicao', 'Genuine', 'Dona Jura', 'Harald']
+
+    // Perguntas genéricas (sem marca nem tamanho)
+    assert.strictEqual(isGenericProductQuery('E chocolate em pó?', brands), true)
+    assert.strictEqual(isGenericProductQuery('Tem cobertura?', brands), true)
+    assert.strictEqual(isGenericProductQuery('Quais granulados você tem?', brands), true)
+    assert.strictEqual(isGenericProductQuery('Tem leite condensado?', brands), true)
+
+    // Perguntas específicas (com marca ou tamanho)
+    assert.strictEqual(isGenericProductQuery('Tem chocolate da Genuine?', brands), false)
+    assert.strictEqual(isGenericProductQuery('Quero cobertura barra 1kg', brands), false)
+    assert.strictEqual(isGenericProductQuery('Chocolate em pó 500g', brands), false)
+  })
+
+  await t.test('9. extractAvailableSizes extrai pesos e gramagens das embalagens', () => {
+    const sample = [
+      { id: '1', name: 'CHOC. EM PO SICAO 50% (1.01KG)' },
+      { id: '2', name: 'CHOC. EM PO SELECTA NAMUR 50% (200G)' },
+      { id: '3', name: 'COB. GENUINE GTS BRANCO (2.05KG)' }
+    ] as any
+
+    const sizes = extractAvailableSizes(sample)
+    assert.ok(sizes.includes('1.01kg'))
+    assert.ok(sizes.includes('200g'))
+    assert.ok(sizes.includes('2.05kg'))
+  })
+
+  await t.test('10. applyCommercialStrategy gera consultative_hint e is_broad_query para busca genérica', () => {
+    const searchMock = {
+      status: 'success',
+      matches: [
+        { id: '1', name: 'CHOC. EM PO SICAO 50% (1.01KG)', brand: 'Sicao' },
+        { id: '2', name: 'CHOC. EM PO GENUINE 50% (1.05KG)', brand: 'Genuine' },
+        { id: '3', name: 'CHOC. EM PO DONA JURA 55% (1.005KG)', brand: 'Dona Jura' },
+        { id: '4', name: 'CHOC. EM PO HARALD MELKEN 50% (200G)', brand: 'Harald' }
+      ]
+    } as any
+
+    const strategy = applyCommercialStrategy('E chocolate em pó?', searchMock, 1, undefined, new Map())
+    assert.strictEqual(strategy.strategy, 'generic_discovery')
+    assert.strictEqual(strategy.is_broad_query, true)
+    assert.ok(strategy.consultative_hint)
+    assert.match(strategy.consultative_hint, /GENÉRICA/)
+    assert.match(strategy.consultative_hint, /PERGUNTE/)
+    assert.ok(strategy.available_brands.includes('Sicao'))
+    assert.ok(strategy.available_brands.includes('Genuine'))
   })
 })
