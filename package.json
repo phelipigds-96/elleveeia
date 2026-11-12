@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build && node scripts/emit-preview.mjs",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc -p tsconfig.ci.json --noEmit",
+    "security:check": "node scripts/ci-security-check.mjs",
+    "test:ci": "node scripts/run-ci-tests.mjs",
+    "ci:gate": "npm run typecheck && npm run security:check && npm run test:ci"
   },
   "dependencies": {
     "@google/genai": "latest",
