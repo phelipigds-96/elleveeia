@@ -15,6 +15,7 @@ import {
   extractAvailableSizes,
   applyCommercialStrategy
 } from '@/lib/services/agent/commercial-strategy'
+import { resolveToolScope } from '@/lib/services/agent/tool-scoping'
 
 test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil', async (t) => {
   await t.test('1. isWorkingMemoryExpired lida com valores vazios e inválidos sem explodir', () => {
@@ -202,5 +203,38 @@ test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil
     assert.match(strategy.consultative_hint, /PERGUNTE/)
     assert.ok(strategy.available_brands.includes('Sicao'))
     assert.ok(strategy.available_brands.includes('Genuine'))
+  })
+
+  await t.test('11. resolveToolScope disponibiliza transferir_para_humano no fechamento do orçamento', () => {
+    const allTools = [
+      { name: 'consultar_produto_comercial', metadata: { category: 'commercial' } },
+      { name: 'gerar_orcamento', metadata: { category: 'quotes' } },
+      { name: 'transferir_para_humano', metadata: { category: 'general' } }
+    ] as any
+
+    const cartMemory: WorkingMemory = {
+      activeCart: [
+        {
+          productId: 'prod-genuine',
+          name: 'COB. GENUINE BARRA BRANCO (1KG)',
+          quantity: 2,
+          unitPrice: 39.49,
+          subtotal: 78.98,
+          isPriceConfirmed: true
+        }
+      ]
+    }
+
+    // Mensagem de fechamento informando retirada e pagamento
+    const tools = resolveToolScope(
+      'Ok, vou retirar na loja, dai ja pago no ato da retirada',
+      [],
+      allTools,
+      cartMemory
+    )
+    const names = tools.map((t: any) => t.name)
+
+    assert.ok(names.includes('transferir_para_humano'), 'Deve disponibilizar transferir_para_humano no checkout')
+    assert.ok(names.includes('gerar_orcamento'), 'Deve disponibilizar gerar_orcamento no checkout')
   })
 })
