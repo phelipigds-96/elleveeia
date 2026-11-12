@@ -1,0 +1,47 @@
+name: CI Gate — Ellevee IA
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-security-gate:
+    name: TypeCheck, Security, Tests & Next Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript Production Gate
+        run: npm run typecheck
+
+      - name: Static Security & Migration Integrity Gate
+        run: npm run security:check
+
+      - name: Automated Regression Suite (Etapas 1, 2A, 2B, 3A, 3B + Core)
+        run: npm run test:ci
+
+      - name: Next.js Production Build Gate
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-ci.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-anon-placeholder-key' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-service-role-placeholder' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-cron-secret-placeholder' }}
+        run: npx next build --no-lint
