@@ -11,10 +11,15 @@ import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
 import { consultarOrcamentoTool } from './tools/consultar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
+import { salvarNomeClienteTool } from './tools/salvar-nome-cliente'
+import { transferirParaHumanoTool } from './tools/transferir-para-humano'
 import { resolveToolScope, hasClearProductIntent } from './tool-scoping'
 import { applyWorkingMemoryUpdate } from './working-memory'
+import { maybeRefreshConversationSummary } from './conversation-summary'
+import { DEFAULT_LLM_TIMEOUT_MS, LLMTimeoutError } from '../llm/timeout'
 
 const MAX_TOOL_ITERATIONS = 5
+const AGENT_TURN_BUDGET_MS = 40_000
 
 export interface AgentRunParams {
   companyId: string
@@ -40,6 +45,7 @@ export interface AgentRunResult {
   agentId?: string
   conversationId?: string
   metadata?: Record<string, any> | null
+  handoffTriggered?: boolean
   code?: string
   statusCode?: number
   error?: string
@@ -180,7 +186,7 @@ export async function runAgentEngine({
     }
 
     // 4. Carregamento do contexto operacional do agente (histórico, Working Memory, etc.)
-    const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics, hasCatalogProducts } = await buildAgentContext({
+    const { agent, conversation, payloadMessages, workingMemory: previousWorkingMemory, contextMetrics, hasCatalogProducts, hasConfirmedCustomerName } = await buildAgentContext({
       companyId,
       agentId,
       conversationId
@@ -199,12 +205,14 @@ export async function runAgentEngine({
     registry.register(gerarOrcamentoTool)
     registry.register(consultarOrcamentoTool)
     registry.register(consultarProdutoComercialTool)
+    registry.register(salvarNomeClienteTool)
+    registry.register(transferirParaHumanoTool)
     
     const executor = new ToolExecutor(registry)
     
     // 1. Tool Scoping: Resolvemos as tools ideais baseado na msg, historico limpo e Working Memory atual
     const historyForScoping = payloadMessages.filter(m => m.role === 'user' || m.role === 'assistant')
-    scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list(), previousWorkingMemory)
+    scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list(), previousWorkingMemory, { hasConfirmedCustomerName })
     const filteredScopedTools = hasCatalogProducts
       ? scopedTools
       : scopedTools.filter(t => t.name !== 'consultar_produto_comercial' && t.name !== 'buscar_produto' && t.name !== 'consultar_preco' && t.name !== 'calcular_preco_produto')
@@ -228,12 +236,21 @@ export async function runAgentEngine({
       iteration++
 
       const roundStartTime = Date.now()
+      const remainingBudgetMs = AGENT_TURN_BUDGET_MS - (roundStartTime - startTime)
+      if (remainingBudgetMs <= 0) {
+        throw new LLMTimeoutError(
+          providerUsed,
+          AGENT_TURN_BUDGET_MS,
+          `Orçamento máximo do turno (${AGENT_TURN_BUDGET_MS}ms) excedido antes da iteração ${iteration}.`
+        )
+      }
 
       const response = await provider.generateResponse({
         model: modelUsed,
         messages: messagesForLLM,
         temperature: 0.7,
-        tools: availableTools
+        tools: availableTools,
+        timeoutMs: Math.min(DEFAULT_LLM_TIMEOUT_MS, remainingBudgetMs)
       })
 
       // Acumula métricas de uso de tokens
@@ -302,7 +319,8 @@ export async function runAgentEngine({
             agentId, 
             conversationId,
             customerId: conversation?.customer_id || undefined,
-            workingMemory: currentWorkingMemory // Propagação viva da memória de trabalho atualizada
+            workingMemory: currentWorkingMemory, // Propagação viva da memória de trabalho atualizada
+            adminClient: supabase
           })
           
           executedTools.push({ name: call.toolName, success: result.success })
@@ -379,7 +397,26 @@ export async function runAgentEngine({
       }
     }
 
+    const handoffTriggered = allToolResults.some(
+      (r) => r?.toolName === 'transferir_para_humano' && r?.success === true && r?.data?.transferred === true
+    )
+
     runStatus = 'success'
+
+    // Atualização incremental e best-effort do resumo persistente de conversas longas
+    if (!handoffTriggered) {
+      await maybeRefreshConversationSummary({
+        supabase,
+        provider,
+        model: modelUsed,
+        companyId,
+        conversationId,
+        previousSummary: (conversation as any)?.summary ?? null,
+        previousSummaryMessageCount: (conversation as any)?.summary_message_count ?? 0,
+        availableRecentCount: contextMetrics.availableMessages,
+        remainingBudgetMs: AGENT_TURN_BUDGET_MS - (Date.now() - startTime)
+      }).catch(() => undefined)
+    }
 
     // Calcular métricas de cache agregadas
     let total_cached_tokens = 0
@@ -411,6 +448,7 @@ export async function runAgentEngine({
       orchestration: {
         iterations: iteration,
         fallback_catalog_triggered: fallbackTriggered,
+        handoff_triggered: handoffTriggered,
         executed_tools: executedTools.map(t => ({ tool: t.name, success: t.success })),
         has_active_quote: Boolean(newWorkingMemory.activeQuote?.id),
         quote_id: newWorkingMemory.activeQuote?.id || null
@@ -452,11 +490,16 @@ export async function runAgentEngine({
       workingMemory: newWorkingMemory,
       agentId,
       conversationId,
-      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null
+      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null,
+      handoffTriggered
     }
 
   } catch (error: any) {
-    runStatus = 'error'
+    const isTimeout =
+      error instanceof LLMTimeoutError ||
+      error?.code === 'LLM_TIMEOUT' ||
+      error?.name === 'AbortError'
+    runStatus = isTimeout ? 'timeout' : 'error'
     runErrorMessage = error.message
 
     // Tratamento controlado e seguro de TenantAccessError:
@@ -489,7 +532,10 @@ export async function runAgentEngine({
     
     return {
       success: false,
-      error: 'Ocorreu um erro no processamento do agente inteligente.',
+      ...(isTimeout ? { code: 'LLM_TIMEOUT' } : {}),
+      error: isTimeout
+        ? 'O modelo de IA excedeu o tempo limite de resposta.'
+        : 'Ocorreu um erro no processamento do agente inteligente.',
       details: runErrorMessage
     }
   }

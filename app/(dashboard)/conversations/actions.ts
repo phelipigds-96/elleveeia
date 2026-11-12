@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
-import { dispatchOutboxMessage } from "@/lib/services/outbox-dispatcher"
+import { dispatchOutboxRecordHardened } from "@/lib/services/conversations-internal"
 import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
 import { assignDefaultWorkflowStages } from "@/lib/services/workflows/conversation-workflow"
 import { getBrazilianPhoneVariants } from "@/lib/services/phone-normalization"
@@ -530,10 +530,16 @@ export async function sendMessageAction(
       console.warn("[Chat] Aviso ao registrar na message_outbox:", outboxInsertErr.message)
     }
 
-    // 5. Despacho Imediato em Tempo Real (Painel -> Gateway -> WhatsApp)
+    // 5. Despacho Imediato em Tempo Real via Pipeline Atômico (Claim + SSRF Guard + Gateway Lock)
     if (createdOutbox?.id) {
       try {
-        await dispatchOutboxMessage(createdOutbox.id, { adminClient })
+        await dispatchOutboxRecordHardened({
+          adminClient,
+          companyId,
+          outboxId: createdOutbox.id,
+          messageId: createdMsg.id,
+          outboundPayload: outboxPayload,
+        })
       } catch (dispErr: any) {
         console.error("[Chat] Falha no despacho imediato da outbox (será reprocessado por worker):", dispErr?.message || dispErr)
       }
@@ -551,6 +557,7 @@ export async function sendMessageAction(
       .eq("company_id", companyId)
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -623,6 +630,7 @@ export async function takeoverConversationAction(
     })
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -708,6 +716,7 @@ export async function returnToAIAction(
     })
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -858,6 +867,7 @@ export async function closeConversationAction(
     })
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -925,6 +935,7 @@ export async function reopenConversationAction(
     })
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -1027,6 +1038,10 @@ export async function updateCustomerProfileAction(params: {
 
     let pendingMigration = false
     const fullPayload = { ...updatePayload }
+    if (params.name !== undefined && params.name.trim()) {
+      fullPayload.name_confirmed = true
+      fullPayload.name_source = "manual"
+    }
     if (params.address !== undefined) fullPayload.address = params.address.trim() || null
     if (params.notes !== undefined) fullPayload.notes = params.notes.trim() || null
 
@@ -1068,6 +1083,7 @@ export async function updateCustomerProfileAction(params: {
     }
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -1346,7 +1362,13 @@ export async function sendMediaMessageAction(params: {
 
     if (createdOutbox?.id) {
       try {
-        await dispatchOutboxMessage(createdOutbox.id, { adminClient })
+        await dispatchOutboxRecordHardened({
+          adminClient,
+          companyId,
+          outboxId: createdOutbox.id,
+          messageId: createdMsg.id,
+          outboundPayload: outboxPayload,
+        })
       } catch (dispErr: any) {
         console.error("[ChatMedia] Falha no despacho da outbox:", dispErr?.message || dispErr)
       }
@@ -1363,6 +1385,7 @@ export async function sendMediaMessageAction(params: {
       .eq("company_id", companyId)
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
 
     return {
       success: true,
@@ -1426,22 +1449,52 @@ export async function startNewConversationAction(params: {
     if (existingCust) {
       customerId = existingCust.id
       if (params.name?.trim() && existingCust.name !== params.name.trim()) {
-        await adminClient
+        const cleanManualName = params.name.trim()
+        const { error: updErr } = await adminClient
           .from("customers")
-          .update({ name: params.name.trim() })
+          .update({
+            name: cleanManualName,
+            name_confirmed: true,
+            name_source: "manual",
+          })
           .eq("id", customerId)
           .eq("company_id", companyId)
+
+        if (updErr && updErr.code === "42703") {
+          await adminClient
+            .from("customers")
+            .update({ name: cleanManualName })
+            .eq("id", customerId)
+            .eq("company_id", companyId)
+        }
       }
     } else {
-      const { data: newCust, error: custErr } = await adminClient
+      const hasExplicitName = Boolean(params.name?.trim())
+      let { data: newCust, error: custErr } = await adminClient
         .from("customers")
         .insert({
           company_id: companyId,
           name: cleanName,
           phone: cleanPhone,
+          name_confirmed: hasExplicitName,
+          name_source: "manual",
         })
         .select("id")
         .single()
+
+      if (custErr && custErr.code === "42703") {
+        const fallbackCust = await adminClient
+          .from("customers")
+          .insert({
+            company_id: companyId,
+            name: cleanName,
+            phone: cleanPhone,
+          })
+          .select("id")
+          .single()
+        newCust = fallbackCust.data
+        custErr = fallbackCust.error
+      }
 
       if (custErr || !newCust) {
         return { success: false, error: `Falha ao cadastrar cliente: ${custErr?.message || "Erro desconhecido"}` }
@@ -1515,6 +1568,7 @@ export async function startNewConversationAction(params: {
     }
 
     revalidatePath("/conversations")
+    revalidatePath("/customers")
     return { success: true, conversationId }
   } catch (err: any) {
     console.error("[startNewConversationAction] Exceção:", err)

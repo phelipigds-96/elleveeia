@@ -356,14 +356,16 @@ export function DashboardShell({
               <MessageSquare className="h-5 w-5" />
             </Link>
 
-            {/* Clientes */}
-            <Link
-              href="/customers"
-              className="h-10 w-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
-              title="Clientes & Contatos"
-            >
-              <Users className="h-5 w-5" />
-            </Link>
+            {/* Clientes (restrito a Admin / Owner) */}
+            {!isAttendant && (
+              <Link
+                href="/customers"
+                className="h-10 w-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+                title="Clientes & Contatos"
+              >
+                <Users className="h-5 w-5" />
+              </Link>
+            )}
 
             {/* Agentes de IA */}
             <Link

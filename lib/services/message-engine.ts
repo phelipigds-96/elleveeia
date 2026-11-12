@@ -7,14 +7,15 @@ import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform
 import { prepareOutboundMessage } from '@/lib/services/outbound-internal'
 import { assignDefaultWorkflowStages } from '@/lib/services/workflows/conversation-workflow'
 import { getBrazilianPhoneVariants } from '@/lib/services/phone-normalization'
+import { buildFallbackCustomerName, isPlausibleHumanName, normalizeRawName, sanitizeCustomerName } from '@/lib/services/customer-name'
 export type ProcessWebhookResult = 
-  | { success: true; duplicate: true; event_id: string; conversation_id?: undefined; message_id?: undefined }
-  | { success: true; duplicate: false; event_id: string; conversation_id: string; message_id: string }
+  | { success: true; duplicate: true; event_id: string; webhook_event_id?: string; conversation_id?: undefined; message_id?: undefined }
+  | { success: true; duplicate: false; event_id: string; webhook_event_id?: string; conversation_id: string; message_id: string }
 
 export async function processWebhookEvent(
   companyId: string, 
   payload: WebhookPayload,
-  options?: { adminClient?: any }
+  options?: { adminClient?: any; retryWebhookEventRowId?: string }
 ): Promise<ProcessWebhookResult> {
   const supabase = options?.adminClient || createAdminClient()
 
@@ -22,66 +23,123 @@ export async function processWebhookEvent(
   // Garante que mesmo chamadores internos/diretos não persistam registros para empresas bloqueadas
   await requireActiveCompany(companyId, { adminClient: supabase })
 
-  // 1. Controle de Idempotência
-  // Registra o evento. Se já existir o par company_id + event_id (Violate Unique Constraint), retornamos duplicate
-  const { data: eventRecord, error: eventError } = await supabase.from('webhook_events').insert({
-    company_id: companyId,
-    event_id: payload.event_id,
-    event_type: payload.event_type,
-    payload: payload,
-    status: 'processing'
-  }).select().single()
+  // 1. Controle de Idempotência (ou Retomada de Ingestão Travada via Worker)
+  let eventRecord: any = null
 
-  if (eventError) {
-    // 23505 = Unique_violation em PostgreSQL
-    if (eventError.code === '23505') {
-      return { success: true, duplicate: true, event_id: payload.event_id }
+  if (options?.retryWebhookEventRowId) {
+    const { data: existingEvent, error: existingEventErr } = await supabase
+      .from('webhook_events')
+      .select('id, company_id, event_id, event_type, status')
+      .eq('id', options.retryWebhookEventRowId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    if (existingEventErr || !existingEvent) {
+      throw new Error(`Evento de recuperação não localizado em webhook_events: ${existingEventErr?.message || options.retryWebhookEventRowId}`)
     }
-    throw new Error(`Falha ao registrar webhook event: ${eventError.message}`)
+    eventRecord = existingEvent
+  } else {
+    // Registra o evento. Se já existir o par company_id + event_id (Violate Unique Constraint), retornamos duplicate
+    const { data: insertedEvent, error: eventError } = await supabase.from('webhook_events').insert({
+      company_id: companyId,
+      event_id: payload.event_id,
+      event_type: payload.event_type,
+      payload: payload,
+      status: 'processing'
+    }).select().single()
+
+    if (eventError) {
+      // 23505 = Unique_violation em PostgreSQL
+      if (eventError.code === '23505') {
+        return { success: true, duplicate: true, event_id: payload.event_id }
+      }
+      throw new Error(`Falha ao registrar webhook event: ${eventError.message}`)
+    }
+    eventRecord = insertedEvent
   }
 
   try {
-    // 2. Customer Upsert (Localiza ou Cria cliente baseado em Company + Phone)
+    // 2. Customer Upsert (Localiza ou Cria cliente baseado em Company + Phone com espelhamento híbrido)
     let customerId: string
     const phoneVariants = getBrazilianPhoneVariants(payload.customer.phone)
-    const { data: existingCustomer } = await supabase.from('customers')
-      .select('id, phone')
+    let { data: existingCustomer, error: custLookupErr } = await supabase.from('customers')
+      .select('id, name, phone, name_confirmed, name_source')
       .eq('company_id', companyId)
       .in('phone', phoneVariants)
       .limit(1)
       .maybeSingle()
-    
+
+    if (custLookupErr && custLookupErr.code === '42703') {
+      const baseLookup = await supabase.from('customers')
+        .select('id, name, phone')
+        .eq('company_id', companyId)
+        .in('phone', phoneVariants)
+        .limit(1)
+        .maybeSingle()
+      existingCustomer = baseLookup.data
+    }
+
     const avatarUrl = payload.customer.avatar_url || payload.customer.profile_picture_url || null
+    const rawIncomingName = normalizeRawName(payload.customer.name)
+    const incomingPlausible = isPlausibleHumanName(rawIncomingName)
+    const cleanIncomingName = incomingPlausible ? sanitizeCustomerName(rawIncomingName) : ''
 
     if (existingCustomer) {
       customerId = existingCustomer.id
-      // Atualiza o nome e foto do cliente se necessário com escopo estrito de tenant
-      const updateData: any = { name: payload.customer.name }
+      const hasConfirmedName =
+        existingCustomer.name_confirmed === true ||
+        existingCustomer.name_source === 'manual' ||
+        existingCustomer.name_source === 'agent_collected' ||
+        (existingCustomer.name_confirmed === undefined && isPlausibleHumanName(existingCustomer.name))
+
+      // Preserva nomes já confirmados/editados e sempre espelha whatsapp_name/avatar_url
+      const updateData: any = {}
+      if (!hasConfirmedName && incomingPlausible && cleanIncomingName) {
+        updateData.name = cleanIncomingName
+        updateData.name_confirmed = true
+        updateData.name_source = 'whatsapp_push'
+      }
+      if (rawIncomingName) {
+        updateData.whatsapp_name = rawIncomingName
+      }
       if (avatarUrl) {
         updateData.avatar_url = avatarUrl
       }
-      const { error: custErr } = await supabase
-        .from('customers')
-        .update(updateData)
-        .eq('id', customerId)
-        .eq('company_id', companyId)
 
-      // Fallback gracioso se a coluna avatar_url ainda não existir no banco (42703)
-      if (custErr && custErr.code === '42703') {
-        await supabase
+      if (Object.keys(updateData).length > 0) {
+        const { error: custErr } = await supabase
           .from('customers')
-          .update({ name: payload.customer.name })
+          .update(updateData)
           .eq('id', customerId)
           .eq('company_id', companyId)
-      } else if (custErr) {
-        console.error('[processWebhookEvent] Erro ao atualizar nome do cliente:', custErr)
+
+        // Fallback gracioso se colunas novas ainda não existirem no banco (42703)
+        if (custErr && custErr.code === '42703') {
+          if (!hasConfirmedName && incomingPlausible && cleanIncomingName) {
+            await supabase
+              .from('customers')
+              .update({ name: cleanIncomingName })
+              .eq('id', customerId)
+              .eq('company_id', companyId)
+          }
+        } else if (custErr) {
+          console.error('[processWebhookEvent] Erro ao atualizar dados do cliente:', custErr)
+        }
       }
     } else {
+      const resolvedName =
+        incomingPlausible && cleanIncomingName
+          ? cleanIncomingName
+          : buildFallbackCustomerName(payload.customer.phone)
+
       const insertData: any = {
         company_id: companyId,
-        name: payload.customer.name,
+        name: resolvedName,
         phone: payload.customer.phone,
-        email: payload.customer.email || null
+        email: payload.customer.email || null,
+        whatsapp_name: rawIncomingName || null,
+        name_confirmed: incomingPlausible,
+        name_source: 'whatsapp_push'
       }
       if (avatarUrl) {
         insertData.avatar_url = avatarUrl
@@ -92,12 +150,12 @@ export async function processWebhookEvent(
         .insert(insertData)
         .select()
         .single()
-      
-      // Fallback gracioso se a coluna avatar_url ainda não existir no banco (42703)
+
+      // Fallback gracioso se colunas novas ainda não existirem no banco (42703)
       if (cErr && cErr.code === '42703') {
         const fallbackRes = await supabase.from('customers').insert({
           company_id: companyId,
-          name: payload.customer.name,
+          name: resolvedName,
           phone: payload.customer.phone,
           email: payload.customer.email || null
         }).select().single()
@@ -241,30 +299,65 @@ export async function processWebhookEvent(
     // Variável para compatibilidade com o bloco de retorno abaixo
     const msg = { id: messageId }
 
-    // 6. Finaliza a transação lógica marcando o evento como processado
-    await supabase.from('webhook_events').update({
+    // 6. Finaliza a transação lógica marcando o evento como processado e preparando o ciclo autônomo
+    const nowIso = new Date().toISOString()
+    const isCustomerMsg = payload.message.sender_type === 'customer'
+    const extendedFinalizePatch: Record<string, any> = {
       status: 'processed',
-      processed_at: new Date().toISOString()
-    })
+      processed_at: nowIso,
+      conversation_id: conversationId,
+      message_id: msg.id,
+      autonomous_status: isCustomerMsg ? 'pending' : 'skipped',
+      autonomous_locked_until: isCustomerMsg ? new Date(Date.now() + 90_000).toISOString() : null,
+      autonomous_claim_token: null,
+      autonomous_last_error: null,
+      updated_at: nowIso
+    }
+
+    const finalizeRes = await supabase.from('webhook_events')
+      .update(extendedFinalizePatch)
       .eq('id', eventRecord.id)
       .eq('company_id', companyId)
+
+    // Degradação graciosa se a migration 2B (colunas novas) ainda não tiver sido aplicada (42703)
+    if (finalizeRes?.error?.code === '42703') {
+      await supabase.from('webhook_events').update({
+        status: 'processed',
+        processed_at: nowIso
+      })
+        .eq('id', eventRecord.id)
+        .eq('company_id', companyId)
+    }
 
     return {
       success: true,
       duplicate: false,
       event_id: payload.event_id,
+      webhook_event_id: eventRecord?.id,
       conversation_id: conversationId,
       message_id: msg.id
     }
 
   } catch (err: any) {
     // Falha em cascata detectada. Marca o evento como error na camada mais baixa.
-    await supabase.from('webhook_events').update({
+    const errRes = await supabase.from('webhook_events').update({
       status: 'error',
-      error_message: err.message
+      error_message: err.message,
+      autonomous_claim_token: null,
+      autonomous_last_error: err.message,
+      updated_at: new Date().toISOString()
     })
       .eq('id', eventRecord.id)
       .eq('company_id', companyId)
+
+    if (errRes?.error?.code === '42703') {
+      await supabase.from('webhook_events').update({
+        status: 'error',
+        error_message: err.message
+      })
+        .eq('id', eventRecord.id)
+        .eq('company_id', companyId)
+    }
     
     throw err
   }
@@ -277,6 +370,8 @@ export interface AutonomousCycleParams {
   messageId: string
   eventId: string
   payload: WebhookPayload
+  webhookEventRowId?: string
+  autonomousClaimToken?: string
   adminClient?: any
   llmProvider?: any
 }
@@ -346,15 +441,160 @@ export async function resolveEligibleAgent(companyId: string, conversationAgentI
  * Executa o ciclo autonomo completo:
  * Validacao de condicoes -> Resolucao de agente -> Agent Engine -> Trava de Handoff -> Outbox -> n8n.
  */
+async function applyMetadataPatchSafely(
+  supabase: any,
+  companyId: string,
+  messageId: string,
+  baseMetadata: Record<string, any>,
+  patch: Record<string, any>
+): Promise<void> {
+  if (typeof supabase?.rpc === 'function' && isValidUuid(companyId) && isValidUuid(messageId)) {
+    const res = await updateMessageMetadataSafe(supabase, companyId, messageId, patch)
+    if (!res.success) {
+      console.warn(`[message-engine] Falha ao mesclar metadata monotonicamente (${messageId}):`, res.error)
+    }
+    return
+  }
+
+  await supabase
+    .from('messages')
+    .update({
+      metadata: {
+        ...baseMetadata,
+        ...patch
+      }
+    })
+    .eq('id', messageId)
+    .eq('company_id', companyId)
+}
+
+function isMissingDatabaseRoutineError(err: any): boolean {
+  const code = String(err?.code || '')
+  const msg = String(err?.message || '').toLowerCase()
+  return (
+    code === '42883' ||
+    code === 'PGRST202' ||
+    msg.includes('could not find the function') ||
+    msg.includes('does not exist') ||
+    msg.includes('not implemented')
+  )
+}
+
+async function acquireConversationLockWithRetry(
+  supabase: any,
+  companyId: string,
+  conversationId: string,
+  leaseSeconds = 65,
+  maxWaitMs = 2500
+): Promise<{ acquired: boolean; lockToken?: string; bypass?: boolean }> {
+  if (typeof supabase?.rpc !== 'function' || !isValidUuid(companyId) || !isValidUuid(conversationId)) {
+    return { acquired: false, bypass: true }
+  }
+
+  const deadline = Date.now() + maxWaitMs
+  const delays = [500, 900, 1100]
+
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      const rpcRes = await supabase.rpc('acquire_conversation_processing_lock', {
+        p_company_id: companyId,
+        p_conversation_id: conversationId,
+        p_lease_seconds: leaseSeconds
+      })
+
+      if (!rpcRes || rpcRes.error) {
+        if (!rpcRes || isMissingDatabaseRoutineError(rpcRes.error)) {
+          return { acquired: false, bypass: true }
+        }
+        console.warn('[ConversationLock] Erro ao adquirir lock (seguindo sem bloqueio):', rpcRes.error.message)
+        return { acquired: false, bypass: true }
+      }
+
+      const row = Array.isArray(rpcRes.data) ? rpcRes.data[0] : rpcRes.data
+      if (!row || row.was_acquired === undefined) {
+        return { acquired: false, bypass: true }
+      }
+
+      if (row.was_acquired && row.lock_token) {
+        return { acquired: true, lockToken: row.lock_token }
+      }
+    } catch (err: any) {
+      if (isMissingDatabaseRoutineError(err)) {
+        return { acquired: false, bypass: true }
+      }
+      return { acquired: false, bypass: true }
+    }
+
+    if (attempt >= delays.length || Date.now() >= deadline) {
+      break
+    }
+
+    const waitMs = Math.min(delays[attempt], Math.max(50, deadline - Date.now()))
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+  }
+
+  return { acquired: false, bypass: false }
+}
+
+async function releaseConversationLockSafe(
+  supabase: any,
+  companyId: string,
+  conversationId: string,
+  lockToken?: string
+): Promise<void> {
+  if (!lockToken || typeof supabase?.rpc !== 'function') return
+  try {
+    await supabase.rpc('release_conversation_processing_lock', {
+      p_company_id: companyId,
+      p_conversation_id: conversationId,
+      p_lock_token: lockToken
+    })
+  } catch {}
+}
+
+async function finalizeWebhookAutonomousStatusSafe(
+  supabase: any,
+  params: {
+    companyId: string
+    webhookEventRowId?: string
+    claimToken?: string
+    status: 'pending' | 'completed' | 'skipped' | 'failed'
+    lastError?: string | null
+    retryAfterSec?: number | null
+  }
+): Promise<void> {
+  if (!params.webhookEventRowId || typeof supabase?.rpc !== 'function' || !isValidUuid(params.companyId)) {
+    return
+  }
+
+  try {
+    await supabase.rpc('complete_webhook_autonomous_event', {
+      p_company_id: params.companyId,
+      p_webhook_event_id: params.webhookEventRowId,
+      p_claim_token: params.claimToken || null,
+      p_autonomous_status: params.status,
+      p_last_error: params.lastError || null,
+      p_retry_after_sec: params.retryAfterSec ?? null
+    })
+  } catch {}
+}
+
 export async function handleAutonomousCycle(
   params: AutonomousCycleParams,
   options?: { adminClient?: any }
 ): Promise<AutonomousCycleResult> {
-  const { companyId, conversationId, messageId, eventId, payload } = params
+  const { companyId, conversationId, payload, webhookEventRowId, autonomousClaimToken } = params
   const supabase = params.adminClient || options?.adminClient || createAdminClient()
 
   // 1. Condicao: Apenas mensagens reais de cliente acionam o agente (protege contra ecos e loops)
   if (payload.message.sender_type !== 'customer') {
+    await finalizeWebhookAutonomousStatusSafe(supabase, {
+      companyId,
+      webhookEventRowId,
+      claimToken: autonomousClaimToken,
+      status: 'skipped',
+      lastError: 'non_customer_sender'
+    })
     return { executed: false, reason: 'non_customer_sender' }
   }
 
@@ -365,7 +605,14 @@ export async function handleAutonomousCycle(
     await requireActiveCompany(companyId, { adminClient: supabase })
   } catch (err: any) {
     const errorMsg = err instanceof TenantAccessError ? err.message : 'Falha ao verificar autorização da empresa'
-    console.warn(`[AutonomousCycle Blocked req:${eventId}] Tenant '${companyId}' bloqueado no início do ciclo: ${errorMsg}`)
+    console.warn(`[AutonomousCycle Blocked req:${params.eventId}] Tenant '${companyId}' bloqueado no início do ciclo: ${errorMsg}`)
+    await finalizeWebhookAutonomousStatusSafe(supabase, {
+      companyId,
+      webhookEventRowId,
+      claimToken: autonomousClaimToken,
+      status: 'skipped',
+      lastError: 'tenant_blocked'
+    })
     return {
       executed: false,
       dispatched: false,
@@ -373,6 +620,110 @@ export async function handleAutonomousCycle(
       error: errorMsg
     }
   }
+
+  // 1.2 Lock distribuído por conversa (serializa turnos rápidos do mesmo cliente sem pg_advisory_lock)
+  const lockLeaseSeconds = 65
+  const lockMaxWaitMs = autonomousClaimToken ? 600 : 2500
+  const lockResult = await acquireConversationLockWithRetry(
+    supabase,
+    companyId,
+    conversationId,
+    lockLeaseSeconds,
+    lockMaxWaitMs
+  )
+
+  if (!lockResult.bypass && !lockResult.acquired) {
+    console.warn(`[AutonomousCycle Lock Busy] Conversa ${conversationId} em processamento por outro worker; deferindo evento ${params.eventId}`)
+    await finalizeWebhookAutonomousStatusSafe(supabase, {
+      companyId,
+      webhookEventRowId,
+      claimToken: autonomousClaimToken,
+      status: 'pending',
+      lastError: 'conversation_lock_busy',
+      retryAfterSec: 10
+    })
+    return {
+      executed: false,
+      dispatched: false,
+      reason: 'conversation_lock_busy',
+      error: 'Conversa em processamento concorrente; tentativa adiada.'
+    }
+  }
+
+  let result: AutonomousCycleResult
+  try {
+    result = await executeLockedAutonomousCycle(params, supabase)
+  } catch (err: any) {
+    await finalizeWebhookAutonomousStatusSafe(supabase, {
+      companyId,
+      webhookEventRowId,
+      claimToken: autonomousClaimToken,
+      status: 'pending',
+      lastError: err?.message || 'unhandled_cycle_error',
+      retryAfterSec: 15
+    })
+    throw err
+  } finally {
+    await releaseConversationLockSafe(supabase, companyId, conversationId, lockResult.lockToken)
+  }
+
+  // Mapeia desfecho final para webhook_events:
+  // - Outbox já criada (dispatched, idempotent_duplicate, unknown_outcome, outbound_failed, claim_*) -> ciclo autônomo resolvido (outbox-worker assume retries se necessário)
+  // - Erro pré-outbox (agent_engine_failed / prepare_outbound_failed) -> retorna para 'pending' para recuperação no worker
+  // - Demais skips definitivos (human_mode_active, conversation_closed, suppressed_by_handoff, no_active_agents_*) -> 'skipped'
+  if (webhookEventRowId) {
+    const outboxCreated = Boolean(result.outboxId)
+    const isCompleted = Boolean(result.dispatched) || result.reason === 'idempotent_duplicate' || outboxCreated
+    const isRetryablePreOutbox = !outboxCreated && (
+      result.reason === 'agent_engine_failed' ||
+      result.reason === 'prepare_outbound_failed' ||
+      result.reason === 'conversation_lock_busy'
+    )
+
+    if (isRetryablePreOutbox) {
+      await finalizeWebhookAutonomousStatusSafe(supabase, {
+        companyId,
+        webhookEventRowId,
+        claimToken: autonomousClaimToken,
+        status: 'pending',
+        lastError: result.error || result.reason || 'retryable_cycle_error',
+        retryAfterSec: 15
+      })
+    } else if (result.reason === 'suppressed_by_handoff' || result.reason === 'tenant_blocked') {
+      await finalizeWebhookAutonomousStatusSafe(supabase, {
+        companyId,
+        webhookEventRowId,
+        claimToken: autonomousClaimToken,
+        status: 'skipped',
+        lastError: result.reason
+      })
+    } else if (isCompleted) {
+      await finalizeWebhookAutonomousStatusSafe(supabase, {
+        companyId,
+        webhookEventRowId,
+        claimToken: autonomousClaimToken,
+        status: 'completed',
+        lastError: null
+      })
+    } else {
+      await finalizeWebhookAutonomousStatusSafe(supabase, {
+        companyId,
+        webhookEventRowId,
+        claimToken: autonomousClaimToken,
+        status: 'skipped',
+        lastError: result.reason || result.error || 'cycle_skipped'
+      })
+    }
+  }
+
+  return result
+}
+
+async function executeLockedAutonomousCycle(
+  params: AutonomousCycleParams,
+  supabase: any
+): Promise<AutonomousCycleResult> {
+  const { companyId, conversationId, messageId, eventId, payload } = params
 
   // 2. Condicao: Conversa existe e esta aberta (nao fechada, nao em handoff humano)
   const { data: conversation, error: convErr } = await supabase
@@ -461,7 +812,7 @@ export async function handleAutonomousCycle(
     .eq('company_id', companyId)
     .single()
 
-  if (latestConv?.status === 'human') {
+  if (latestConv?.status === 'human' && !agentResult.handoffTriggered) {
     console.log(`[AutonomousCycle Suppressed] Conversa ${conversationId} entrou em handoff humano durante processamento do LLM`)
     return { executed: true, dispatched: false, reason: 'suppressed_by_handoff' }
   }
@@ -597,10 +948,11 @@ export async function handleAutonomousCycle(
   const replyMessageId = prepResult.messageId
 
   // 9. Reivindicação Atômica com Fencing Token e Lease (claim_outbox_message)
+  const autonomousLeaseSeconds = 120
   const { data: claimData, error: claimErr } = await (supabase as any).rpc('claim_outbox_message', {
     p_company_id: companyId,
     p_outbox_id: outboxId,
-    p_lease_seconds: 120
+    p_lease_seconds: autonomousLeaseSeconds
   })
 
   if (claimErr) {
@@ -648,7 +1000,7 @@ export async function handleAutonomousCycle(
     .eq('company_id', companyId)
     .single()
 
-  const isHandoff = preDispatchConv?.status === 'human'
+  const isHandoff = preDispatchConv?.status === 'human' && !agentResult.handoffTriggered
   const isClosed = preDispatchConv?.status === 'closed'
 
   if (!tenantActive || isHandoff || isClosed) {
@@ -684,13 +1036,10 @@ export async function handleAutonomousCycle(
       }
     }
 
-    await supabase.from('messages').update({
-      metadata: {
-        ...messageMetadata,
-        delivery_status: 'suppressed',
-        suppression_reason: isHandoff ? 'handoff' : (!tenantActive ? 'tenant_blocked' : 'conversation_closed')
-      }
-    }).eq('id', replyMessageId).eq('company_id', companyId)
+    await applyMetadataPatchSafely(supabase, companyId, replyMessageId, messageMetadata, {
+      delivery_status: 'suppressed',
+      suppression_reason: isHandoff ? 'handoff' : (!tenantActive ? 'tenant_blocked' : 'conversation_closed')
+    })
 
     return {
       executed: true,
@@ -707,7 +1056,8 @@ export async function handleAutonomousCycle(
   const outboundRes = await sendOutboundMessage(companyId, claim.payload || outboundPayload, {
     adminClient: supabase,
     outboxId,
-    messageId: replyMessageId
+    messageId: replyMessageId,
+    leaseSeconds: autonomousLeaseSeconds
   })
 
   // 12. Conclusão Atômica com Fencing (complete_outbox_message)
@@ -790,13 +1140,10 @@ export async function handleAutonomousCycle(
     p_last_error: finalError
   })
 
-  await supabase.from('messages').update({
-    metadata: {
-      ...messageMetadata,
-      delivery_status: targetStatus,
-      delivery_error: finalError
-    }
-  }).eq('id', replyMessageId).eq('company_id', companyId)
+  await applyMetadataPatchSafely(supabase, companyId, replyMessageId, messageMetadata, {
+    delivery_status: targetStatus,
+    delivery_error: finalError
+  })
 
   return {
     executed: true,
@@ -875,6 +1222,7 @@ export interface RetryOutboxOptions {
     claim_version: number | string
     payload?: any
     message_id?: string
+    attempts?: number
   }
 }
 
@@ -1131,7 +1479,8 @@ export async function retryOutboxMessage(
       claim_token: options.claim.claim_token,
       claim_version: options.claim.claim_version,
       payload,
-      message_id: messageId
+      message_id: messageId,
+      attempts: options.claim.attempts
     }
   } else {
     const { data: claimData, error: claimErr } = await (supabase as any).rpc('claim_outbox_message', {
@@ -1284,9 +1633,11 @@ export async function retryOutboxMessage(
     try {
       const outboxUpdate: Record<string, any> = {
         status: 'sent',
-        attempts: claim.attempts,
         sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
+      }
+      if (typeof claim.attempts === 'number') {
+        outboxUpdate.attempts = claim.attempts
       }
 
       const outboxBuilder = (supabase as any).from('message_outbox').update(outboxUpdate).eq('id', outboxId)
@@ -1353,12 +1704,10 @@ export async function retryOutboxMessage(
   }
 
   if (claim.message_id) {
-    await (supabase as any).from('messages').update({
-      metadata: {
-        delivery_status: targetStatus,
-        delivery_error: finalError
-      }
-    }).eq('id', claim.message_id).eq('company_id', companyId)
+    await updateMessageMetadataSafe(supabase, companyId, claim.message_id, {
+      delivery_status: targetStatus,
+      delivery_error: finalError
+    })
   }
 
   return {
@@ -1515,6 +1864,31 @@ export async function updateMessageDeliveryStatus(
     }
   }
 
+  // Fallback Etapa 2B: busca em message_outbox pelo provider_message_id se messages.external_id ainda não foi espelhado
+  if (!targetMessage && providerMessageId) {
+    try {
+      const { data: outboxByProvider } = await supabase
+        .from('message_outbox')
+        .select('id, message_id')
+        .eq('company_id', companyId)
+        .eq('provider_message_id', providerMessageId)
+        .maybeSingle()
+
+      if (outboxByProvider?.message_id) {
+        const { data: msgByOutbox } = await supabase
+          .from('messages')
+          .select('id, company_id, metadata, external_id')
+          .eq('id', outboxByProvider.message_id)
+          .eq('company_id', companyId)
+          .maybeSingle()
+
+        if (msgByOutbox) {
+          targetMessage = msgByOutbox
+        }
+      }
+    } catch {}
+  }
+
   if (!targetMessage) {
     return {
       success: false,
@@ -1608,22 +1982,110 @@ export async function updateMessageDeliveryStatus(
     }
   }
 
-  // 6. Reconciliação com message_outbox se status for sent, delivered ou read
+  // 6. Reconciliação com message_outbox e gateway_outbound_locks conforme o status confirmado pelo gateway
   if (newStatus === 'sent' || newStatus === 'delivered' || newStatus === 'read') {
     try {
+      const richOutboxPatch: Record<string, any> = {
+        status: 'sent',
+        sent_at: updateTimestamp,
+        locked_at: null,
+        locked_until: null,
+        claim_token: null,
+        updated_at: updateTimestamp
+      }
+      if (providerMessageId) {
+        richOutboxPatch.provider_message_id = providerMessageId
+      }
+
       const outboxBuilder = supabase
         .from('message_outbox')
+        .update(richOutboxPatch)
+        .eq('message_id', targetMessage.id)
+
+      const outboxRes = await (
+        typeof (outboxBuilder as any).eq === 'function'
+          ? (outboxBuilder as any).eq('company_id', companyId)
+          : outboxBuilder
+      )
+
+      if (outboxRes?.error?.code === '42703') {
+        const legacyOutboxBuilder = supabase
+          .from('message_outbox')
+          .update({
+            status: 'sent',
+            sent_at: updateTimestamp,
+            updated_at: updateTimestamp
+          })
+          .eq('message_id', targetMessage.id)
+
+        await (
+          typeof (legacyOutboxBuilder as any).eq === 'function'
+            ? (legacyOutboxBuilder as any).eq('company_id', companyId)
+            : legacyOutboxBuilder
+        )
+      }
+    } catch {}
+
+    try {
+      const lockPatch: Record<string, any> = {
+        status: 'completed',
+        completed_at: updateTimestamp,
+        locked_until: updateTimestamp,
+        last_error: null,
+        updated_at: updateTimestamp
+      }
+      if (providerMessageId) {
+        lockPatch.provider_message_id = providerMessageId
+      }
+
+      const lockBuilder = supabase
+        .from('gateway_outbound_locks')
+        .update(lockPatch)
+        .eq('company_id', companyId)
+
+      await (
+        typeof (lockBuilder as any).eq === 'function'
+          ? (lockBuilder as any).eq('message_id', targetMessage.id)
+          : lockBuilder
+      )
+    } catch {}
+  } else if (newStatus === 'failed') {
+    const failedReason = errorMsg || 'delivery_failed_callback'
+    try {
+      const outboxFailedBuilder = supabase
+        .from('message_outbox')
         .update({
-          status: 'sent',
-          sent_at: updateTimestamp,
+          status: 'failed',
+          last_error: failedReason,
+          locked_at: null,
+          locked_until: null,
+          claim_token: null,
           updated_at: updateTimestamp
         })
         .eq('message_id', targetMessage.id)
 
       await (
-        typeof (outboxBuilder as any).eq === 'function'
-          ? (outboxBuilder as any).eq('company_id', companyId)
-          : outboxBuilder
+        typeof (outboxFailedBuilder as any).eq === 'function'
+          ? (outboxFailedBuilder as any).eq('company_id', companyId)
+          : outboxFailedBuilder
+      )
+    } catch {}
+
+    try {
+      const lockFailedBuilder = supabase
+        .from('gateway_outbound_locks')
+        .update({
+          status: 'failed',
+          last_error: failedReason,
+          locked_until: updateTimestamp,
+          updated_at: updateTimestamp
+        })
+        .eq('company_id', companyId)
+
+      await (
+        typeof (lockFailedBuilder as any).eq === 'function'
+          ? (lockFailedBuilder as any).eq('message_id', targetMessage.id)
+          : lockFailedBuilder
       )
     } catch {}
   }

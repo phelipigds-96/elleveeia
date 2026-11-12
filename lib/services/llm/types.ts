@@ -14,6 +14,8 @@ export interface LLMRequest {
   messages: LLMRequestMessage[]
   temperature?: number
   tools?: any[] // Formato nativo agnóstico (array retornado pelo registry)
+  timeoutMs?: number
+  signal?: AbortSignal
 }
 
 export interface LLMResponseUsage {
