@@ -723,7 +723,7 @@ async function executeLockedAutonomousCycle(
   params: AutonomousCycleParams,
   supabase: any
 ): Promise<AutonomousCycleResult> {
-  const { companyId, conversationId, messageId, eventId, payload } = params
+  const { companyId, conversationId, messageId, eventId, payload, webhookEventRowId } = params
 
   // 2. Condicao: Conversa existe e esta aberta (nao fechada, nao em handoff humano)
   const { data: conversation, error: convErr } = await supabase
@@ -796,7 +796,9 @@ async function executeLockedAutonomousCycle(
     userMessage: payload.message.content,
     skipCustomerMessageInsert: true,
     persistMessage: false,
-    llmProvider: params.llmProvider
+    llmProvider: params.llmProvider,
+    triggerEventId: cleanEventId,
+    webhookEventId: webhookEventRowId
   })
 
   if (!agentResult.success || !agentResult.message) {
