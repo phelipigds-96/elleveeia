@@ -289,7 +289,7 @@ describe('ETAPA 2A — Verificação Completa (Timeouts, Memória, Scoping, Míd
             if (hasWmNot) {
               durableFallbackCalled = true
               return {
-                data: [{ metadata: { working_memory: durableMemory }, created_at: '2026-11-10T00:00:00Z' }],
+                data: [{ metadata: { working_memory: durableMemory }, created_at: new Date().toISOString() }],
                 error: null
               }
             }

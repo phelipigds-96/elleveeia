@@ -26,13 +26,14 @@ runSuite(
   { MOCK_AGENT_ENGINE: '1' }
 )
 
-runSuite('Etapas 2A, 2B, 3A, 3B, 3D, 3E & Regressão Core', [
+runSuite('Etapas 2A, 2B, 3A, 3B, 3D, 3E, 3F & Regressão Core', [
   'tests/ci/etapa2a-verify.test.ts',
   'tests/ci/etapa2b-verify.test.ts',
   'tests/ci/etapa3a-verify.test.ts',
   'tests/ci/etapa3b-verify.test.ts',
   'tests/ci/etapa3d-verify.test.ts',
   'tests/ci/etapa3e-audio-fallback.test.ts',
+  'tests/ci/etapa3f-cart-ttl.test.ts',
   'lib/services/agent/tools/etapa7.2-prompt-scoping.test.ts',
   'lib/services/agent/tools/etapa8.4.3s-admin-metrics-and-audit.test.ts',
 ])
