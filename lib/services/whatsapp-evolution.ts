@@ -722,6 +722,7 @@ export async function createEvolutionInstanceOnServer(params: {
     if (webhookUrl) {
       bodyPayload.webhook = webhookUrl
       bodyPayload.webhook_by_events = false
+      bodyPayload.webhook_base64 = true
       bodyPayload.events = [
         'MESSAGES_UPSERT',
         'CONNECTION_UPDATE',
