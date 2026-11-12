@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import type { OpenAIMessage } from './openai'
 import type { WorkingMemory } from './working-memory'
+import { isPlausibleHumanName, sanitizeCustomerName } from '@/lib/services/customer-name'
 
 interface ContextBuilderParams {
   companyId: string
@@ -104,13 +105,24 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     throw new Error('O agente esta desabilitado.')
   }
 
-  // 2. Validar a conversa e buscar o cliente
-  const { data: conversation, error: convError } = await supabase
+  // 2. Validar a conversa e buscar o cliente (com fallback 42703 caso migration pendente)
+  let { data: conversation, error: convError } = await supabase
     .from('conversations')
-    .select('*, customers(name, phone)')
+    .select('*, customers(name, phone, name_confirmed, whatsapp_name)')
     .eq('id', conversationId)
     .eq('company_id', companyId)
     .single()
+
+  if (convError && convError.code === '42703') {
+    const baseRes = await supabase
+      .from('conversations')
+      .select('*, customers(name, phone)')
+      .eq('id', conversationId)
+      .eq('company_id', companyId)
+      .single()
+    conversation = baseRes.data
+    convError = baseRes.error
+  }
 
   if (convError || !conversation) {
     throw new Error('Conversa nao encontrada ou acesso negado.')
@@ -151,6 +163,30 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     }
   }
 
+  // Fallback duravel: se a conversa tiver >20 mensagens desde a ultima acao comercial,
+  // busca a ultima working_memory persistida diretamente no banco.
+  if (!workingMemory) {
+    const wmBaseQuery = (supabase as any)
+      .from('messages')
+      .select('metadata, created_at')
+      .eq('conversation_id', conversationId)
+      .eq('company_id', companyId)
+      .eq('sender_type', 'agent')
+
+    if (typeof wmBaseQuery?.not === 'function') {
+      const { data: wmRows, error: wmLookupError } = await wmBaseQuery
+        .not('metadata->>working_memory', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (wmLookupError) {
+        console.warn('[buildAgentContext] Falha ao buscar working_memory duravel:', wmLookupError)
+      } else if (Array.isArray(wmRows) && wmRows[0]?.metadata?.working_memory) {
+        workingMemory = wmRows[0].metadata.working_memory
+      }
+    }
+  }
+
   // 5. Selecao Inteligente de Historico (Camada A + Anchoring)
   const RECENT_WINDOW = 8
   const MAX_WINDOW = 12
@@ -186,10 +222,32 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   }
 
   // --- PARTE DINAMICA ---
-  systemPrompt += `\n[CLIENTE]\nNome: ${conversation.customers?.name || '?'}\nTel: ${conversation.customers?.phone || '?'}\n`
+  const customerRow: any = Array.isArray((conversation as any).customers)
+    ? (conversation as any).customers[0]
+    : (conversation as any).customers
+
+  const hasConfirmedCustomerName =
+    customerRow?.name_confirmed === true ||
+    (customerRow?.name_confirmed === undefined && isPlausibleHumanName(customerRow?.name))
+
+  if (hasConfirmedCustomerName && customerRow?.name) {
+    const displayName = sanitizeCustomerName(customerRow.name)
+    systemPrompt += `\n[CLIENTE]\nNome confirmado: ${displayName}\nTel: ${customerRow?.phone || '?'}\nStatus cadastral: CLIENTE JÁ IDENTIFICADO (chame-o pelo primeiro nome com naturalidade e NÃO pergunte o nome novamente)\n`
+  } else {
+    const refName = customerRow?.whatsapp_name || customerRow?.name || 'Não informado'
+    systemPrompt += `\n[CLIENTE]\nNome atual: ${refName} (NÃO CONFIRMADO / PROVISÓRIO)\nTel: ${customerRow?.phone || '?'}\nStatus cadastral: PRIMEIRO CONTATO SEM NOME REAL CONFIRMADO\nRegra de cadastro de nome: Caso o cliente ainda não tenha informado o nome nesta conversa, pergunte gentilmente como prefere ser chamado(a). Se ele já fez uma pergunta comercial ou sobre a loja, responda a dúvida primeiro com clareza e peça o nome ao final da mensagem. Assim que o cliente informar o nome, chame obrigatoriamente a ferramenta salvar_nome_cliente antes de encerrar a resposta.\n`
+  }
 
   const now = new Date()
   systemPrompt += `\n[CONTEXTO TEMPORAL]\n${now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`
+
+  // Injeção de memória resumida persistente para conversas longas (> janela de 8-12 mensagens)
+  const savedSummary = typeof (conversation as any)?.summary === 'string'
+    ? (conversation as any).summary.trim()
+    : ''
+  if (savedSummary) {
+    systemPrompt += `\n[RESUMO ANTERIOR DA CONVERSA]\n${savedSummary.substring(0, 1200)}\n`
+  }
 
   // Injeção da Working Memory estruturada
   if (workingMemory && Object.keys(workingMemory).length > 0) {
@@ -306,6 +364,7 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
     payloadMessages,
     workingMemory,
     hasCatalogProducts,
+    hasConfirmedCustomerName,
     contextMetrics: {
       availableMessages: rawHistory.length,
       usedMessages: selectedHistory.length,

@@ -2,6 +2,8 @@ import type { LLMProvider, LLMRequest, LLMResponse } from '../types'
 import type { InternalToolCall } from '../../agent/tools'
 import { GoogleGenAI } from '@google/genai'
 
+import { executeWithLLMTimeout } from '../timeout'
+
 export class GeminiProvider implements LLMProvider {
   async generateResponse(request: LLMRequest): Promise<LLMResponse> {
     const apiKey = process.env.GEMINI_API_KEY
@@ -74,11 +76,19 @@ export class GeminiProvider implements LLMProvider {
       }]
     }
 
-    const response = await ai.models.generateContent({
-      model: request.model,
-      contents,
-      config
-    })
+    const response = await executeWithLLMTimeout(
+      'gemini',
+      (signal) =>
+        ai.models.generateContent({
+          model: request.model,
+          contents,
+          config: {
+            ...config,
+            abortSignal: signal
+          }
+        }),
+      { timeoutMs: request.timeoutMs, signal: request.signal }
+    )
 
     const usage = response.usageMetadata
     let internalToolCalls: InternalToolCall[] | undefined = undefined

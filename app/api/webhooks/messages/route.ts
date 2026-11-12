@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { validateWebhookPayload, validateWebhookStatusPayload } from '@/lib/validations/webhook'
 import { processInboundMedia } from '@/lib/services/audio-transcription'
-import { processWebhookEvent, handleAutonomousCycle, updateMessageDeliveryStatus, type AutonomousCycleResult } from '@/lib/services/message-engine'
+import {
+  processWebhookEvent,
+  handleAutonomousCycle,
+  updateMessageDeliveryStatus,
+  updateMessageMetadataSafe,
+  isValidUuid,
+  type AutonomousCycleResult
+} from '@/lib/services/message-engine'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 
@@ -34,23 +41,33 @@ export async function POST(request: Request) {
     let companyId: string | null = null
 
     // 1.1 Tenta autenticar por api_keys
-    const { data: apiKey } = await supabase
+    const { data: apiKey, error: apiKeyError } = await supabase
       .from('api_keys')
       .select('company_id')
       .eq('key', secret)
       .maybeSingle()
 
+    if (apiKeyError) {
+      console.error(`[Webhook Auth DB Error req:${requestId}] api_keys lookup:`, apiKeyError.message || apiKeyError)
+      return NextResponse.json({ error: 'Serviço temporariamente indisponível' }, { status: 503 })
+    }
+
     if (apiKey?.company_id) {
       companyId = apiKey.company_id
     } else {
       // 1.2 Tenta autenticar pelo secret cadastrado na integracao n8n da empresa
-      const { data: integration } = await supabase
+      const { data: integration, error: integrationError } = await supabase
         .from('integrations')
         .select('company_id')
         .eq('type', 'n8n')
         .eq('status', 'active')
         .eq('credentials->>webhook_secret', secret)
         .maybeSingle()
+
+      if (integrationError) {
+        console.error(`[Webhook Auth DB Error req:${requestId}] integrations lookup:`, integrationError.message || integrationError)
+        return NextResponse.json({ error: 'Serviço temporariamente indisponível' }, { status: 503 })
+      }
 
       if (integration?.company_id) {
         companyId = integration.company_id
@@ -110,8 +127,8 @@ export async function POST(request: Request) {
       return NextResponse.json(statusRes, { status: 200 })
     }
 
-    // 2.1 Tratamento Automático de Mídia Inbound (Áudio, Imagem, Documento)
-    if (
+    // 2.1 Detecta presença de mídia inbound sem ainda gastar cota com Whisper/Storage (antes da idempotência)
+    const hasInboundMedia = Boolean(
       body?.message?.message_type === 'audio' ||
       body?.message?.message_type === 'image' ||
       body?.message?.message_type === 'document' ||
@@ -120,39 +137,19 @@ export async function POST(request: Request) {
       body?.metadata?.media_type === 'document' ||
       body?.metadata?.base64 ||
       body?.message?.base64
-    ) {
-      const mediaResult = await processInboundMedia({
-        companyId,
-        eventId: body.event_id || `media-${Date.now()}`,
-        mediaType: body.message?.message_type || body.metadata?.media_type || 'audio',
-        base64: body.metadata?.base64 || body.message?.base64,
-        mediaUrl: body.metadata?.media_url || body.message?.media_url,
-        currentContent: body.message?.content
-      })
+    )
 
-      if (mediaResult.mediaUrl) {
-        body.metadata = body.metadata || {}
-        body.metadata.media_url = mediaResult.mediaUrl
-        body.metadata.media_type = mediaResult.mediaType || 'audio'
-        if (body.message) {
-          body.message.message_type = mediaResult.mediaType || 'audio'
-        }
+    const rawBase64 = body?.metadata?.base64 || body?.message?.base64
+    const rawMediaUrl = body?.metadata?.media_url || body?.message?.media_url
+    const rawMediaTypeHint = body?.message?.message_type || body?.metadata?.media_type || 'audio'
+
+    // Evita salvar payloads base64 multi-megabyte em webhook_events/messages e garante content string para validação de schema
+    if (hasInboundMedia) {
+      if (body?.message && typeof body.message === 'object' && typeof body.message.content !== 'string') {
+        body.message.content = ''
       }
-
-      if (mediaResult.transcription) {
-        if (body.message) {
-          body.message.content = mediaResult.transcription
-        }
-        body.metadata = body.metadata || {}
-        body.metadata.transcription = mediaResult.transcription
-      } else if (!body.message?.content || body.message.content.trim() === '') {
-        if (body.message) {
-          body.message.content = mediaResult.mediaType === 'image' ? '[Imagem]' : '[Mensagem de Voz]'
-        }
-      }
-
-      if (body.metadata?.base64) delete body.metadata.base64
-      if (body.message?.base64) delete body.message.base64
+      if (body?.metadata?.base64) delete body.metadata.base64
+      if (body?.message?.base64) delete body.message.base64
     }
 
     if (!validateWebhookPayload(body)) {
@@ -162,10 +159,86 @@ export async function POST(request: Request) {
     // 3. Processamento via Motor de Mensagens (Idempotencia e persistencia da mensagem de entrada)
     const result = await processWebhookEvent(companyId, body)
 
-    // 4. Se for evento duplicado ou sem IDs, interrompe imediatamente preservando o contrato HTTP (Regra 4)
+    // 4. Se for evento duplicado ou sem IDs, interrompe imediatamente (ANTES de transcrição Whisper / Storage)
     if (result.duplicate || !result.conversation_id || !result.message_id) {
       console.log(`[Webhook duplicate req:${requestId}] company:${companyId} event:${result.event_id} - ${Date.now() - startTime}ms`)
       return NextResponse.json(result, { status: 200 })
+    }
+
+    // 4.1 Pós-idempotência garantida: processa mídia inbound (Upload Storage + Whisper) e atualiza a mensagem persistida
+    if (hasInboundMedia) {
+      const mediaResult = await processInboundMedia({
+        companyId,
+        eventId: result.event_id || body.event_id || `media-${Date.now()}`,
+        mediaType: rawMediaTypeHint,
+        base64: rawBase64,
+        mediaUrl: rawMediaUrl,
+        currentContent: body.message?.content
+      })
+
+      const resolvedMediaType = mediaResult.mediaType || rawMediaTypeHint || 'audio'
+      const mediaMetaPatch: Record<string, any> = {
+        media_type: resolvedMediaType
+      }
+      const messageExtraFields: Record<string, any> = {
+        message_type: resolvedMediaType
+      }
+
+      if (mediaResult.mediaUrl) {
+        body.metadata = body.metadata || {}
+        body.metadata.media_url = mediaResult.mediaUrl
+        body.metadata.media_type = resolvedMediaType
+        mediaMetaPatch.media_url = mediaResult.mediaUrl
+        if (body.message) {
+          body.message.message_type = resolvedMediaType
+        }
+      }
+
+      if (mediaResult.transcription) {
+        if (body.message) {
+          body.message.content = mediaResult.transcription
+        }
+        body.metadata = body.metadata || {}
+        body.metadata.transcription = mediaResult.transcription
+        mediaMetaPatch.transcription = mediaResult.transcription
+        messageExtraFields.content = mediaResult.transcription
+      } else if (!body.message?.content || body.message.content.trim() === '') {
+        const placeholder =
+          resolvedMediaType === 'image'
+            ? '[Imagem]'
+            : resolvedMediaType === 'document'
+              ? '[Documento]'
+              : '[Mensagem de Voz]'
+        if (body.message) {
+          body.message.content = placeholder
+        }
+        messageExtraFields.content = placeholder
+      }
+
+      if (typeof (supabase as any)?.rpc === 'function' && isValidUuid(companyId) && isValidUuid(result.message_id)) {
+        const safeRes = await updateMessageMetadataSafe(
+          supabase,
+          companyId,
+          result.message_id,
+          mediaMetaPatch,
+          messageExtraFields
+        )
+        if (!safeRes.success) {
+          console.warn(`[Webhook Media Persist Warn req:${requestId}]`, safeRes.error)
+        }
+      } else {
+        await (supabase as any)
+          .from('messages')
+          .update({
+            ...messageExtraFields,
+            metadata: {
+              ...(body.metadata || {}),
+              ...mediaMetaPatch
+            }
+          })
+          .eq('id', result.message_id)
+          .eq('company_id', companyId)
+      }
     }
 
     // 5. Execucao do Ciclo Autonomo de Atendimento (Validacao, Agent Engine, Handoff check e envio via n8n)
@@ -174,6 +247,7 @@ export async function POST(request: Request) {
       conversationId: result.conversation_id,
       messageId: result.message_id,
       eventId: result.event_id,
+      webhookEventRowId: result.webhook_event_id,
       payload: body
     }).catch(err => {
       console.error(`[AutonomousCycle Error req:${requestId}]`, err.message)

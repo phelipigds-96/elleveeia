@@ -1,6 +1,8 @@
 import type { LLMProvider, LLMRequest, LLMResponse } from '../types'
 import type { InternalToolCall } from '../../agent/tools'
 
+import { executeWithLLMTimeout } from '../timeout'
+
 export class OpenAIProvider implements LLMProvider {
   async generateResponse(request: LLMRequest): Promise<LLMResponse> {
     const apiKey = process.env.OPENAI_API_KEY
@@ -54,14 +56,20 @@ export class OpenAIProvider implements LLMProvider {
       }))
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(payload)
-    })
+    const response = await executeWithLLMTimeout(
+      'openai',
+      (signal) =>
+        fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(payload),
+          signal
+        }),
+      { timeoutMs: request.timeoutMs, signal: request.signal }
+    )
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null)

@@ -46,6 +46,17 @@ function isAskingDuration(msg: string): boolean {
 }
 
 /**
+ * Padrões explícitos de pedido de atendimento humano ou transferência para pessoa real.
+ * Não dispara em perguntas institucionais gerais (ex: "horário de atendimento", "telefone do suporte").
+ */
+const HANDOFF_PATTERNS = [
+  /\b(?:falar|conversar|passa|passe|transfere|transferir|chamar?|manda|encaminh(?:ar?|e))\b.*\b(?:humano|atendente|pessoa|vendedor|vendedora|gerente|consultor|consultora|especialista|suporte|alguem)\b/i,
+  /\b(?:quero|preciso|gostaria|prefiro|pode)\b.*\b(?:humano|atendente|pessoa|vendedor|vendedora|gerente|atendimento\s+humano)\b/i,
+  /\b(?:atendimento\s+humano|falar\s+com\s+(?:um\s+|uma\s+)?(?:pessoa|alguem|atendente|vendedor|vendedora|gerente)|transferir\s+para\s+(?:um\s+)?humano)\b/i,
+  /^(?:sim|ok|beleza|por\s+favor|pfv)?\s*(?:pode\s+)?transfer(?:ir|e)(?:\s+(?:pfv|por\s+favor|sim))?$/i
+]
+
+/**
  * Termos institucionais e operacionais que indicam perguntas sobre a empresa,
  * políticas, formas de pagamento, horários ou atendimento, e NÃO consulta a catálogo.
  */
@@ -110,8 +121,9 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
   const msg = normalizeText(userMessage)
   if (!msg) return false
 
-  // Se for encerramento ou apenas saudação, nunca é intenção de produto
+  // Se for encerramento ou pedido explícito de atendimento humano, nunca é intenção de produto
   if (CLOSING_PATTERNS.some(p => p.test(msg))) return false
+  if (HANDOFF_PATTERNS.some(p => p.test(msg))) return false
 
   const words = msg.split(/\s+/)
   const GREETINGS = new Set([
@@ -169,36 +181,39 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
  * Resolve quais ferramentas devem ser enviadas ao LLM com base na mensagem atual,
  * no histórico e na Working Memory (activeCart e activeQuote), reduzindo cirurgicamente o consumo de tokens.
  */
+export interface ToolScopeOptions {
+  hasConfirmedCustomerName?: boolean
+}
+
+function withCustomerNameTool(
+  tools: ToolDefinition[],
+  availableTools: ToolDefinition[],
+  options?: ToolScopeOptions,
+  isClosing?: boolean
+): ToolDefinition[] {
+  if (options?.hasConfirmedCustomerName !== false || isClosing) {
+    return tools
+  }
+  const nameTool = availableTools.find(t => t.name === 'salvar_nome_cliente')
+  if (!nameTool || tools.some(t => t.name === 'salvar_nome_cliente')) {
+    return tools
+  }
+  return [...tools, nameTool]
+}
+
 export function resolveToolScope(
   userMessage: string | undefined,
   history: any[],
   availableTools: ToolDefinition[],
-  workingMemory?: any
+  workingMemory?: any,
+  options?: ToolScopeOptions
 ): ToolDefinition[] {
   if (!userMessage) return availableTools
 
   const msg = normalizeText(userMessage)
   const words = msg.split(/\s+/)
 
-  // 1. Identificar se é apenas Greeting/Confirmação/Encerramento (NÃO precisa de tools, mesmo com histórico)
-  const GREETINGS = new Set([
-    'ola', 'oi', 'tudo', 'bem', 'bom', 'dia', 'boa', 'tarde', 'noite',
-    'opa', 'eae', 'obrigado', 'obrigada', 'valeu', 'tchau', 'ate', 'logo',
-    'beleza', 'ok', 'certo', 'entendi', 'sim', 'nao', 'aham', 'isso', 'perfeito'
-  ])
-  
-  const isOnlyGreeting = words.length > 0 && words.every(w => GREETINGS.has(w))
-  const isClosing = CLOSING_PATTERNS.some(p => p.test(msg))
-
-  if (isOnlyGreeting || isClosing) {
-    return [] // Retorna imediatamente sem acionar fallbacks
-  }
-
-  // Identifica presença de termos institucionais e perguntas de prazo/duração
-  const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
-  const isAskingTimeDuration = isAskingDuration(msg)
-
-  // 2. Extrair Working Memory Operacional (via parâmetro direto ou histórico de mensagens)
+  // 1. Extrair Working Memory primeiro para distinguir saudações vazias de confirmações curtas comerciais
   let wm = workingMemory
   if (!wm && Array.isArray(history)) {
     for (const m of history) {
@@ -211,7 +226,43 @@ export function resolveToolScope(
 
   const hasActiveCart = Boolean(wm?.activeCart && Array.isArray(wm.activeCart) && wm.activeCart.length > 0)
   const hasActiveQuote = Boolean(wm?.activeQuote?.id)
+  const hasActiveProduct = Boolean(wm?.activeProduct?.id || wm?.activeProduct?.name)
+  const hasDiscoveredProducts = Boolean(wm?.discoveredProducts && Array.isArray(wm.discoveredProducts) && wm.discoveredProducts.length > 0)
   const hasCartOrQuote = hasActiveCart || hasActiveQuote
+  const hasCommercialState = hasCartOrQuote || hasActiveProduct || hasDiscoveredProducts
+
+  // 2. Identificar se é Greeting/Encerramento vs Confirmação curta em fluxo comercial ativo
+  const GREETINGS = new Set([
+    'ola', 'oi', 'tudo', 'bem', 'bom', 'dia', 'boa', 'tarde', 'noite',
+    'opa', 'eae', 'obrigado', 'obrigada', 'valeu', 'tchau', 'ate', 'logo',
+    'beleza', 'ok', 'certo', 'entendi', 'sim', 'nao', 'aham', 'isso', 'perfeito'
+  ])
+  const CONFIRMATION_WORDS = new Set([
+    'beleza', 'ok', 'certo', 'entendi', 'sim', 'aham', 'isso', 'perfeito'
+  ])
+  const SHORT_COMMERCIAL_CONFIRMATION_REGEX =
+    /^(?:(?:sim|ok|beleza|certo|perfeito|isso|por favor|pfv)\s+)*(?:(?:pode\s+)?(?:gerar|fazer|fechar|mandar|enviar|continuar|seguir)|gera|faz|fecha|fechou|manda|envia|confirmo|confirmado)(?:\s+(?:sim|ok|por\s+favor|pfv|ai|isso|orcamento))?$/i
+
+  const isOnlyGreeting = words.length > 0 && words.every(w => GREETINGS.has(w))
+  const isClosing = CLOSING_PATTERNS.some(p => p.test(msg))
+
+  if (isClosing) {
+    return withCustomerNameTool([], availableTools, options, true) // Encerramento interrompe o fluxo comercial
+  }
+
+  const hasConfirmationWord = words.some(w => CONFIRMATION_WORDS.has(w))
+  const isShortConfirmation =
+    (isOnlyGreeting && hasConfirmationWord) ||
+    SHORT_COMMERCIAL_CONFIRMATION_REGEX.test(msg)
+
+  if (isOnlyGreeting && !(isShortConfirmation && hasCommercialState)) {
+    return withCustomerNameTool([], availableTools, options, false) // Retorna imediatamente sem acionar fallbacks comerciais
+  }
+
+  // Identifica presença de termos institucionais, perguntas de prazo/duração e pedido explícito de handoff
+  const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
+  const isAskingTimeDuration = isAskingDuration(msg)
+  const hasHandoffIntent = HANDOFF_PATTERNS.some(p => p.test(msg))
 
   // 3. Extrair Intenções Específicas
   let hasTimeIntent = false
@@ -243,7 +294,7 @@ export function resolveToolScope(
     if (quantityPriceKeywords.includes(w)) hasQuantityPriceIntent = true
 
     if (catalogSearchKeywords.includes(w)) {
-      if (!isInstitutional || (w !== 'tem' && w !== 'temos')) {
+      if (!hasHandoffIntent && (!isInstitutional || (w !== 'tem' && w !== 'temos'))) {
         hasCatalogSearchIntent = true
       }
     }
@@ -286,14 +337,31 @@ export function resolveToolScope(
     hasCatalogSearchIntent = true
   }
 
-  // Se a mensagem for institucional e NÃO tiver intenções comerciais explícitas, bloqueia vazamento de tools
+  // Se a mensagem for institucional e NÃO tiver intenções comerciais explícitas, bloqueia vazamento de tools comerciais
   if (isInstitutional && !hasProductPriceIntent && !hasQuantityPriceIntent && !hasRemovalIntent && !hasModificationIntent && !hasInclusionIntent && !hasQuoteIntent) {
+    const allowedNonCommercial: ToolDefinition[] = []
+    if (hasHandoffIntent) {
+      const handoffTool = availableTools.find(t => t.name === 'transferir_para_humano')
+      if (handoffTool) allowedNonCommercial.push(handoffTool)
+    }
     // Apenas permite datetime se perguntou horário de funcionamento
     if (hasTimeIntent) {
       const dtTool = availableTools.find(t => t.name === 'get_current_datetime')
-      return dtTool ? [dtTool] : []
+      if (dtTool) allowedNonCommercial.push(dtTool)
     }
-    return []
+    return withCustomerNameTool(allowedNonCommercial, availableTools, options, false)
+  }
+
+  // Confirmação curta em contexto comercial ativo preserva ferramentas de orçamento e recálculo
+  if (isShortConfirmation && hasCommercialState) {
+    if (hasCartOrQuote) {
+      hasQuoteIntent = true
+      hasProductPriceIntent = true
+    } else if (hasActiveProduct || hasDiscoveredProducts) {
+      hasProductPriceIntent = true
+      hasQuantityPriceIntent = true
+      hasQuoteIntent = true
+    }
   }
 
   const selectedTools = new Set<ToolDefinition>()
@@ -304,6 +372,10 @@ export function resolveToolScope(
     const category = tool.metadata?.category || 'general'
 
     if (category === 'datetime' && hasTimeIntent) {
+      selectedTools.add(tool)
+    }
+
+    if (name === 'transferir_para_humano' && hasHandoffIntent) {
       selectedTools.add(tool)
     }
     
@@ -355,17 +427,17 @@ export function resolveToolScope(
   }
 
   // 5. Fallback Seguro Contextual
-  // Apenas aciona se houver histórico de conversa (continuação de atendimento) e NÃO for institucional, saudação nem prazo/duração
-  if (selectedTools.size === 0 && !isOnlyGreeting && !isClosing && !isInstitutional && !isAskingTimeDuration && history.length > 0) {
+  // Apenas aciona se houver histórico de conversa (continuação de atendimento) e NÃO for institucional, saudação, prazo/duração nem handoff
+  if (selectedTools.size === 0 && !isOnlyGreeting && !isClosing && !isInstitutional && !isAskingTimeDuration && !hasHandoffIntent && history.length > 0) {
     const fallbackTool = availableTools.find(t => t.name === 'consultar_produto_comercial')
     if (fallbackTool) selectedTools.add(fallbackTool)
   }
 
   // 6. Otimização de Conflitos: Se a Composta for carregada, a busca simples perde necessidade
   const hasComercial = Array.from(selectedTools).some(t => t.name === 'consultar_produto_comercial')
-  if (hasComercial) {
-    return Array.from(selectedTools).filter(t => t.name !== 'buscar_produto')
-  }
+  const finalTools = hasComercial
+    ? Array.from(selectedTools).filter(t => t.name !== 'buscar_produto')
+    : Array.from(selectedTools)
 
-  return Array.from(selectedTools)
+  return withCustomerNameTool(finalTools, availableTools, options, false)
 }

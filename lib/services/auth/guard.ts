@@ -52,22 +52,24 @@ export async function requireCompanyAdmin(): Promise<CurrentUserProfile> {
     redirect('/login')
   }
 
-  // Se estiver em modo Impersonate do SuperAdmin, opera com poderes de Admin na empresa alvo
-  try {
-    const { cookies } = await import('next/headers')
-    const cookieStore = cookies()
-    const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-    if (impersonateId) {
-      return {
-        id: user.id,
-        email: profile.email || user.email || '',
-        full_name: profile.full_name || 'Administrador',
-        role: 'admin',
-        company_id: impersonateId,
+  // Se estiver em modo Impersonate do SuperAdmin (exclusivo para role master com UUID válido)
+  if (profile.role === 'master') {
+    try {
+      const { cookies } = await import('next/headers')
+      const cookieStore = cookies()
+      const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
+      if (impersonateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(impersonateId)) {
+        return {
+          id: user.id,
+          email: profile.email || user.email || '',
+          full_name: profile.full_name || 'Administrador',
+          role: 'admin',
+          company_id: impersonateId,
+        }
       }
+    } catch {
+      // segue fluxo normal
     }
-  } catch {
-    // segue fluxo normal
   }
 
   // Atendentes e operadores comuns têm acesso exclusivo ao chat/conversas

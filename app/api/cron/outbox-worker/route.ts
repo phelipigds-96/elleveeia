@@ -1,5 +1,6 @@
+import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { reconcileStalledOutboxBatch } from '@/lib/services/outbox-worker'
+import { reconcileStalledOutboxBatch, reconcileStalledWebhookEventsBatch } from '@/lib/services/outbox-worker'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,35 +17,121 @@ function isAuthorized(request: Request): boolean {
     return false
   }
 
-  return authHeader === `Bearer ${cronSecret}`
+  const expected = Buffer.from(`Bearer ${cronSecret}`, 'utf8')
+  const received = Buffer.from(authHeader, 'utf8')
+  if (expected.length !== received.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(expected, received)
+}
+
+function clampNumber(value: unknown, min: number, max: number): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  const num = Number(value)
+  if (!Number.isFinite(num)) return undefined
+  return Math.max(min, Math.min(max, Math.floor(num)))
 }
 
 function parseQueryParams(urlStr: string) {
   try {
     const url = new URL(urlStr)
-    const qBatch = url.searchParams.get('batch_size') || url.searchParams.get('batchSize')
-    const qLease = url.searchParams.get('lease_seconds') || url.searchParams.get('leaseSeconds')
-
-    const batchSize = qBatch && !isNaN(Number(qBatch)) ? Math.max(1, Math.min(100, Number(qBatch))) : undefined
-    const leaseSeconds = qLease && !isNaN(Number(qLease)) ? Math.max(15, Math.min(600, Number(qLease))) : undefined
-
+    const batchSize = clampNumber(
+      url.searchParams.get('batch_size') || url.searchParams.get('batchSize'),
+      1,
+      100
+    )
+    const leaseSeconds = clampNumber(
+      url.searchParams.get('lease_seconds') || url.searchParams.get('leaseSeconds'),
+      15,
+      600
+    )
     return { batchSize, leaseSeconds }
   } catch {
     return { batchSize: undefined, leaseSeconds: undefined }
   }
 }
 
-export async function GET(request: Request) {
+async function resolveWorkerOptions(request: Request, method: 'GET' | 'POST') {
+  let { batchSize, leaseSeconds } = parseQueryParams(request.url)
+
+  if (method === 'POST') {
+    const contentType = request.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const body = await request.json().catch(() => ({}))
+      const bodyBatch = clampNumber(body?.batch_size ?? body?.batchSize, 1, 100)
+      const bodyLease = clampNumber(body?.lease_seconds ?? body?.leaseSeconds, 15, 600)
+      if (bodyBatch !== undefined) batchSize = bodyBatch
+      if (bodyLease !== undefined) leaseSeconds = bodyLease
+    }
+  }
+
+  return { batchSize, leaseSeconds }
+}
+
+async function handleWorkerRequest(request: Request, method: 'GET' | 'POST') {
   if (!isAuthorized(request)) {
+    console.warn(
+      JSON.stringify({
+        event: 'outbox_worker.http_unauthorized',
+        method,
+        has_cron_secret: Boolean(process.env.CRON_SECRET)
+      })
+    )
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+  const startedAt = Date.now()
+
   try {
-    const { batchSize, leaseSeconds } = parseQueryParams(request.url)
+    const { batchSize, leaseSeconds } = await resolveWorkerOptions(request, method)
     const result = await reconcileStalledOutboxBatch({ batchSize, leaseSeconds })
-    return NextResponse.json({ success: true, ...result })
+
+    const totalBudgetMs = 19000
+    const remainingBudgetMs = totalBudgetMs - (Date.now() - startedAt)
+    const webhookRecovery = remainingBudgetMs >= 4500
+      ? await reconcileStalledWebhookEventsBatch({
+          batchSize: Math.min(batchSize ?? 5, 3),
+          leaseSeconds: Math.min(leaseSeconds ?? 90, 120),
+          timeBudgetMs: remainingBudgetMs
+        })
+      : {
+          processed: 0,
+          recovered_ingest: 0,
+          recovered_autonomous: 0,
+          deferred: 0,
+          failed: 0,
+          skipped_due_to_budget: true,
+          elapsed_ms: 0,
+          items: []
+        }
+
+    console.log(
+      JSON.stringify({
+        event: 'outbox_worker.http_completed',
+        method,
+        processed: result.processed,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        suppressed: result.suppressed,
+        deferred: result.deferred || 0,
+        webhook_recovery_processed: webhookRecovery.processed,
+        webhook_recovery_autonomous: webhookRecovery.recovered_autonomous,
+        webhook_recovery_ingest: webhookRecovery.recovered_ingest,
+        elapsed_ms: Date.now() - startedAt
+      })
+    )
+
+    return NextResponse.json({ success: true, ...result, webhook_recovery: webhookRecovery })
   } catch (err: any) {
-    console.error(`[Cron OutboxWorker Error] Falha na reconciliação: ${err?.message || err}`)
+    console.error(
+      JSON.stringify({
+        event: 'outbox_worker.http_failed',
+        method,
+        elapsed_ms: Date.now() - startedAt,
+        error: err?.message || String(err)
+      })
+    )
     return NextResponse.json(
       { success: false, error: err?.message || 'Erro interno no outbox worker' },
       { status: 500 }
@@ -52,37 +139,10 @@ export async function GET(request: Request) {
   }
 }
 
+export async function GET(request: Request) {
+  return handleWorkerRequest(request, 'GET')
+}
+
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
-
-  try {
-    let { batchSize, leaseSeconds } = parseQueryParams(request.url)
-
-    const contentType = request.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      const body = await request.json().catch(() => ({}))
-      if (body?.batch_size && !isNaN(Number(body.batch_size))) {
-        batchSize = Math.max(1, Math.min(100, Number(body.batch_size)))
-      } else if (body?.batchSize && !isNaN(Number(body.batchSize))) {
-        batchSize = Math.max(1, Math.min(100, Number(body.batchSize)))
-      }
-
-      if (body?.lease_seconds && !isNaN(Number(body.lease_seconds))) {
-        leaseSeconds = Math.max(15, Math.min(600, Number(body.lease_seconds)))
-      } else if (body?.leaseSeconds && !isNaN(Number(body.leaseSeconds))) {
-        leaseSeconds = Math.max(15, Math.min(600, Number(body.leaseSeconds)))
-      }
-    }
-
-    const result = await reconcileStalledOutboxBatch({ batchSize, leaseSeconds })
-    return NextResponse.json({ success: true, ...result })
-  } catch (err: any) {
-    console.error(`[Cron OutboxWorker Error] Falha na reconciliação: ${err?.message || err}`)
-    return NextResponse.json(
-      { success: false, error: err?.message || 'Erro interno no outbox worker' },
-      { status: 500 }
-    )
-  }
+  return handleWorkerRequest(request, 'POST')
 }

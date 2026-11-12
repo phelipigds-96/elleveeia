@@ -278,63 +278,39 @@ export async function sendManualMessageInternal(
     }
   }
 
-  // 6. Claim da mensagem na outbox via claim_outbox_message
-  const leaseSeconds = 120
-  let claim: any = null
-  if (rpcClient) {
-    const { data: claimData, error: claimErr } = await (rpcClient as any).rpc('claim_outbox_message', {
-      p_company_id: companyId,
-      p_outbox_id: outboxId,
-      p_lease_seconds: leaseSeconds
-    })
-    if (!claimErr && claimData) {
-      claim = Array.isArray(claimData) ? claimData[0] : claimData
-    }
-  }
-
-  // 7. Disparo externo via gateway de saída com Gateway Lock e Fencing
-  const { sendOutboundMessage, isAmbiguousNetworkError } = await import('@/lib/services/n8n-internal')
-
-  const outboundPayload = {
-    event_id: idempotencyKey,
-    event_type: 'message.send',
-    channel: conv.channel || 'whatsapp',
-    conversation_id: conversationId,
-    customer: {
-      phone: conv.customers?.phone
+  // 6-8. Pipeline endurecido compartilhado: Claim + Gateway Lock + Dispatch + Reconciliação
+  const dispatchRes = await dispatchOutboxRecordHardened({
+    adminClient,
+    companyId,
+    outboxId,
+    messageId,
+    outboundPayload: {
+      event_id: idempotencyKey,
+      event_type: 'message.send',
+      channel: conv.channel || 'whatsapp',
+      conversation_id: conversationId,
+      customer: {
+        phone: conv.customers?.phone
+      },
+      message: {
+        content: content.trim(),
+        message_type: 'text'
+      },
+      metadata: {
+        message_id: messageId,
+        sender_type: 'human'
+      }
     },
-    message: {
-      content: content.trim(),
-      message_type: 'text'
-    },
-    metadata: {
-      message_id: messageId,
-      sender_type: 'human'
-    }
-  }
+    leaseSeconds: 120
+  })
 
-  let outboundRes: any
-  try {
-    outboundRes = await sendOutboundMessage(companyId, outboundPayload, {
-      adminClient,
-      outboxId,
-      messageId,
-      leaseSeconds
-    })
-  } catch (dispErr: any) {
-    console.error('[sendMessageInternal] Exceção inesperada no gateway de saída:', dispErr)
-    outboundRes = { success: false, error: dispErr.message || 'Exceção no gateway de saída' }
-  }
+  const outboundRes = dispatchRes.outboundRes
 
-  // 8. Avaliação do resultado com tratamento de Ambíguo vs Determinístico
-
-  // 8.1. Falha de rede ambígua (Timeout, AbortError, ECONNRESET): abandona lock e preserva outbox em processing
-  const isAmbiguous = isAmbiguousNetworkError(outboundRes?.error || outboundRes?.reason)
-  if (isAmbiguous) {
+  if (dispatchRes.outcome === 'ambiguous') {
     console.warn(`[sendMessageInternal] Timeout ou falha de rede ambígua para outbox ${outboxId}. Mantendo outbox como processing para reconciliação pelo worker.`)
     return {
       success: false,
-      error: outboundRes?.error || 'Timeout no gateway de saída',
+      error: dispatchRes.finalError || 'Timeout no gateway de saída',
       code: 'OUTBOUND_DISPATCH_FAILED',
       reason: 'gateway_timeout',
       gatewayDispatched: false,
@@ -352,38 +328,10 @@ export async function sendManualMessageInternal(
     }
   }
 
-  // 8.2. Falha determinística (HTTP 4xx, 500 nítido, tenant_blocked)
-  if (!outboundRes || !outboundRes.success) {
-    const isTenantBlocked = outboundRes?.reason === 'tenant_blocked'
-    const newStatus = isTenantBlocked ? 'suppressed' : 'failed'
-    const finalError = outboundRes?.error || outboundRes?.reason || 'Falha no envio outbound'
-
-    if (rpcClient) {
-      // Atualiza metadata de forma atômica e monotônica
-      await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
-        p_company_id: companyId,
-        p_message_id: messageId,
-        p_metadata_patch: {
-          delivery_status: newStatus,
-          suppressed_reason: outboundRes?.reason,
-          dispatch_error: finalError
-        },
-        p_provider_message_id: null
-      })
-
-      // Conclui outbox como failed/suppressed
-      if (claim?.claim_token && claim?.claim_version) {
-        await (rpcClient as any).rpc('complete_outbox_message', {
-          p_company_id: companyId,
-          p_outbox_id: outboxId,
-          p_claim_token: claim.claim_token,
-          p_claim_version: claim.claim_version,
-          p_status: newStatus,
-          p_last_error: finalError,
-          p_provider_message_id: null
-        })
-      }
-    }
+  if (dispatchRes.outcome === 'suppressed' || dispatchRes.outcome === 'failed') {
+    const isTenantBlocked = dispatchRes.outcome === 'suppressed'
+    const newStatus = dispatchRes.outcome
+    const finalError = dispatchRes.finalError || 'Falha no envio outbound'
 
     return {
       success: false,
@@ -411,39 +359,8 @@ export async function sendManualMessageInternal(
     }
   }
 
-  // 8.3. Sucesso: Conclui outbox como sent e consolida metadata via merge_message_metadata_monotonic
-  const providerMessageId = (outboundRes as any).provider_message_id || null
-
-  let msgStatusErr: any = null
-
-  if (rpcClient) {
-    try {
-      if (claim?.claim_token && claim?.claim_version) {
-        await (rpcClient as any).rpc('complete_outbox_message', {
-          p_company_id: companyId,
-          p_outbox_id: outboxId,
-          p_claim_token: claim.claim_token,
-          p_claim_version: claim.claim_version,
-          p_status: 'sent',
-          p_last_error: null,
-          p_provider_message_id: providerMessageId
-        })
-      }
-
-      const { error: mergeErr } = await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
-        p_company_id: companyId,
-        p_message_id: messageId,
-        p_metadata_patch: {
-          delivery_status: 'sent',
-          ...(providerMessageId ? { provider_message_id: providerMessageId } : {})
-        },
-        p_provider_message_id: providerMessageId
-      })
-      if (mergeErr) msgStatusErr = mergeErr
-    } catch (err: any) {
-      msgStatusErr = err
-    }
-  }
+  const providerMessageId = dispatchRes.providerMessageId
+  const msgStatusErr = dispatchRes.msgStatusErr
 
   if (msgStatusErr) {
     console.error('[sendMessageInternal] INCONSISTENCY: Mensagem externa aceita pelo gateway, mas falhou ao atualizar delivery_status para sent no banco:', msgStatusErr)
@@ -518,5 +435,389 @@ export async function sendManualMessageInternal(
     persistedStatus: 'sent',
     inconsistency: false,
     message: retMsg
+  }
+}
+
+export interface HardenedOutboxDispatchParams {
+  adminClient: any
+  companyId: string
+  outboxId: string
+  messageId: string
+  outboundPayload: any
+  leaseSeconds?: number
+}
+
+export interface HardenedOutboxDispatchResult {
+  outcome: 'sent' | 'ambiguous' | 'failed' | 'suppressed'
+  outboundRes: any
+  providerMessageId: string | null
+  msgStatusErr: any
+  finalError?: string
+}
+
+async function resolveEvolutionDispatchConfig(adminClient: any, companyId: string): Promise<{
+  apiUrl: string
+  apiKey: string
+  instanceName: string
+} | null> {
+  let apiUrl = (process.env.EVOLUTION_API_URL || '').trim()
+  let apiKey = (process.env.EVOLUTION_API_KEY || '').trim()
+  let instanceName = (process.env.EVOLUTION_INSTANCE_NAME || '').trim()
+
+  if (apiUrl === 'mock') return null
+
+  try {
+    const { data: tenantEvo } = await adminClient
+      .from('integrations')
+      .select('config, credentials, status')
+      .eq('company_id', companyId)
+      .eq('type', 'whatsapp_evolution')
+      .maybeSingle()
+
+    if (tenantEvo) {
+      if (tenantEvo.status && tenantEvo.status !== 'active') return null
+      if (tenantEvo.config?.instance_name) instanceName = String(tenantEvo.config.instance_name).trim()
+      if (tenantEvo.config?.api_url) apiUrl = String(tenantEvo.config.api_url).trim()
+      if (tenantEvo.credentials?.api_key) apiKey = String(tenantEvo.credentials.api_key).trim()
+    }
+
+    if (!apiUrl || !apiKey) {
+      const { data: globalEvo } = await adminClient
+        .from('integrations')
+        .select('config, credentials')
+        .eq('type', 'whatsapp_evolution')
+        .not('config->api_url', 'is', null)
+        .limit(1)
+        .maybeSingle()
+
+      if (globalEvo?.config?.api_url && !apiUrl) apiUrl = String(globalEvo.config.api_url).trim()
+      if (globalEvo?.credentials?.api_key && !apiKey) apiKey = String(globalEvo.credentials.api_key).trim()
+    }
+  } catch {
+    return null
+  }
+
+  apiUrl = apiUrl.replace(/\/+$/, '')
+  if (!apiUrl || !apiKey || !instanceName) return null
+  return { apiUrl, apiKey, instanceName }
+}
+
+async function safeCompleteGatewayLock(
+  rpcClient: any,
+  params: {
+    companyId: string
+    eventId: string
+    claimToken: string | null
+    status: 'completed' | 'failed'
+    providerMessageId?: string | null
+    lastError?: string | null
+  }
+): Promise<void> {
+  if (!rpcClient || !params.claimToken) return
+  try {
+    await rpcClient.rpc('complete_gateway_outbound_lock', {
+      p_company_id: params.companyId,
+      p_event_id: params.eventId,
+      p_claim_token: params.claimToken,
+      p_status: params.status,
+      p_provider_message_id: params.providerMessageId ?? null,
+      p_last_error: params.lastError ?? null
+    })
+  } catch {
+    // Best-effort lock finalization
+  }
+}
+
+async function sendEvolutionWithGatewayLock(params: {
+  adminClient: any
+  companyId: string
+  outboxId: string
+  messageId: string
+  outboundPayload: any
+  leaseSeconds: number
+  isSafeUrl: (url: string) => boolean
+  isAmbiguousNetworkError: (err: any) => boolean
+}): Promise<any | null> {
+  const { adminClient, companyId, outboxId, messageId, outboundPayload, leaseSeconds, isSafeUrl, isAmbiguousNetworkError } = params
+  const evo = await resolveEvolutionDispatchConfig(adminClient, companyId)
+  if (!evo) return null
+
+  try {
+    await requireActiveCompany(companyId, { adminClient })
+  } catch (err: any) {
+    if (err instanceof TenantAccessError) {
+      return { success: false, reason: 'tenant_blocked', code: err.code, error: err.message }
+    }
+    return { success: false, reason: 'tenant_status_unavailable', error: err?.message }
+  }
+
+  if (!isSafeUrl(evo.apiUrl)) {
+    return { success: false, reason: 'unsafe_url', error: 'Unsafe Evolution URL detected (SSRF Protection)' }
+  }
+
+  const rpcClient = typeof adminClient?.rpc === 'function' ? adminClient : null
+  const eventId = outboundPayload?.event_id || `outbox-${outboxId}`
+  let lockToken: string | null = null
+
+  if (rpcClient) {
+    const { data: lockData, error: lockErr } = await rpcClient.rpc('acquire_gateway_outbound_lock', {
+      p_company_id: companyId,
+      p_event_id: eventId,
+      p_outbox_id: outboxId,
+      p_message_id: messageId,
+      p_lease_seconds: leaseSeconds
+    })
+    if (lockErr) {
+      return { success: false, reason: 'gateway_lock_error', error: lockErr.message }
+    }
+    const lockRow = Array.isArray(lockData) ? lockData[0] : lockData
+    if (lockRow && !lockRow.was_acquired) {
+      if (lockRow.status === 'completed' || lockRow.error_reason === 'already_completed') {
+        return { success: true, duplicate: true, provider_message_id: lockRow.provider_message_id || null }
+      }
+      return { success: false, reason: 'gateway_lock_in_flight', error: 'Disparo já em andamento no gateway.' }
+    }
+    lockToken = lockRow?.claim_token || null
+  }
+
+  const recipient = outboundPayload?.recipient || outboundPayload?.number || outboundPayload?.customer?.phone
+  const textContent = outboundPayload?.message?.content ?? outboundPayload?.text ?? ''
+  const mediaUrl = outboundPayload?.media_url || outboundPayload?.message?.media_url
+  const mediaType = outboundPayload?.media_type || outboundPayload?.message?.message_type || 'image'
+  const fileName = outboundPayload?.file_name || 'arquivo'
+
+  let targetUrl = `${evo.apiUrl}/message/sendText/${evo.instanceName}`
+  let bodyPayload: Record<string, any> = { number: recipient, text: textContent }
+
+  if (mediaUrl) {
+    if (mediaType === 'audio') {
+      targetUrl = `${evo.apiUrl}/message/sendWhatsAppAudio/${evo.instanceName}`
+      bodyPayload = { number: recipient, audio: mediaUrl }
+    } else {
+      targetUrl = `${evo.apiUrl}/message/sendMedia/${evo.instanceName}`
+      bodyPayload = {
+        number: recipient,
+        mediatype: mediaType === 'document' ? 'document' : 'image',
+        media: mediaUrl,
+        caption: textContent,
+        fileName
+      }
+    }
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: evo.apiKey
+      },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+
+    const rawText = await response.text().catch(() => '')
+    let data: any = null
+    try {
+      data = rawText ? JSON.parse(rawText) : null
+    } catch {
+      data = null
+    }
+
+    if (!response.ok) {
+      const errMsg = `Evolution API HTTP ${response.status}: ${rawText.slice(0, 200)}`
+      const isAmbiguousHttp = response.status === 502 || response.status === 504 || response.status === 408
+      if (!isAmbiguousHttp) {
+        await safeCompleteGatewayLock(rpcClient, {
+          companyId,
+          eventId,
+          claimToken: lockToken,
+          status: 'failed',
+          lastError: errMsg
+        })
+      }
+      return {
+        success: false,
+        reason: isAmbiguousHttp ? `gateway_timeout_http_${response.status}` : `http_${response.status}`,
+        error: errMsg
+      }
+    }
+
+    const providerMessageId = data?.key?.id || data?.messageId || data?.id || data?.keyId || null
+    await safeCompleteGatewayLock(rpcClient, {
+      companyId,
+      eventId,
+      claimToken: lockToken,
+      status: 'completed',
+      providerMessageId
+    })
+
+    return { success: true, provider_message_id: providerMessageId }
+  } catch (err: any) {
+    clearTimeout(timeoutId)
+    const isAmbiguous = isAmbiguousNetworkError(err)
+    if (!isAmbiguous) {
+      await safeCompleteGatewayLock(rpcClient, {
+        companyId,
+        eventId,
+        claimToken: lockToken,
+        status: 'failed',
+        lastError: err?.message || 'Evolution dispatch exception'
+      })
+    }
+    return {
+      success: false,
+      reason: isAmbiguous ? 'gateway_timeout' : 'fetch_error',
+      error: err?.message || String(err)
+    }
+  }
+}
+
+/**
+ * Pipeline atômico compartilhado para envio manual/humano via outbox:
+ * 1. claim_outbox_message (fencing token + lease)
+ * 2. sendOutboundMessage (SSRF guard + gateway_outbound_locks + n8n; fallback seguro Evolution API)
+ * 3. Reconciliação de falhas ambíguas vs determinísticas + complete_outbox_message + merge_message_metadata_monotonic
+ */
+export async function dispatchOutboxRecordHardened(
+  params: HardenedOutboxDispatchParams
+): Promise<HardenedOutboxDispatchResult> {
+  const { adminClient, companyId, outboxId, messageId, outboundPayload } = params
+  const leaseSeconds = params.leaseSeconds || 120
+  const rpcClient = typeof (adminClient as any)?.rpc === 'function' ? adminClient : null
+
+  let claim: any = null
+  if (rpcClient) {
+    const { data: claimData, error: claimErr } = await (rpcClient as any).rpc('claim_outbox_message', {
+      p_company_id: companyId,
+      p_outbox_id: outboxId,
+      p_lease_seconds: leaseSeconds
+    })
+    if (!claimErr && claimData) {
+      claim = Array.isArray(claimData) ? claimData[0] : claimData
+    }
+  }
+
+  const { sendOutboundMessage, isAmbiguousNetworkError, isSafeUrl } = await import('@/lib/services/n8n-internal')
+
+  let outboundRes: any
+  try {
+    outboundRes = await sendOutboundMessage(companyId, outboundPayload, {
+      adminClient,
+      outboxId,
+      messageId,
+      leaseSeconds
+    })
+    if (outboundRes?.reason === 'no_integration') {
+      const evoRes = await sendEvolutionWithGatewayLock({
+        adminClient,
+        companyId,
+        outboxId,
+        messageId,
+        outboundPayload,
+        leaseSeconds,
+        isSafeUrl,
+        isAmbiguousNetworkError
+      })
+      if (evoRes) {
+        outboundRes = evoRes
+      }
+    }
+  } catch (dispErr: any) {
+    console.error('[dispatchOutboxRecordHardened] Exceção inesperada no gateway de saída:', dispErr)
+    outboundRes = { success: false, error: dispErr?.message || 'Exceção no gateway de saída' }
+  }
+
+  const isAmbiguous = isAmbiguousNetworkError(outboundRes?.error || outboundRes?.reason)
+  if (isAmbiguous) {
+    return {
+      outcome: 'ambiguous',
+      outboundRes,
+      providerMessageId: null,
+      msgStatusErr: null,
+      finalError: outboundRes?.error || 'Timeout no gateway de saída'
+    }
+  }
+
+  if (!outboundRes || !outboundRes.success) {
+    const isTenantBlocked = outboundRes?.reason === 'tenant_blocked'
+    const newStatus: 'suppressed' | 'failed' = isTenantBlocked ? 'suppressed' : 'failed'
+    const finalError = outboundRes?.error || outboundRes?.reason || 'Falha no envio outbound'
+
+    if (rpcClient) {
+      await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
+        p_company_id: companyId,
+        p_message_id: messageId,
+        p_metadata_patch: {
+          delivery_status: newStatus,
+          suppressed_reason: outboundRes?.reason,
+          dispatch_error: finalError
+        },
+        p_provider_message_id: null
+      })
+
+      if (claim?.claim_token && claim?.claim_version) {
+        await (rpcClient as any).rpc('complete_outbox_message', {
+          p_company_id: companyId,
+          p_outbox_id: outboxId,
+          p_claim_token: claim.claim_token,
+          p_claim_version: claim.claim_version,
+          p_status: newStatus,
+          p_last_error: finalError,
+          p_provider_message_id: null
+        })
+      }
+    }
+
+    return {
+      outcome: newStatus,
+      outboundRes,
+      providerMessageId: null,
+      msgStatusErr: null,
+      finalError
+    }
+  }
+
+  const providerMessageId = (outboundRes as any).provider_message_id || null
+  let msgStatusErr: any = null
+
+  if (rpcClient) {
+    try {
+      if (claim?.claim_token && claim?.claim_version) {
+        await (rpcClient as any).rpc('complete_outbox_message', {
+          p_company_id: companyId,
+          p_outbox_id: outboxId,
+          p_claim_token: claim.claim_token,
+          p_claim_version: claim.claim_version,
+          p_status: 'sent',
+          p_last_error: null,
+          p_provider_message_id: providerMessageId
+        })
+      }
+
+      const { error: mergeErr } = await (rpcClient as any).rpc('merge_message_metadata_monotonic', {
+        p_company_id: companyId,
+        p_message_id: messageId,
+        p_metadata_patch: {
+          delivery_status: 'sent',
+          ...(providerMessageId ? { provider_message_id: providerMessageId } : {})
+        },
+        p_provider_message_id: providerMessageId
+      })
+      if (mergeErr) msgStatusErr = mergeErr
+    } catch (err: any) {
+      msgStatusErr = err
+    }
+  }
+
+  return {
+    outcome: 'sent',
+    outboundRes,
+    providerMessageId,
+    msgStatusErr
   }
 }
