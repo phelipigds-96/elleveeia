@@ -183,7 +183,7 @@ test('4. getTenantGovernanceReport consolida custos, tokens, latência, fallback
   ]
   const messages = [
     ...Array.from({ length: 85 }, () => ({ company_id: 'comp-a', sender_type: 'agent' })),
-    ...Array.from({ length: 12 }, () => ({ company_id: 'comp-b', sender_type: 'customer' })),
+    ...Array.from({ length: 12 }, () => ({ company_id: 'comp-b', sender_type: 'agent' })),
   ]
   const agentRuns = [
     {

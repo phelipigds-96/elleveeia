@@ -236,6 +236,13 @@ export default function AdminGovernancePanel({
             {governance.totals.warningTenantsCount} em 80%+ ·{" "}
             {governance.totals.exceededTenantsCount} em 100%+
           </div>
+          {(governance.totals.totalExtraInvoiceBrl > 0 || governance.totals.totalAddonMessages > 0) && (
+            <div className="text-[11px] font-medium text-violet-600 dark:text-violet-400 mt-1">
+              Extra mês: {formatBrl(governance.totals.totalExtraInvoiceBrl)} (
+              {formatNumber(governance.totals.totalAddonMessages)} pkg ·{" "}
+              {formatNumber(governance.totals.totalOverageMessages)} avulso)
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
@@ -320,8 +327,8 @@ export default function AdminGovernancePanel({
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">
-                          {formatNumber(tenant.monthlyMessagesUsed)} /{" "}
-                          {formatNumber(tenant.monthlyMessagesLimit)}
+                          {formatNumber(tenant.monthlySentMessagesUsed)} /{" "}
+                          {formatNumber(tenant.effectiveMessagesLimit)}
                         </span>
                         <span
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getQuotaBadgeStyle(
@@ -343,6 +350,18 @@ export default function AdminGovernancePanel({
                           style={{ width: `${Math.min(100, tenant.quotaUsagePercent)}%` }}
                         />
                       </div>
+                      <div className="mt-1 text-[10px] text-muted-foreground">
+                        Enviadas (IA+Hum) · Base {formatNumber(tenant.monthlyMessagesLimit)}
+                        {tenant.addonMessagesPurchased > 0
+                          ? ` + ${formatNumber(tenant.addonMessagesPurchased)} pkg`
+                          : ""}
+                      </div>
+                      {(tenant.overageMessages > 0 || tenant.extraInvoiceTotalBrl > 0) && (
+                        <div className="mt-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                          Avulso: {formatNumber(tenant.overageMessages)} · Extra:{" "}
+                          {formatBrl(tenant.extraInvoiceTotalBrl)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 align-top text-xs">

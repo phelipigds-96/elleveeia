@@ -33,6 +33,8 @@ export default function PlanEditDialog({
   const [maxAgents, setMaxAgents] = useState<number>(1)
   const [maxCatalogItems, setMaxCatalogItems] = useState<number>(10000)
   const [maxMonthlyQuotes, setMaxMonthlyQuotes] = useState<number>(1000)
+  const [addonPackageUnitPriceBrl, setAddonPackageUnitPriceBrl] = useState<number>(0.04)
+  const [overageUnitPriceBrl, setOverageUnitPriceBrl] = useState<number>(0.07)
   const [defaultAiProvider, setDefaultAiProvider] = useState<"openai" | "gemini" | "hybrid">("openai")
   const [defaultAiModel, setDefaultAiModel] = useState<string>("gpt-4o-mini")
   const [badge, setBadge] = useState<string>("")
@@ -50,6 +52,12 @@ export default function PlanEditDialog({
       setMaxAgents(plan.maxAgents)
       setMaxCatalogItems(plan.maxCatalogItems)
       setMaxMonthlyQuotes(plan.maxMonthlyQuotes)
+      setAddonPackageUnitPriceBrl(
+        plan.addonPackageUnitPriceBrl ?? (plan.key === "trial" ? 0 : 0.04)
+      )
+      setOverageUnitPriceBrl(
+        plan.overageUnitPriceBrl ?? (plan.key === "trial" ? 0 : 0.07)
+      )
       setDefaultAiProvider(plan.defaultAiProvider || "openai")
       setDefaultAiModel(plan.defaultAiModel || (plan.key === "pro" || plan.key === "enterprise" ? "gpt-4o" : "gpt-4o-mini"))
       setBadge(plan.badge || "")
@@ -82,6 +90,8 @@ export default function PlanEditDialog({
         maxAgents: Number(maxAgents),
         maxCatalogItems: Number(maxCatalogItems),
         maxMonthlyQuotes: Number(maxMonthlyQuotes),
+        addonPackageUnitPriceBrl: Math.max(0, Number(addonPackageUnitPriceBrl) || 0),
+        overageUnitPriceBrl: Math.max(0, Number(overageUnitPriceBrl) || 0),
         defaultAiProvider,
         defaultAiModel,
         allowedLlmProviders: allowedProviders,
@@ -270,6 +280,35 @@ export default function PlanEditDialog({
                 onChange={(e) => setMaxMonthlyQuotes(Number(e.target.value))}
                 required
                 className="text-xs h-9 bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-ellevee-border">
+            <div>
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
+                Tarifa Bloco Extra (R$/msg env.)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={addonPackageUnitPriceBrl}
+                onChange={(e) => setAddonPackageUnitPriceBrl(Number(e.target.value))}
+                className="text-xs h-9 bg-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-ellevee-text-secondary block mb-1">
+                Tarifa Excedente Avulso (R$/msg env.)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={overageUnitPriceBrl}
+                onChange={(e) => setOverageUnitPriceBrl(Number(e.target.value))}
+                className="text-xs h-9 bg-white font-mono"
               />
             </div>
           </div>

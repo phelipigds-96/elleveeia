@@ -5,7 +5,15 @@ import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/service"
 import { createClient } from "@/lib/supabase/server"
 import { requirePlatformAdmin } from "@/lib/services/platform/admin"
-import { CompanyMock } from "@/components/companies/mock-companies"
+import { CompanyAddonRecord, CompanyMock } from "@/components/companies/mock-companies"
+import {
+  ADDON_PACKAGE_SIZES,
+  AddonPackageSize,
+  calculateCompanyBillingOverage,
+  getCurrentBillingMonth,
+  isOutboundSentSenderType,
+  resolvePlanBillingKey,
+} from "@/lib/services/platform/tenant-governance"
 import {
   WORKFLOW_TEMPLATES,
   getCompanyWorkflowForAdmin,
@@ -72,9 +80,9 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
   try {
     const adminClient = createAdminClient()
 
-    // 1. Tenta consultar empresas com colunas de cnpj, contact_email e require_close_reason
+    // 1. Tenta consultar empresas com colunas de cnpj, contact_email, require_close_reason e tarifas customizadas
     let rows: any[] = []
-    const { data: rowsWithCols, error: compErr } = await adminClient
+    const { data: rowsWithCustomTariffs, error: customTariffErr } = await adminClient
       .from("companies")
       .select(`
         id,
@@ -92,14 +100,42 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
           max_monthly_messages,
           max_monthly_quotes,
           max_catalog_items,
-          allowed_llm_providers
+          allowed_llm_providers,
+          custom_addon_unit_price_brl,
+          custom_overage_unit_price_brl
         )
       `)
       .order("created_at", { ascending: false })
 
-    if (!compErr && rowsWithCols) {
-      rows = rowsWithCols
+    if (!customTariffErr && rowsWithCustomTariffs) {
+      rows = rowsWithCustomTariffs
     } else {
+      const { data: rowsWithCols, error: compErr } = await adminClient
+        .from("companies")
+        .select(`
+          id,
+          name,
+          slug,
+          status,
+          plan_tier,
+          created_at,
+          updated_at,
+          cnpj,
+          contact_email,
+          require_close_reason,
+          company_limits (
+            max_agents,
+            max_monthly_messages,
+            max_monthly_quotes,
+            max_catalog_items,
+            allowed_llm_providers
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      if (!compErr && rowsWithCols) {
+        rows = rowsWithCols
+      } else {
       // Fallback caso as colunas novas ainda não tenham sido migradas no Supabase
       const { data: fallbackRows, error: fallbackErr } = await adminClient
         .from("companies")
@@ -154,17 +190,19 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         }
       }
     }
+    }
 
   const now = new Date()
   const monthStartIso = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
   ).toISOString()
+  const currentBillingMonth = getCurrentBillingMonth(now)
 
-  // 2. Consulta quantidade real de mensagens e tokens LLM do mês corrente por tenant
+  // 2. Consulta quantidade real de mensagens enviadas e tokens LLM do mês corrente por tenant
   const [{ data: messagesData }, { data: agentRunsData }] = await Promise.all([
     adminClient
       .from("messages")
-      .select("company_id")
+      .select("company_id, sender_type")
       .gte("created_at", monthStartIso),
     adminClient
       .from("agent_runs")
@@ -172,16 +210,72 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       .gte("created_at", monthStartIso),
   ])
 
-  const messagesCountMap = new Map<string, number>()
+  const sentMessagesCountMap = new Map<string, number>()
+  const totalMessagesCountMap = new Map<string, number>()
   if (messagesData) {
-    for (const msg of messagesData) {
+    for (const msg of messagesData as any[]) {
       if (msg.company_id) {
-        messagesCountMap.set(
+        totalMessagesCountMap.set(
           msg.company_id,
-          (messagesCountMap.get(msg.company_id) || 0) + 1
+          (totalMessagesCountMap.get(msg.company_id) || 0) + 1
         )
+        if (isOutboundSentSenderType(msg.sender_type)) {
+          sentMessagesCountMap.set(
+            msg.company_id,
+            (sentMessagesCountMap.get(msg.company_id) || 0) + 1
+          )
+        }
       }
     }
+  }
+
+  // 2.1. Consulta tarifas por plano e pacotes extras contratados no mês (com fallback gracioso)
+  const planTariffMap = new Map<string, { addonPrice?: number; overagePrice?: number }>()
+  try {
+    const { data: planTariffs, error: ptErr } = await adminClient
+      .from("platform_plans")
+      .select("key, addon_package_unit_price_brl, overage_unit_price_brl")
+    if (!ptErr && Array.isArray(planTariffs)) {
+      for (const p of planTariffs as any[]) {
+        if (p?.key) {
+          planTariffMap.set(String(p.key).toLowerCase(), {
+            addonPrice: p.addon_package_unit_price_brl !== null && p.addon_package_unit_price_brl !== undefined ? Number(p.addon_package_unit_price_brl) : undefined,
+            overagePrice: p.overage_unit_price_brl !== null && p.overage_unit_price_brl !== undefined ? Number(p.overage_unit_price_brl) : undefined,
+          })
+        }
+      }
+    }
+  } catch {
+    // fallback para defaults
+  }
+
+  const companyAddonsMap = new Map<string, CompanyAddonRecord[]>()
+  try {
+    const { data: addonsData, error: addonsErr } = await adminClient
+      .from("company_message_addons")
+      .select("id, company_id, billing_month, package_messages, unit_price_brl, total_price_brl, status, notes, created_at")
+      .eq("billing_month", currentBillingMonth)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+    if (!addonsErr && Array.isArray(addonsData)) {
+      for (const a of addonsData as any[]) {
+        if (!a?.company_id) continue
+        const list = companyAddonsMap.get(a.company_id) || []
+        list.push({
+          id: a.id,
+          billingMonth: a.billing_month,
+          packageMessages: Number(a.package_messages) || 0,
+          unitPriceBrl: Number(a.unit_price_brl) || 0,
+          totalPriceBrl: Number(a.total_price_brl) || 0,
+          status: a.status === "cancelled" ? "cancelled" : "active",
+          notes: a.notes || null,
+          createdAt: a.created_at,
+        })
+        companyAddonsMap.set(a.company_id, list)
+      }
+    }
+  } catch {
+    // tabela company_message_addons ainda não migrada
   }
 
   const tokensCountMap = new Map<string, number>()
@@ -239,8 +333,10 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       ? c.company_limits[0]
       : c.company_limits
 
-    const msgsUsed = messagesCountMap.get(c.id) || 0
+    const sentMsgsUsed = sentMessagesCountMap.get(c.id) || 0
+    const totalMsgsUsed = totalMessagesCountMap.get(c.id) || 0
     const planTierDb = (c.plan_tier || "standard").toLowerCase()
+    const planKey = resolvePlanBillingKey(planTierDb)
 
     let planUI: "Trial" | "Starter" | "Pro" | "Enterprise" = "Starter"
     if (planTierDb === "trial") planUI = "Trial"
@@ -291,6 +387,36 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       auditEmailMap.get(c.id) ||
       `admin@${c.slug}.com`
 
+    const activeAddons = companyAddonsMap.get(c.id) || []
+    const addonMessagesPurchased = activeAddons.reduce(
+      (acc, a) => acc + (Number(a.packageMessages) || 0),
+      0
+    )
+    const addonsTotalBrl = activeAddons.reduce(
+      (acc, a) => acc + (Number(a.totalPriceBrl) || 0),
+      0
+    )
+    const planTariffs = planTariffMap.get(planKey)
+    const customAddonRate =
+      limits?.custom_addon_unit_price_brl !== undefined &&
+      limits?.custom_addon_unit_price_brl !== null
+        ? Number(limits.custom_addon_unit_price_brl)
+        : undefined
+    const customOverageRate =
+      limits?.custom_overage_unit_price_brl !== undefined &&
+      limits?.custom_overage_unit_price_brl !== null
+        ? Number(limits.custom_overage_unit_price_brl)
+        : undefined
+    const billingSummary = calculateCompanyBillingOverage({
+      sentMessages: sentMsgsUsed,
+      baseQuotaMessages: messagesLimit,
+      addonMessagesPurchased,
+      addonsTotalBrl,
+      addonUnitPriceBrl: customAddonRate ?? planTariffs?.addonPrice,
+      overageUnitPriceBrl: customOverageRate ?? planTariffs?.overagePrice,
+      isTrial: planKey === "trial",
+    })
+
     return {
       id: c.id,
       name: c.name,
@@ -300,7 +426,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       status: statusUI,
       agentsCount: 1,
       maxAgents,
-      messagesUsed: msgsUsed,
+      messagesUsed: sentMsgsUsed,
       messagesLimit,
       tokensUsed: tokensCountMap.get(c.id) || 0,
       tokensLimit,
@@ -308,6 +434,18 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       createdAt: c.created_at ? c.created_at.split("T")[0] : new Date().toISOString().split("T")[0],
       adminEmail: resolvedEmail,
       requireCloseReason: Boolean(c.require_close_reason),
+      sentMessagesUsed: sentMsgsUsed,
+      totalMessagesUsed: totalMsgsUsed,
+      addonMessages: billingSummary.addonMessagesPurchased,
+      effectiveMessagesLimit: billingSummary.effectiveQuotaMessages,
+      overageMessages: billingSummary.overageMessages,
+      addonsTotalBrl: billingSummary.addonsTotalBrl,
+      overageTotalBrl: billingSummary.overageTotalBrl,
+      extraInvoiceBrl: billingSummary.extraInvoiceTotalBrl,
+      addonUnitPriceBrl: billingSummary.addonUnitPriceBrl,
+      overageUnitPriceBrl: billingSummary.overageUnitPriceBrl,
+      billingMonth: currentBillingMonth,
+      activeAddons,
     }
   })
 
@@ -899,6 +1037,8 @@ export interface UpdateLimitsInput {
   maxCatalogItems?: number
   tokensLimit?: number
   requireCloseReason?: boolean
+  customAddonUnitPriceBrl?: number | null
+  customOverageUnitPriceBrl?: number | null
 }
 
 /**
@@ -954,39 +1094,61 @@ export async function updateCompanyLimitsAction(
     if (newLimits.maxCatalogItems !== undefined) {
       updatePayload.max_catalog_items = Math.max(0, Math.floor(Number(newLimits.maxCatalogItems) || 0))
     }
+    if (newLimits.customAddonUnitPriceBrl !== undefined) {
+      updatePayload.custom_addon_unit_price_brl =
+        newLimits.customAddonUnitPriceBrl === null
+          ? null
+          : Math.max(0, Number(newLimits.customAddonUnitPriceBrl) || 0)
+    }
+    if (newLimits.customOverageUnitPriceBrl !== undefined) {
+      updatePayload.custom_overage_unit_price_brl =
+        newLimits.customOverageUnitPriceBrl === null
+          ? null
+          : Math.max(0, Number(newLimits.customOverageUnitPriceBrl) || 0)
+    }
 
-    let limitsResult: any
-    if (currentLimits) {
-      const { data, error } = await adminClient
-        .from("company_limits")
-        .update(updatePayload)
-        .eq("company_id", companyId)
-        .select("*")
-        .single()
-
-      if (error) {
-        console.error("[SuperAdmin] Erro ao atualizar company_limits:", error)
-        return { success: false, error: `Falha ao atualizar limites: ${error.message}` }
+    const persistLimits = async (payloadToSave: Record<string, any>) => {
+      if (currentLimits) {
+        return await adminClient
+          .from("company_limits")
+          .update(payloadToSave)
+          .eq("company_id", companyId)
+          .select("*")
+          .single()
       }
-      limitsResult = data
-    } else {
-      const { data, error } = await adminClient
+      return await adminClient
         .from("company_limits")
         .insert({
           company_id: companyId,
-          ...updatePayload,
+          ...payloadToSave,
           max_monthly_quotes: 1000,
           max_catalog_items: 50000,
         })
         .select("*")
         .single()
-
-      if (error) {
-        console.error("[SuperAdmin] Erro ao criar company_limits:", error)
-        return { success: false, error: `Falha ao salvar limites: ${error.message}` }
-      }
-      limitsResult = data
     }
+
+    let { data: limitsData, error: limitsErr } = await persistLimits(updatePayload)
+    if (
+      limitsErr &&
+      (String(limitsErr.code || "") === "42703" ||
+        String(limitsErr.message || "").toLowerCase().includes("column"))
+    ) {
+      const {
+        custom_addon_unit_price_brl: _ignoreCustomAddon,
+        custom_overage_unit_price_brl: _ignoreCustomOverage,
+        ...legacyPayload
+      } = updatePayload
+      const retryRes = await persistLimits(legacyPayload)
+      limitsData = retryRes.data
+      limitsErr = retryRes.error
+    }
+
+    if (limitsErr) {
+      console.error("[SuperAdmin] Erro ao salvar company_limits:", limitsErr)
+      return { success: false, error: `Falha ao salvar limites: ${limitsErr.message}` }
+    }
+    const limitsResult = limitsData
 
     // 2.1. Atualizar política de motivo de encerramento da empresa se especificado
     if (newLimits.requireCloseReason !== undefined) {
@@ -1588,5 +1750,228 @@ export async function deleteCompanyAttendantAction(
     return { success: true }
   } catch (err: any) {
     return { success: false, error: err?.message || "Erro ao deletar usuário" }
+  }
+}
+
+/**
+ * SuperAdmin: Adiciona pacote extra mensal (1.000, 5.000, 10.000 ou 15.000 mensagens enviadas)
+ */
+export async function addCompanyAddonPackageAction(
+  companyId: string,
+  packageMessages: AddonPackageSize,
+  notes?: string
+): Promise<ActionResult<CompanyAddonRecord>> {
+  try {
+    const { operator, user } = await requirePlatformAdmin()
+    if (!companyId) {
+      return { success: false, error: "Identificador da empresa inválido." }
+    }
+    if (!(ADDON_PACKAGE_SIZES as readonly number[]).includes(packageMessages)) {
+      return {
+        success: false,
+        error: "Tamanho de pacote inválido. Escolha 1.000, 5.000, 10.000 ou 15.000 mensagens.",
+      }
+    }
+
+    const adminClient = createAdminClient()
+    const { data: company, error: compErr } = await adminClient
+      .from("companies")
+      .select("id, name, slug, plan_tier")
+      .eq("id", companyId)
+      .maybeSingle()
+
+    if (compErr || !company) {
+      return { success: false, error: "Empresa não encontrada no banco de dados." }
+    }
+
+    const planKey = resolvePlanBillingKey(company.plan_tier)
+    let customAddonPrice: number | null = null
+    let planAddonPrice: number | undefined
+
+    try {
+      const { data: limitRow } = await adminClient
+        .from("company_limits")
+        .select("custom_addon_unit_price_brl")
+        .eq("company_id", companyId)
+        .maybeSingle()
+      if (limitRow && (limitRow as any).custom_addon_unit_price_brl !== null && (limitRow as any).custom_addon_unit_price_brl !== undefined) {
+        customAddonPrice = Number((limitRow as any).custom_addon_unit_price_brl)
+      }
+    } catch {
+      // coluna custom ainda não migrada
+    }
+
+    try {
+      const { data: planRow } = await adminClient
+        .from("platform_plans")
+        .select("addon_package_unit_price_brl")
+        .eq("key", planKey)
+        .maybeSingle()
+      if (planRow && (planRow as any).addon_package_unit_price_brl !== null && (planRow as any).addon_package_unit_price_brl !== undefined) {
+        planAddonPrice = Number((planRow as any).addon_package_unit_price_brl)
+      }
+    } catch {
+      // coluna no plano ainda não migrada
+    }
+
+    const resolvedSummary = calculateCompanyBillingOverage({
+      sentMessages: 0,
+      baseQuotaMessages: 0,
+      addonUnitPriceBrl: customAddonPrice ?? planAddonPrice,
+      isTrial: planKey === "trial",
+    })
+
+    const unitPriceBrl = resolvedSummary.addonUnitPriceBrl
+    const totalPriceBrl = Number((packageMessages * unitPriceBrl).toFixed(2))
+    const billingMonth = getCurrentBillingMonth()
+    const cleanNotes = notes && notes.trim().length > 0 ? notes.trim() : null
+
+    const { data: inserted, error: insertErr } = await adminClient
+      .from("company_message_addons")
+      .insert({
+        company_id: companyId,
+        billing_month: billingMonth,
+        package_messages: packageMessages,
+        unit_price_brl: unitPriceBrl,
+        total_price_brl: totalPriceBrl,
+        status: "active",
+        notes: cleanNotes,
+        created_by: operator?.id || user?.id || null,
+      })
+      .select("id, billing_month, package_messages, unit_price_brl, total_price_brl, status, notes, created_at")
+      .single()
+
+    if (insertErr || !inserted) {
+      const code = String(insertErr?.code || "")
+      if (code === "42P01" || String(insertErr?.message || "").includes("does not exist")) {
+        return {
+          success: false,
+          error:
+            "Tabela company_message_addons não encontrada no Supabase. Execute a migration 2026111204_overage_and_addon_packages.sql no SQL Editor.",
+        }
+      }
+      return {
+        success: false,
+        error: `Falha ao registrar pacote adicional: ${insertErr?.message || "Erro desconhecido"}`,
+      }
+    }
+
+    try {
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: operator?.id || user?.id,
+        actor_email: operator?.email || user?.email || "admin@ellevee.com",
+        action: "company.addon_added",
+        target_company_id: companyId,
+        payload_summary: {
+          company_name: company.name,
+          company_slug: company.slug,
+          billing_month: billingMonth,
+          package_messages: packageMessages,
+          unit_price_brl: unitPriceBrl,
+          total_price_brl: totalPriceBrl,
+          notes: cleanNotes,
+        },
+        reason: `Contratação de pacote extra (+${packageMessages.toLocaleString("pt-BR")} msgs enviadas)`,
+        status: "success",
+      })
+    } catch {
+      // auditoria não-bloqueante
+    }
+
+    try {
+      revalidatePath("/companies")
+      revalidatePath("/paineladmin")
+      revalidatePath("/admin-settings")
+      revalidatePath("/audit")
+    } catch {
+      // ignora em testes
+    }
+
+    return {
+      success: true,
+      data: {
+        id: inserted.id,
+        billingMonth: inserted.billing_month,
+        packageMessages: Number(inserted.package_messages),
+        unitPriceBrl: Number(inserted.unit_price_brl),
+        totalPriceBrl: Number(inserted.total_price_brl),
+        status: "active",
+        notes: inserted.notes || null,
+        createdAt: inserted.created_at,
+      },
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro inesperado ao adicionar pacote." }
+  }
+}
+
+/**
+ * SuperAdmin: Cancela/estorna um pacote adicional do mês vigente
+ */
+export async function cancelCompanyAddonPackageAction(
+  companyId: string,
+  addonId: string
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { operator, user } = await requirePlatformAdmin()
+    if (!companyId || !addonId) {
+      return { success: false, error: "Empresa ou pacote inválido." }
+    }
+
+    const adminClient = createAdminClient()
+    const { data: existing, error: fetchErr } = await adminClient
+      .from("company_message_addons")
+      .select("id, company_id, billing_month, package_messages, total_price_brl, status")
+      .eq("id", addonId)
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    if (fetchErr || !existing) {
+      return { success: false, error: "Pacote adicional não encontrado para esta empresa." }
+    }
+
+    const { error: updateErr } = await adminClient
+      .from("company_message_addons")
+      .update({
+        status: "cancelled",
+      })
+      .eq("id", addonId)
+      .eq("company_id", companyId)
+
+    if (updateErr) {
+      return { success: false, error: `Falha ao cancelar pacote: ${updateErr.message}` }
+    }
+
+    try {
+      await adminClient.from("platform_audit_logs").insert({
+        actor_id: operator?.id || user?.id,
+        actor_email: operator?.email || user?.email || "admin@ellevee.com",
+        action: "company.addon_cancelled",
+        target_company_id: companyId,
+        payload_summary: {
+          addon_id: addonId,
+          billing_month: existing.billing_month,
+          package_messages: existing.package_messages,
+          total_price_brl: existing.total_price_brl,
+        },
+        reason: "Cancelamento/estorno de pacote extra pelo SuperAdmin",
+        status: "success",
+      })
+    } catch {
+      // auditoria não-bloqueante
+    }
+
+    try {
+      revalidatePath("/companies")
+      revalidatePath("/paineladmin")
+      revalidatePath("/admin-settings")
+      revalidatePath("/audit")
+    } catch {
+      // ignora em testes
+    }
+
+    return { success: true, data: { id: addonId } }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro inesperado ao cancelar pacote." }
   }
 }

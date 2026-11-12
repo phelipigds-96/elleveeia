@@ -86,6 +86,7 @@ if (!fs.existsSync(migrationsDir)) {
     '2026111201_engine_reliability_2b.sql',
     '2026111202_enterprise_observability_3a.sql',
     '2026111203_enterprise_governance_3b.sql',
+    '2026111204_overage_and_addon_packages.sql',
   ]
   for (const reqFile of requiredEnterpriseMigrations) {
     if (!sqlFiles.includes(reqFile)) {

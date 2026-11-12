@@ -59,22 +59,47 @@ export async function updatePlatformPlanAction(
     if (updates.badge !== undefined) dbPayload.badge = updates.badge
     if (updates.isPopular !== undefined) dbPayload.is_popular = updates.isPopular
     if (updates.active !== undefined) dbPayload.active = updates.active
+    if (updates.addonPackageUnitPriceBrl !== undefined) {
+      dbPayload.addon_package_unit_price_brl = Math.max(0, Number(updates.addonPackageUnitPriceBrl) || 0)
+    }
+    if (updates.overageUnitPriceBrl !== undefined) {
+      dbPayload.overage_unit_price_brl = Math.max(0, Number(updates.overageUnitPriceBrl) || 0)
+    }
     if (updates.features !== undefined) dbPayload.features = updates.features
 
+    const fullUpsertRow = {
+      ...dbPayload,
+      name: dbPayload.name || defPlan.name,
+      description: dbPayload.description || defPlan.description,
+      features: dbPayload.features || defPlan.features,
+    }
+
     let persistedRow: any = null
-    const { data: updatedDb, error: updateErr } = await adminClient
+    let { data: updatedDb, error: updateErr } = await adminClient
       .from("platform_plans")
-      .upsert(
-        {
-          ...dbPayload,
-          name: dbPayload.name || defPlan.name,
-          description: dbPayload.description || defPlan.description,
-          features: dbPayload.features || defPlan.features,
-        },
-        { onConflict: "key" }
-      )
+      .upsert(fullUpsertRow, { onConflict: "key" })
       .select("*")
       .single()
+
+    // Fallback gracioso caso a migration 2026111204 ainda nao tenha sido aplicada no banco
+    if (
+      updateErr &&
+      (String(updateErr.code || "") === "42703" ||
+        String(updateErr.message || "").toLowerCase().includes("column"))
+    ) {
+      const {
+        addon_package_unit_price_brl: _ignoreAddonPrice,
+        overage_unit_price_brl: _ignoreOveragePrice,
+        ...legacyUpsertRow
+      } = fullUpsertRow
+      const retryRes = await adminClient
+        .from("platform_plans")
+        .upsert(legacyUpsertRow, { onConflict: "key" })
+        .select("*")
+        .single()
+      updatedDb = retryRes.data
+      updateErr = retryRes.error
+    }
 
     if (!updateErr && updatedDb) {
       persistedRow = updatedDb
@@ -105,6 +130,8 @@ export async function updatePlatformPlanAction(
       const changesSummary = [
         updates.priceMonthly !== undefined ? `R$ ${updates.priceMonthly}/mês` : null,
         updates.maxMonthlyMessages !== undefined ? `${updates.maxMonthlyMessages.toLocaleString("pt-BR")} msgs` : null,
+        updates.addonPackageUnitPriceBrl !== undefined ? `Pacote R$ ${updates.addonPackageUnitPriceBrl.toFixed(2)}/msg` : null,
+        updates.overageUnitPriceBrl !== undefined ? `Avulso R$ ${updates.overageUnitPriceBrl.toFixed(2)}/msg` : null,
         updates.maxAgents !== undefined ? `${updates.maxAgents} agentes` : null,
         updates.defaultAiModel ? `Modelo: ${updates.defaultAiModel}` : null,
       ]
@@ -154,6 +181,18 @@ export async function updatePlatformPlanAction(
       badge: updates.badge !== undefined ? updates.badge : persistedRow?.badge !== undefined ? persistedRow.badge : defPlan.badge,
       isPopular: updates.isPopular !== undefined ? updates.isPopular : persistedRow?.is_popular !== undefined ? Boolean(persistedRow.is_popular) : defPlan.isPopular,
       active: updates.active !== undefined ? updates.active : persistedRow?.active !== undefined ? Boolean(persistedRow.active) : defPlan.active,
+      addonPackageUnitPriceBrl:
+        updates.addonPackageUnitPriceBrl !== undefined
+          ? updates.addonPackageUnitPriceBrl
+          : persistedRow?.addon_package_unit_price_brl !== undefined && persistedRow?.addon_package_unit_price_brl !== null
+            ? Number(persistedRow.addon_package_unit_price_brl)
+            : defPlan.addonPackageUnitPriceBrl,
+      overageUnitPriceBrl:
+        updates.overageUnitPriceBrl !== undefined
+          ? updates.overageUnitPriceBrl
+          : persistedRow?.overage_unit_price_brl !== undefined && persistedRow?.overage_unit_price_brl !== null
+            ? Number(persistedRow.overage_unit_price_brl)
+            : defPlan.overageUnitPriceBrl,
       updatedAt: new Date().toISOString(),
     }
 

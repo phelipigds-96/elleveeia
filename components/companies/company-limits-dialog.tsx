@@ -31,6 +31,8 @@ export default function CompanyLimitsDialog({
   const [allowGemini, setAllowGemini] = useState(true)
   const [allowAnthropic, setAllowAnthropic] = useState(false)
   const [requireCloseReason, setRequireCloseReason] = useState(false)
+  const [customAddonPriceInput, setCustomAddonPriceInput] = useState<string>("")
+  const [customOveragePriceInput, setCustomOveragePriceInput] = useState<string>("")
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -42,6 +44,12 @@ export default function CompanyLimitsDialog({
       setAllowGemini(company.aiProvider === "gemini" || company.aiProvider === "hybrid")
       setAllowAnthropic(false)
       setRequireCloseReason(Boolean(company.requireCloseReason))
+      setCustomAddonPriceInput(
+        company.addonUnitPriceBrl !== undefined ? String(company.addonUnitPriceBrl) : ""
+      )
+      setCustomOveragePriceInput(
+        company.overageUnitPriceBrl !== undefined ? String(company.overageUnitPriceBrl) : ""
+      )
     }
   }, [company])
 
@@ -56,12 +64,19 @@ export default function CompanyLimitsDialog({
       if (allowAnthropic) allowedProviders.push("anthropic")
       if (allowedProviders.length === 0) allowedProviders.push("gemini")
 
+      const parsedAddonPrice =
+        customAddonPriceInput.trim() === "" ? null : Math.max(0, Number(customAddonPriceInput) || 0)
+      const parsedOveragePrice =
+        customOveragePriceInput.trim() === "" ? null : Math.max(0, Number(customOveragePriceInput) || 0)
+
       const result = await updateCompanyLimitsAction(company.id, {
         maxMonthlyMessages: messagesLimit,
         maxAgents: maxAgents,
         allowedLlmProviders: allowedProviders,
         tokensLimit: tokensLimit,
         requireCloseReason,
+        customAddonUnitPriceBrl: parsedAddonPrice,
+        customOverageUnitPriceBrl: parsedOveragePrice,
       })
 
       if (result.success) {
@@ -83,6 +98,8 @@ export default function CompanyLimitsDialog({
             maxAgents,
             aiProvider: providerUI,
             requireCloseReason,
+            addonUnitPriceBrl: parsedAddonPrice ?? company.addonUnitPriceBrl,
+            overageUnitPriceBrl: parsedOveragePrice ?? company.overageUnitPriceBrl,
           })
         }
 
@@ -134,8 +151,40 @@ export default function CompanyLimitsDialog({
             disabled={isSaving}
           />
           <p className="text-[11px] text-ellevee-text-secondary">
-            Total de mensagens que o motor de atendimento (humano e IA) pode transacionar por mês.
+            Total de mensagens enviadas (IA + Humano) incluídas na franquia mensal sem pausa automática.
           </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-ellevee-border">
+            <div>
+              <label className="text-[10px] font-medium text-ellevee-text-secondary block mb-1">
+                Tarifa Bloco Extra (R$/msg env.)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Padrão do plano (0.04)"
+                value={customAddonPriceInput}
+                onChange={(e) => setCustomAddonPriceInput(e.target.value)}
+                className="bg-white font-mono text-xs h-8 border-ellevee-border text-ellevee-deep-ink"
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-ellevee-text-secondary block mb-1">
+                Tarifa Avulso Excedente (R$/msg env.)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Padrão do plano (0.07)"
+                value={customOveragePriceInput}
+                onChange={(e) => setCustomOveragePriceInput(e.target.value)}
+                className="bg-white font-mono text-xs h-8 border-ellevee-border text-ellevee-deep-ink"
+                disabled={isSaving}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Limite de Tokens */}
