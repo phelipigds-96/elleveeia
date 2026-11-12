@@ -33,11 +33,11 @@ export interface GlobalEvolutionConfig {
  * 2. Fallback para variáveis de ambiente (EVOLUTION_API_URL, EVOLUTION_API_KEY)
  */
 export async function getGlobalEvolutionConfig(): Promise<GlobalEvolutionConfig> {
-  const adminClient = createAdminClient()
   let apiUrl = process.env.EVOLUTION_API_URL || ''
   let apiKey = process.env.EVOLUTION_API_KEY || ''
 
   try {
+    const adminClient = createAdminClient()
     // 1. Procura pela empresa Ellevee Admin
     const { data: adminCompany } = await adminClient
       .from('companies')
@@ -219,29 +219,32 @@ export async function resolveEvolutionContext(targetCompanyId?: string) {
   let instanceName = ''
   let hasSpecificIntegration = false
 
-  const adminClient = createAdminClient()
-
   // 2. Se temos companyId, busca a instância vinculada à empresa
   if (companyId) {
-    const { data: integration } = await adminClient
-      .from('integrations')
-      .select('config, credentials, status')
-      .eq('company_id', companyId)
-      .eq('type', 'whatsapp_evolution')
-      .maybeSingle()
+    try {
+      const adminClient = createAdminClient()
+      const { data: integration } = await adminClient
+        .from('integrations')
+        .select('config, credentials, status')
+        .eq('company_id', companyId)
+        .eq('type', 'whatsapp_evolution')
+        .maybeSingle()
 
-    if (integration) {
-      hasSpecificIntegration = true
-      if (integration.config?.instance_name) {
-        instanceName = integration.config.instance_name
+      if (integration) {
+        hasSpecificIntegration = true
+        if (integration.config?.instance_name) {
+          instanceName = integration.config.instance_name
+        }
+        // Se a empresa tiver uma URL ou chave própria (dedicada), sobrepõe a global
+        if (integration.config?.api_url) {
+          apiUrl = integration.config.api_url
+        }
+        if (integration.credentials?.api_key) {
+          apiKey = integration.credentials.api_key
+        }
       }
-      // Se a empresa tiver uma URL ou chave própria (dedicada), sobrepõe a global
-      if (integration.config?.api_url) {
-        apiUrl = integration.config.api_url
-      }
-      if (integration.credentials?.api_key) {
-        apiKey = integration.credentials.api_key
-      }
+    } catch (dbErr) {
+      console.warn('[WhatsAppEvolution] Falha ao consultar integrations da empresa:', dbErr)
     }
   }
 
@@ -786,3 +789,72 @@ export async function deleteEvolutionInstanceOnServer(params: {
     return { success: false, error: err?.message || 'Falha ao deletar instância na Evolution API.' }
   }
 }
+
+/**
+ * Baixa o base64 de uma mensagem de mídia diretamente da Evolution API (v2.x).
+ * Usado como fallback resiliente quando webhooks (ex: n8n) chegam sem o payload base64.
+ */
+export async function fetchEvolutionMediaBase64(params: {
+  companyId?: string
+  instanceName?: string
+  messageExternalId: string
+  apiUrl?: string
+  apiKey?: string
+}): Promise<{ base64?: string; mimetype?: string; mediaType?: string; error?: string }> {
+  const cleanMessageId = params.messageExternalId.replace(/^evolution-/, '').trim()
+  if (!cleanMessageId) {
+    return { error: 'messageExternalId inválido' }
+  }
+
+  const ctx = await resolveEvolutionContext(params.companyId)
+  const apiUrl = (params.apiUrl || ctx.apiUrl || '').trim().replace(/\/+$/, '')
+  const apiKey = (params.apiKey || ctx.apiKey || '').trim()
+  const instanceName = (params.instanceName || ctx.instanceName || '').trim()
+
+  if (!apiUrl || !apiKey || !instanceName) {
+    return { error: 'Evolution API ou instância não configurada para download de mídia' }
+  }
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 12000)
+
+    const endpoint = `${apiUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify({
+        message: {
+          key: {
+            id: cleanMessageId,
+          },
+        },
+        convertToMp4: false,
+      }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      return { error: `Evolution getBase64 HTTP ${response.status}: ${errText.slice(0, 200)}` }
+    }
+
+    const data = await response.json().catch(() => null)
+    if (!data?.base64) {
+      return { error: 'Evolution API não retornou campo base64' }
+    }
+
+    return {
+      base64: data.base64,
+      mimetype: data.mimetype,
+      mediaType: data.mediaType,
+    }
+  } catch (err: any) {
+    return { error: err?.message || 'Falha na requisição getBase64FromMediaMessage' }
+  }
+}
+

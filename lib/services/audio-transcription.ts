@@ -7,6 +7,8 @@ export interface ProcessInboundMediaParams {
   base64?: string
   mediaUrl?: string
   currentContent?: string
+  instanceName?: string
+  messageExternalId?: string
 }
 
 export interface ProcessInboundMediaResult {
@@ -37,9 +39,38 @@ export async function processInboundMedia(
     return { mediaUrl, transcription, mediaType }
   }
 
-  const cleanBase64 = params.base64
+  let cleanBase64 = params.base64
     ? params.base64.replace(/^data:(image|audio|application)\/[a-zA-Z0-9.-]+;base64,/, '').trim()
     : null
+
+  // Fallback resiliente: se o webhook não trouxe base64 (ex: n8n sem payload de mídia ou webhookBase64=false),
+  // busca o arquivo de mídia diretamente na Evolution API sob demanda
+  if (!cleanBase64 && params.messageExternalId) {
+    try {
+      const { fetchEvolutionMediaBase64 } = await import('@/lib/services/whatsapp-evolution')
+      const evoMedia = await fetchEvolutionMediaBase64({
+        companyId: params.companyId,
+        instanceName: params.instanceName,
+        messageExternalId: params.messageExternalId,
+      })
+      if (evoMedia.base64) {
+        cleanBase64 = evoMedia.base64
+          .replace(/^data:(image|audio|application)\/[a-zA-Z0-9.-]+;base64,/, '')
+          .trim()
+        if (evoMedia.mediaType && !params.mediaType) {
+          mediaType = evoMedia.mediaType.includes('image')
+            ? 'image'
+            : evoMedia.mediaType.includes('document')
+            ? 'document'
+            : 'audio'
+        }
+      } else if (evoMedia.error) {
+        console.warn(`[InboundMedia] Aviso ao buscar mídia na Evolution (${params.messageExternalId}):`, evoMedia.error)
+      }
+    } catch (evoErr: any) {
+      console.warn('[InboundMedia] Falha ao tentar fallback na Evolution API:', evoErr?.message || evoErr)
+    }
+  }
 
   if (!cleanBase64) {
     return { mediaUrl, transcription, mediaType }
