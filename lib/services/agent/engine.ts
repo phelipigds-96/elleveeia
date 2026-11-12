@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
+import { estimateLlmCostUsd, isMissingSchemaFeatureError } from '@/lib/services/platform/tenant-governance'
 import { buildAgentContext } from './context-builder'
 import { getLLMProvider } from '../llm/factory'
 import type { LLMProviderType, LLMRequestMessage, LLMProvider } from '../llm/types'
@@ -30,6 +31,8 @@ export interface AgentRunParams {
   adminClient?: any
   llmProvider?: LLMProvider
   persistMessage?: boolean
+  triggerEventId?: string
+  webhookEventId?: string
 }
 
 export interface AgentRunResult {
@@ -107,7 +110,9 @@ export async function runAgentEngine({
   skipCustomerMessageInsert = false,
   adminClient,
   llmProvider,
-  persistMessage = true
+  persistMessage = true,
+  triggerEventId,
+  webhookEventId
 }: AgentRunParams): Promise<AgentRunResult> {
   const supabase = adminClient || createAdminClient()
   const startTime = Date.now()
@@ -451,7 +456,9 @@ export async function runAgentEngine({
         handoff_triggered: handoffTriggered,
         executed_tools: executedTools.map(t => ({ tool: t.name, success: t.success })),
         has_active_quote: Boolean(newWorkingMemory.activeQuote?.id),
-        quote_id: newWorkingMemory.activeQuote?.id || null
+        quote_id: newWorkingMemory.activeQuote?.id || null,
+        trigger_event_id: triggerEventId || null,
+        webhook_event_id: webhookEventId || null
       },
       context: {
         history_messages_available: contextMetrics.availableMessages,
@@ -470,6 +477,13 @@ export async function runAgentEngine({
       runMetadata.tool_calls = executedTools
     }
 
+    const estimatedCostUsd = estimateLlmCostUsd(
+      providerUsed,
+      modelUsed,
+      usageMetrics.prompt_tokens,
+      usageMetrics.completion_tokens
+    )
+
     await logAgentRun(supabase, {
       companyId, 
       agentId, 
@@ -479,7 +493,10 @@ export async function runAgentEngine({
       model: modelUsed, 
       usageMetrics, 
       duration: Date.now() - startTime,
-      metadata: runMetadata
+      metadata: runMetadata,
+      correlationEventId: triggerEventId,
+      webhookEventId,
+      estimatedCostUsd
     })
 
     return {
@@ -518,14 +535,37 @@ export async function runAgentEngine({
     }
 
     const errMetadata: any = {
-      tools_available: scopedTools.map(t => t.name)
+      tools_available: scopedTools.map(t => t.name),
+      orchestration: {
+        trigger_event_id: triggerEventId || null,
+        webhook_event_id: webhookEventId || null
+      }
     }
     if (executedTools.length > 0) {
       errMetadata.tool_calls = executedTools
     }
 
+    const estimatedCostUsd = estimateLlmCostUsd(
+      providerUsed,
+      modelUsed,
+      usageMetrics.prompt_tokens,
+      usageMetrics.completion_tokens
+    )
+
     await logAgentRun(supabase, {
-      companyId, agentId, conversationId, status: runStatus, provider: providerUsed, model: modelUsed, usageMetrics, duration: Date.now() - startTime, errorMessage: runErrorMessage, metadata: errMetadata
+      companyId,
+      agentId,
+      conversationId,
+      status: runStatus,
+      provider: providerUsed,
+      model: modelUsed,
+      usageMetrics,
+      duration: Date.now() - startTime,
+      errorMessage: runErrorMessage,
+      metadata: errMetadata,
+      correlationEventId: triggerEventId,
+      webhookEventId,
+      estimatedCostUsd
     }).catch(console.error)
 
     console.error('[Agent Engine Error]', error)
@@ -541,8 +581,22 @@ export async function runAgentEngine({
   }
 }
 
-async function logAgentRun(supabase: any, { companyId, agentId, conversationId, status, provider, model, usageMetrics, duration, errorMessage, metadata }: any) {
-  const payload: any = {
+export async function logAgentRun(supabase: any, {
+  companyId,
+  agentId,
+  conversationId,
+  status,
+  provider,
+  model,
+  usageMetrics,
+  duration,
+  errorMessage,
+  metadata,
+  correlationEventId,
+  webhookEventId,
+  estimatedCostUsd
+}: any) {
+  const legacyPayload: any = {
     company_id: companyId,
     agent_id: agentId,
     conversation_id: conversationId,
@@ -557,8 +611,23 @@ async function logAgentRun(supabase: any, { companyId, agentId, conversationId, 
   }
   
   if (metadata) {
-    payload.metadata = sanitizeLogMetadata(metadata)
+    legacyPayload.metadata = sanitizeLogMetadata(metadata)
   }
 
-  await supabase.from('agent_runs').insert(payload)
+  const fullPayload: any = {
+    ...legacyPayload,
+    estimated_cost_usd: Number.isFinite(Number(estimatedCostUsd)) ? Number(estimatedCostUsd) : 0
+  }
+  if (correlationEventId) {
+    fullPayload.correlation_event_id = correlationEventId
+  }
+  if (webhookEventId) {
+    fullPayload.webhook_event_id = webhookEventId
+  }
+
+  const insertResult = await supabase.from('agent_runs').insert(fullPayload)
+  const insertError = insertResult?.error
+  if (insertError && isMissingSchemaFeatureError(insertError)) {
+    await supabase.from('agent_runs').insert(legacyPayload)
+  }
 }

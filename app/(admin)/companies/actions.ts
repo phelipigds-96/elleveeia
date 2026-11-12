@@ -155,10 +155,22 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       }
     }
 
-  // 2. Consulta quantidade real de mensagens por tenant para cálculo de consumo
-  const { data: messagesData } = await adminClient
-    .from("messages")
-    .select("company_id")
+  const now = new Date()
+  const monthStartIso = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
+  ).toISOString()
+
+  // 2. Consulta quantidade real de mensagens e tokens LLM do mês corrente por tenant
+  const [{ data: messagesData }, { data: agentRunsData }] = await Promise.all([
+    adminClient
+      .from("messages")
+      .select("company_id")
+      .gte("created_at", monthStartIso),
+    adminClient
+      .from("agent_runs")
+      .select("company_id, total_tokens")
+      .gte("created_at", monthStartIso),
+  ])
 
   const messagesCountMap = new Map<string, number>()
   if (messagesData) {
@@ -167,6 +179,18 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
         messagesCountMap.set(
           msg.company_id,
           (messagesCountMap.get(msg.company_id) || 0) + 1
+        )
+      }
+    }
+  }
+
+  const tokensCountMap = new Map<string, number>()
+  if (agentRunsData) {
+    for (const run of agentRunsData) {
+      if (run.company_id) {
+        tokensCountMap.set(
+          run.company_id,
+          (tokensCountMap.get(run.company_id) || 0) + Math.max(0, Number(run.total_tokens) || 0)
         )
       }
     }
@@ -278,7 +302,7 @@ export async function getCompaniesList(): Promise<CompanyMock[]> {
       maxAgents,
       messagesUsed: msgsUsed,
       messagesLimit,
-      tokensUsed: Math.round(msgsUsed * 75),
+      tokensUsed: tokensCountMap.get(c.id) || 0,
       tokensLimit,
       aiProvider: providerUI,
       createdAt: c.created_at ? c.created_at.split("T")[0] : new Date().toISOString().split("T")[0],

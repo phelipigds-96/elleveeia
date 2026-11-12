@@ -11,6 +11,12 @@ import {
   type OperationalTelemetrySummary,
   type ReprocessDeadLetterResult,
 } from "@/lib/services/platform/observability"
+import {
+  getTenantGovernanceReport,
+  traceEventCorrelation,
+  type TenantGovernanceReport,
+  type EventCorrelationTrace,
+} from "@/lib/services/platform/tenant-governance"
 
 function safeRevalidateObservabilityPaths() {
   try {
@@ -224,5 +230,39 @@ export async function reprocessWebhookDlqAction(webhookEventId: string): Promise
     return { success: true, result: res, telemetry }
   } catch (err: any) {
     return { success: false, error: err?.message || "Erro ao reprocessar evento webhook." }
+  }
+}
+
+export async function refreshTenantGovernanceAction(daysWindow = 30): Promise<{
+  success: boolean
+  data?: TenantGovernanceReport
+  error?: string
+}> {
+  try {
+    await requirePlatformAdmin()
+    const report = await getTenantGovernanceReport({ daysWindow })
+    return { success: true, data: report }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Falha ao consolidar governança e custos multi-tenant.",
+    }
+  }
+}
+
+export async function traceEventCorrelationAction(query: string): Promise<{
+  success: boolean
+  data?: EventCorrelationTrace
+  error?: string
+}> {
+  try {
+    await requirePlatformAdmin()
+    const trace = await traceEventCorrelation(query)
+    return { success: true, data: trace }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Falha ao rastrear correlação do evento.",
+    }
   }
 }
