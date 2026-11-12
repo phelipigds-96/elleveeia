@@ -15,7 +15,11 @@ import {
   extractAvailableSizes,
   applyCommercialStrategy
 } from '@/lib/services/agent/commercial-strategy'
-import { resolveToolScope } from '@/lib/services/agent/tool-scoping'
+import {
+  resolveToolScope,
+  hasClearProductIntent,
+  COMPLAINT_AND_FRUSTRATION_PATTERNS
+} from '@/lib/services/agent/tool-scoping'
 
 test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil', async (t) => {
   await t.test('1. isWorkingMemoryExpired lida com valores vazios e inválidos sem explodir', () => {
@@ -236,5 +240,72 @@ test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil
 
     assert.ok(names.includes('transferir_para_humano'), 'Deve disponibilizar transferir_para_humano no checkout')
     assert.ok(names.includes('gerar_orcamento'), 'Deve disponibilizar gerar_orcamento no checkout')
+  })
+
+  await t.test('12. hasClearProductIntent retorna false para reclamações, termos de SAC e clientes nervosos', () => {
+    // Mesmo contendo palavras de produtos ("chocolate", "sicao", "leite"), não deve tratar como intenção de compra
+    assert.strictEqual(
+      hasClearProductIntent('comprei um chocolate sicao ontem e veio estragado, que absurdo'),
+      false,
+      'Produto estragado é reclamação, não busca comercial'
+    )
+    assert.strictEqual(
+      hasClearProductIntent('veio faltando duas barras de chocolate na entrega, quero meu dinheiro de volta'),
+      false,
+      'Item faltando / estorno é reclamação'
+    )
+    assert.strictEqual(
+      hasClearProductIntent('esse robo inútil não resolve nada, vou no procon'),
+      false,
+      'Frustração com robô e menção a procon não é busca de catálogo'
+    )
+    assert.strictEqual(
+      hasClearProductIntent('estou muito irritado com esse atendimento péssimo'),
+      false,
+      'Cliente irritado não é busca de catálogo'
+    )
+  })
+
+  await t.test('13. resolveToolScope isola transferir_para_humano e bloqueia ferramentas comerciais em reclamações', () => {
+    const allTools = [
+      { name: 'consultar_produto_comercial', metadata: { category: 'commercial' } },
+      { name: 'calcular_preco_produto', metadata: { category: 'commercial' } },
+      { name: 'gerar_orcamento', metadata: { category: 'quotes' } },
+      { name: 'transferir_para_humano', metadata: { category: 'general' } }
+    ] as any
+
+    const cartMemory: WorkingMemory = {
+      activeCart: [
+        {
+          productId: 'prod-genuine',
+          name: 'COB. GENUINE BARRA BRANCO (1KG)',
+          quantity: 2,
+          unitPrice: 39.49,
+          subtotal: 78.98,
+          isPriceConfirmed: true
+        }
+      ]
+    }
+
+    // Caso 1: Reclamação com menção a produto
+    const tools1 = resolveToolScope(
+      'Comprei um chocolate sicao e veio estragado, quero falar com o gerente',
+      [],
+      allTools,
+      cartMemory
+    )
+    const names1 = tools1.map((t: any) => t.name)
+    assert.deepStrictEqual(names1, ['transferir_para_humano'], 'Deve conter apenas transferir_para_humano')
+    assert.strictEqual(names1.includes('consultar_produto_comercial'), false, 'Não pode vazar busca de produto')
+    assert.strictEqual(names1.includes('gerar_orcamento'), false, 'Não pode gerar orçamento')
+
+    // Caso 2: Irritação com atendimento e ameaça de procon
+    const tools2 = resolveToolScope(
+      'Que atendimento horrível, atendimento de robô inútil, vou entrar no procon!',
+      [],
+      allTools
+    )
+    const names2 = tools2.map((t: any) => t.name)
+    assert.deepStrictEqual(names2, ['transferir_para_humano'], 'Deve conter apenas transferir_para_humano')
   })
 })

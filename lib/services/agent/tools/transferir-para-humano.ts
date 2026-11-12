@@ -19,7 +19,7 @@ export const transferirParaHumanoSchema = z.object({
 export const transferirParaHumanoTool: ToolDefinition = {
   name: 'transferir_para_humano',
   description:
-    'Transfere o atendimento da IA para um atendente humano da equipe. Deve ser chamada OBRIGATORIAMENTE quando o cliente fechar/concluir o pedido (para conferência de estoque físico e separação/retirada/pagamento), quando solicitar falar com uma pessoa/vendedor ou quando não for possível resolver pela IA.',
+    'Transfere o atendimento da IA para um atendente humano da equipe. Deve ser chamada OBRIGATORIAMENTE quando o cliente manifestar reclamação, insatisfação, raiva ou problema com pedido/produto, no fechamento/conclusão de pedidos (para conferência de estoque físico e separação/retirada), quando solicitar falar com uma pessoa/vendedor ou quando não for possível resolver pela IA.',
   schema: transferirParaHumanoSchema,
   metadata: {
     category: 'general',

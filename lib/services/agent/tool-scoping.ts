@@ -125,6 +125,34 @@ const ORDER_CLOSURE_PATTERNS = [
 ]
 
 /**
+ * Padrões de reclamação, insatisfação, problemas com pedidos/produtos, termos jurídicos
+ * ou frustração/nervosismo do cliente com o atendimento ou com a IA.
+ */
+export const COMPLAINT_AND_FRUSTRATION_PATTERNS = [
+  // Reclamações de produto / pedido
+  /\b(?:reclamar?|reclamacao|reclamacoes|ouvidoria|sac)\b/i,
+  /\b(?:produto|pedido|item|compra|mercadoria|encomenda)\s+(?:veio|estava?|ta|chegou|ficou)\s+(?:estragad[oa]|vencid[oa]|quebrad[oa]|mofad[oa]|azed[oa]|errad[oa]|danificad[oa]|estragou|passou\s+da\s+validade|podre|abert[oa]|violad[oa])\b/i,
+  /\b(?:veio|chegou|mandaram|entregaram)\s+(?:errad[oa]|faltando|estragad[oa]|quebrad[oa]|vencid[oa]|incomplet[oa]|violad[oa])\b/i,
+  /\b(?:faltou|nao\s+veio|nao\s+chegou|nao\s+recebi|sumiu)\s+(?:o|a|os|as|meu|minha|meus|minhas|um|uma)?\s*(?:item|produto|pedido)\b/i,
+  /\b(?:estorno|estornar|devolver|devolucao|reembolso|reembolsar|ressarcir|ressarcimento|trocar\s+o\s+produto)\b/i,
+  /\b(?:devolve|devolva|quero)\s+(?:meu\s+)?dinheiro(?:\s+de\s+volta)?\b/i,
+  /\b(?:cobranca\s+indevida|cobrou\s+a\s+mais|cobraram\s+errado|valor\s+errado)\b/i,
+
+  // Insatisfação, raiva, indignação
+  /\b(?:pessimo|horrivel|terrivel|porcaria|lixo|vergonha|absurdo|palhacada|falta\s+de\s+respeito|descaso|enganacao|golpe)\b/i,
+  /\b(?:estou|to|fiquei|estamos)\s+(?:nervos[oa]|indignad[oa]|irritad[oa]|p\s*da\s*vida|put[oa]|revoltad[oa]|cansad[oa]|furios[oa]|chatead[oa]|estressad[oa]|decepcionad[oa])\b/i,
+  /\b(?:nunca\s+mais\s+compro|vou\s+cancelar\s+tudo|perdi\s+a\s+paciencia|que\s+merda|que\s+saco)\b/i,
+
+  // Ameaças jurídicas / órgãos de defesa
+  /\b(?:procon|pequenas\s+causas|processar|processo|advogad[oa]|justica|denunciar|denuncia|policia|delegacia)\b/i,
+
+  // Frustração direcionada ao robô / IA
+  /\b(?:robo|ia|inteligencia\s+artificial|maquina)\s+(?:burr[oa]|inutil|chato|chata|idiota|nao\s+entende|nao\s+ajuda|incompetente|lerdo|ruim)\b/i,
+  /\b(?:nao\s+quero\s+falar\s+com\s+robo|para\s+de\s+falar\s+besteira|voce\s+nao\s+entende\s+nada|nao\s+resolve\s+nada)\b/i,
+  /\b(?:chama|quero|passa)\s+(?:o|um|uma)?\s*(?:gerente|responsavel|dono|supervisor|supervisora)\b/i
+]
+
+/**
  * Verifica se a mensagem possui intenção clara de produto ou consulta comercial.
  * Usado pelo engine para evitar disparar fallbacks determinísticos em mensagens
  * puramente institucionais, encerramentos ou dúvidas gerais.
@@ -135,9 +163,10 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
   const msg = normalizeText(userMessage)
   if (!msg) return false
 
-  // Se for encerramento ou pedido explícito de atendimento humano, nunca é intenção de produto
+  // Se for encerramento, pedido explícito de atendimento humano ou reclamação/frustração, nunca é intenção de produto
   if (CLOSING_PATTERNS.some(p => p.test(msg))) return false
   if (HANDOFF_PATTERNS.some(p => p.test(msg))) return false
+  if (COMPLAINT_AND_FRUSTRATION_PATTERNS.some(p => p.test(msg))) return false
 
   const words = msg.split(/\s+/)
   const GREETINGS = new Set([
@@ -262,6 +291,14 @@ export function resolveToolScope(
 
   if (isClosing) {
     return withCustomerNameTool([], availableTools, options, true) // Encerramento interrompe o fluxo comercial
+  }
+
+  // 2.1 Reclamação, insatisfação ou cliente nervoso: prioridade absoluta para handoff e desescalada
+  const isComplaintOrFrustration = COMPLAINT_AND_FRUSTRATION_PATTERNS.some(p => p.test(msg))
+  if (isComplaintOrFrustration) {
+    const handoffTool = availableTools.find(t => t.name === 'transferir_para_humano')
+    const selected: ToolDefinition[] = handoffTool ? [handoffTool] : []
+    return withCustomerNameTool(selected, availableTools, options, false)
   }
 
   const hasConfirmationWord = words.some(w => CONFIRMATION_WORDS.has(w))

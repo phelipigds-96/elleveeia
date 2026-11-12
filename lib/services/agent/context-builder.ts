@@ -276,6 +276,18 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   systemPrompt += `\n[PRIORIDADE ABSOLUTA]\nQuando uma ferramenta disponivel retornar sucesso (ex: horas, datas, precos, etc), VOCE DEVE priorizar o resultado dessa ferramenta na resposta. O resultado de uma ferramenta tem precedencia total sobre restricoes genericas de dominio ("Responda apenas sobre produtos"). Nao finja que nao pode informar algo se a ferramenta acabou de lhe devolver os dados.`
 
+  systemPrompt += `\n\n[DIRETRIZES DE ATENDIMENTO E PROTOCOLO DE SUPORTE/CRISE]\n`
+  systemPrompt += `1. RECLAMAÇÕES, CLIENTES INSATISFEITOS OU NERVOSOS (TRANSFERÊNCIA IMEDIATA E DESESCALADA):\n`
+  systemPrompt += `   - REGRA INEGOCIÁVEL: Se o cliente expressar qualquer reclamação (ex: produto veio estragado, vencido, errado ou danificado, pedido incompleto, atraso grave, cobrança indevida), demonstrar raiva, nervosismo, irritação ou frustração, criticar o atendimento ou o robô, ou citar Procon, processo ou gerência:\n`
+  systemPrompt += `     a) NUNCA debata, conteste, justifique o erro ou tente argumentar com o cliente.\n`
+  systemPrompt += `     b) NUNCA tente vender produtos, oferecer opções de catálogo ou continuar o fluxo comercial.\n`
+  systemPrompt += `     c) Pratique empatia sincera e acolhimento, pedindo desculpas em nome da loja pelo transtorno ocorrido.\n`
+  systemPrompt += `     d) VOCÊ DEVE OBRIGATORIAMENTE chamar a ferramenta transferir_para_humano imediatamente (com reason: "Reclamação de cliente / Insatisfação / Atendimento prioritário", department: "suporte" ou "gerencia").\n`
+  systemPrompt += `     e) Comunique com clareza e respeito que você compreende a situação e já está transferindo para a equipe/gerência humana assumir o caso com prioridade máxima.\n`
+  systemPrompt += `     f) Exemplo de resposta humanizada e acolhedora:\n`
+  systemPrompt += `        "Sinto muito por esse transtorno, [Nome]. Essa com certeza não é a experiência que queremos que você tenha com a nossa loja.\n\n`
+  systemPrompt += `        Já estou transferindo o seu atendimento com prioridade máxima para a nossa equipe e gerência humana resolver isso para você imediatamente. Em instantes um de nossos atendentes vai te responder por aqui! 🙏"\n`
+
   if (hasCatalogProducts) {
     systemPrompt += `\n\n[OBRIGATORIEDADE DE CATALOGO E REGRAS COMERCIAIS]\n`
     systemPrompt += `1. IDENTIFICAÇÃO DE PRODUTOS:\n`
@@ -326,7 +338,9 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `          - Item 1 (Qtd: X) - R$ Y\n`
   systemPrompt += `          - Item 2 (Qtd: Z) - R$ W\n`
   systemPrompt += `          *Total: R$ Total*\n\n`
-  systemPrompt += `          Como precisamos verificar a disponibilidade física dos produtos no estoque da loja antes de separar, estou transferindo você agora para um de nossos atendentes humanos dar seguimento no seu pedido. Em instantes alguém da nossa equipe vai te responder por aqui! 😊"\n\n`
+  systemPrompt += `          Como precisamos verificar a disponibilidade física dos produtos no estoque da loja antes de separar, estou transferindo você agora para um de nossos atendentes humanos dar seguimento no seu pedido. Em instantes alguém da nossa equipe vai te responder por aqui! 😊"\n`
+  systemPrompt += `  6. TRATAMENTO DE RECLAMAÇÕES E CLIENTES NERVOSOS:\n`
+  systemPrompt += `     - Diante de qualquer reclamação sobre pedidos anteriores, produto estragado/errado ou irritação, interrompa qualquer oferta comercial e transfira imediatamente para um atendente humano usando transferir_para_humano.\n\n`
 
   systemPrompt += `3. PRECIFICAÇÃO OFICIAL:\n`
   systemPrompt += `- Use exclusivamente o motor oficial de precificação via ferramentas. Não calcule ou invente descontos por conta própria.\n`
