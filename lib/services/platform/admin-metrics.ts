@@ -40,6 +40,8 @@ export interface AdminDashboardMetrics {
     workerStatusText: string
     activeGatewayLocks: number
     stalledMessages: number
+    deadLetterCount?: number
+    lastCronRunAt?: string | null
   }
   recentActivity: Array<{
     id: string
@@ -126,6 +128,12 @@ export function humanizeAuditAction(action: string): {
       return { label: 'Suspensão', badgeVariant: 'destructive' }
     case 'company.status_changed':
       return { label: 'Status', badgeVariant: 'outline' }
+    case 'dlq.outbox_reprocessed':
+      return { label: 'Reenvio DLQ', badgeVariant: 'secondary' }
+    case 'dlq.webhook_reprocessed':
+      return { label: 'Replay DLQ', badgeVariant: 'secondary' }
+    case 'cron.manual_triggered':
+      return { label: 'Worker Cron', badgeVariant: 'outline' }
     default:
       return { label: action.replace(/[._]/g, ' '), badgeVariant: 'outline' }
   }
@@ -172,6 +180,20 @@ export function humanizeAuditDetails(action: string, payload: any, reason?: stri
     if (action === 'company.status_changed') {
       return `Status alterado de "${payload.previous_status || 'desconhecido'}" para "${payload.new_status || 'ativo'}"`
     }
+    if (action === 'dlq.outbox_reprocessed') {
+      const outcomeStr = payload.outcome ? ` (${payload.outcome})` : ''
+      return `Outbox ${payload.outbox_id || ''} reprocessada manualmente${outcomeStr}`.trim()
+    }
+    if (action === 'dlq.webhook_reprocessed') {
+      const outcomeStr = payload.outcome ? ` (${payload.outcome})` : ''
+      return `Webhook ${payload.event_id || payload.webhook_event_id || ''} reprocessado manualmente${outcomeStr}`.trim()
+    }
+    if (action === 'cron.manual_triggered') {
+      if (typeof payload.outbox_processed === 'number' || typeof payload.webhook_processed === 'number') {
+        return `Reconciliação manual: ${payload.outbox_processed ?? 0} outbox • ${payload.webhook_processed ?? 0} webhook(s)`
+      }
+      return `Reconciliação manual acionada${payload.triggered_by ? ` por ${payload.triggered_by}` : ''}`
+    }
   }
 
   if (reason) return reason
@@ -188,13 +210,16 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
     adminClient = createAdminClient()
   }
 
-  // 1. Consultas paralelas ao banco de dados Supabase
+  // 1. Consultas paralelas ao banco de dados Supabase + Telemetria operacional
+  const { getOperationalTelemetry } = await import('./observability')
+
   const [
     { data: companiesData },
     { data: messagesData },
     { data: conversationsData },
     { data: agentsData },
     { data: auditLogsData },
+    telemetry,
   ] = await Promise.all([
     adminClient
       .from('companies')
@@ -213,6 +238,7 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10),
+    getOperationalTelemetry({ adminClient, cronLimit: 20, dlqLimit: 20 }).catch(() => null),
   ])
 
   const companiesList: any[] = companiesData || []
@@ -339,6 +365,9 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
     else if (log.action === 'platform.impersonate_started') title = `Impersonate ativado em ${targetComp?.name || ''}`
     else if (log.action === 'platform.impersonate_stopped') title = `Impersonate finalizado`
     else if (log.action === 'company.status_changed') title = `Status alterado: ${targetComp?.name || ''}`
+    else if (log.action === 'dlq.outbox_reprocessed') title = `Reenvio manual DLQ: ${targetComp?.name || 'Outbox'}`
+    else if (log.action === 'dlq.webhook_reprocessed') title = `Replay manual DLQ: ${targetComp?.name || 'Webhook'}`
+    else if (log.action === 'cron.manual_triggered') title = `Worker Cron acionado manualmente`
 
     const description = humanizeAuditDetails(log.action, log.payload_summary, log.reason)
     const actor = log.actor_email || 'SuperAdmin'
@@ -384,7 +413,7 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
       total: totalMessages,
       today: todayMessages,
       thisMonth: thisMonthMessages,
-      slaPercent: 99.85,
+      slaPercent: telemetry?.llmHealth.slaPercent ?? 100,
     },
     conversations: {
       total: totalConversas,
@@ -400,14 +429,16 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
     agents: {
       total: totalAgents,
       active: activeAgents,
-      averageLatencySeconds: 1.1,
+      averageLatencySeconds: telemetry?.llmHealth.averageLatencySeconds ?? 0,
     },
     chart7Days,
     health: {
-      workerStatus: 'healthy',
-      workerStatusText: 'Operando normalmente',
-      activeGatewayLocks: 0,
-      stalledMessages: 0,
+      workerStatus: telemetry?.queueHealth.workerStatus ?? 'idle',
+      workerStatusText: telemetry?.queueHealth.workerStatusText ?? 'Aguardando telemetria do motor',
+      activeGatewayLocks: telemetry?.queueHealth.activeGatewayLocks ?? 0,
+      stalledMessages: telemetry?.queueHealth.stalledTotal ?? 0,
+      deadLetterCount: telemetry?.queueHealth.deadLetterTotal ?? 0,
+      lastCronRunAt: telemetry?.cronStats.lastRunAt ?? null,
     },
     recentActivity,
   }

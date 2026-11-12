@@ -288,8 +288,21 @@ export default async function SuperAdminDashboardPage() {
                     Saúde Operacional
                   </CardTitle>
                 </div>
-                <Badge variant="outline" className="text-[9px] uppercase font-mono text-emerald-800 bg-emerald-50 border-emerald-200">
-                  OPERACIONAL
+                <Badge
+                  variant="outline"
+                  className={
+                    metrics.health.workerStatus === "warning"
+                      ? "text-[9px] uppercase font-mono text-rose-800 bg-rose-50 border-rose-200"
+                      : metrics.health.workerStatus === "idle"
+                      ? "text-[9px] uppercase font-mono text-amber-800 bg-amber-50 border-amber-200"
+                      : "text-[9px] uppercase font-mono text-emerald-800 bg-emerald-50 border-emerald-200"
+                  }
+                >
+                  {metrics.health.workerStatus === "warning"
+                    ? "ATENÇÃO"
+                    : metrics.health.workerStatus === "idle"
+                    ? "AGUARDANDO"
+                    : "OPERACIONAL"}
                 </Badge>
               </div>
               <CardDescription className="text-xs text-ellevee-text-secondary mt-0.5 font-sans">
@@ -300,15 +313,31 @@ export default async function SuperAdminDashboardPage() {
             <CardContent className="pt-4 space-y-3">
               {/* 1. Worker de Reconciliação */}
               <div className="rounded-lg border border-ellevee-border p-3 bg-[#FBFBFA] space-y-1">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-xs gap-2">
                   <span className="font-semibold text-ellevee-deep-ink">Worker de Outbox & Mensageria</span>
-                  <span className="font-semibold text-emerald-700 flex items-center gap-1.5 font-sans text-[11px]">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Operando normalmente
+                  <span
+                    className={`font-semibold flex items-center gap-1.5 font-sans text-[11px] ${
+                      metrics.health.workerStatus === "warning"
+                        ? "text-rose-700"
+                        : metrics.health.workerStatus === "idle"
+                        ? "text-amber-700"
+                        : "text-emerald-700"
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        metrics.health.workerStatus === "warning"
+                          ? "bg-rose-500 animate-pulse"
+                          : metrics.health.workerStatus === "idle"
+                          ? "bg-amber-500"
+                          : "bg-emerald-500 animate-pulse"
+                      }`}
+                    />
+                    {metrics.health.workerStatusText}
                   </span>
                 </div>
                 <div className="text-[10px] text-ellevee-text-secondary font-mono">
-                  Despacho atômico de outbox e webhooks de entrada ativos
+                  {metrics.health.activeGatewayLocks} lock(s) em voo • Latência média IA {metrics.agents.averageLatencySeconds}s
                 </div>
               </div>
 
@@ -325,16 +354,29 @@ export default async function SuperAdminDashboardPage() {
                 </div>
               </div>
 
-              {/* 3. Mensagens Stalled */}
+              {/* 3. Mensagens Stalled & DLQ */}
               <div className="rounded-lg border border-ellevee-border p-3 bg-[#FBFBFA] space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-ellevee-deep-ink">Mensagens Travadas (Stalled)</span>
-                  <span className="font-mono font-semibold text-emerald-700 text-[11px]">
-                    0 travadas
+                  <span className="font-semibold text-ellevee-deep-ink">Pendências & Dead Letter Queue</span>
+                  <span
+                    className={`font-mono font-semibold text-[11px] ${
+                      metrics.health.stalledMessages > 0 || (metrics.health.deadLetterCount ?? 0) > 0
+                        ? "text-rose-700"
+                        : "text-emerald-700"
+                    }`}
+                  >
+                    {metrics.health.stalledMessages} travada(s) • {metrics.health.deadLetterCount ?? 0} DLQ
                   </span>
                 </div>
-                <div className="text-[10px] text-ellevee-text-secondary font-sans">
-                  Fila outbox saudável • Sem locks expirados
+                <div className="text-[10px] text-ellevee-text-secondary font-sans flex items-center justify-between gap-2">
+                  <span>
+                    {metrics.health.stalledMessages === 0 && (metrics.health.deadLetterCount ?? 0) === 0
+                      ? "Fila outbox saudável • Sem falhas pendentes"
+                      : "Itens aguardando reconciliação ou replay"}
+                  </span>
+                  <Link href="/admin-settings" className="text-[10px] font-semibold text-ellevee-purple hover:underline shrink-0">
+                    Inspecionar →
+                  </Link>
                 </div>
               </div>
             </CardContent>

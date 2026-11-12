@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { reconcileStalledOutboxBatch, reconcileStalledWebhookEventsBatch } from '@/lib/services/outbox-worker'
+import { recordCronExecutionLog } from '@/lib/services/platform/observability'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -106,6 +107,8 @@ async function handleWorkerRequest(request: Request, method: 'GET' | 'POST') {
           items: []
         }
 
+    const totalElapsedMs = Date.now() - startedAt
+
     console.log(
       JSON.stringify({
         event: 'outbox_worker.http_completed',
@@ -118,20 +121,41 @@ async function handleWorkerRequest(request: Request, method: 'GET' | 'POST') {
         webhook_recovery_processed: webhookRecovery.processed,
         webhook_recovery_autonomous: webhookRecovery.recovered_autonomous,
         webhook_recovery_ingest: webhookRecovery.recovered_ingest,
-        elapsed_ms: Date.now() - startedAt
+        elapsed_ms: totalElapsedMs
       })
     )
 
+    await recordCronExecutionLog({
+      workerName: 'outbox-worker',
+      method,
+      httpStatus: 200,
+      durationMs: totalElapsedMs,
+      outbox: result,
+      webhookRecovery
+    })
+
     return NextResponse.json({ success: true, ...result, webhook_recovery: webhookRecovery })
   } catch (err: any) {
+    const totalElapsedMs = Date.now() - startedAt
+    const errMsg = err?.message || String(err)
+
     console.error(
       JSON.stringify({
         event: 'outbox_worker.http_failed',
         method,
-        elapsed_ms: Date.now() - startedAt,
-        error: err?.message || String(err)
+        elapsed_ms: totalElapsedMs,
+        error: errMsg
       })
     )
+
+    await recordCronExecutionLog({
+      workerName: 'outbox-worker',
+      method,
+      httpStatus: 500,
+      durationMs: totalElapsedMs,
+      errorMessage: errMsg
+    })
+
     return NextResponse.json(
       { success: false, error: err?.message || 'Erro interno no outbox worker' },
       { status: 500 }
