@@ -312,7 +312,21 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `  3. Sempre estimule a continuidade da compra e o cross-sell com perguntas amigáveis como:\n`
   systemPrompt += `     "Você precisa de mais algum produto ou informação, ou gostaria de adicionar mais itens ao seu pedido? 😊"\n`
   systemPrompt += `     "Posso te ajudar com mais algum produto ou ingrediente para as suas receitas? 🛒"\n`
-  systemPrompt += `  4. Pergunte sobre forma de pagamento e entrega ou retirada SOMENTE QUANDO o cliente disser explicitamente que encerrou, que é só isso, ou pedir para fechar/concluir o pedido (ex: "é só isso", "quero fechar", "pode finalizar", "quanto deu tudo pra pagar?").\n\n`
+  systemPrompt += `  4. Pergunte sobre forma de pagamento e entrega ou retirada SOMENTE QUANDO o cliente disser explicitamente que encerrou, que é só isso, ou pedir para fechar/concluir o pedido (ex: "é só isso", "quero fechar", "pode finalizar", "quanto deu tudo pra pagar?").\n`
+  systemPrompt += `  5. FECHAMENTO DE ORÇAMENTO E TRANSFERÊNCIA OBRIGATÓRIA PARA ATENDENTE HUMANO:\n`
+  systemPrompt += `     - REGRA INEGOCIÁVEL: Como o catálogo NÃO possui controle de saldo físico de estoque em tempo real, NUNCA confirme por conta própria que o pedido está "reservado", "pronto para retirada" ou que o cliente "pode vir retirar quando quiser"!\n`
+  systemPrompt += `     - SEMPRE que o cliente fechar o pedido (definir retirada na loja, solicitar entrega, informar forma de pagamento como pix/dinheiro/cartão no ato, ou pedir para concluir o pedido):\n`
+  systemPrompt += `       1. Se o orçamento ainda não tiver sido formalizado, chame a ferramenta gerar_orcamento para registrar o pedido no sistema.\n`
+  systemPrompt += `       2. VOCÊ DEVE OBRIGATORIAMENTE chamar a ferramenta transferir_para_humano (com reason: "Orçamento fechado pelo cliente. Verificar disponibilidade física de estoque e dar seguimento ao pedido", department: "vendas").\n`
+  systemPrompt += `       3. Apresente o resumo final do pedido com itens, quantidades e valor total.\n`
+  systemPrompt += `       4. Explique com transparência e cordialidade que o pedido foi registrado e que você está transferindo o atendimento para um atendente humano da equipe confirmar a disponibilidade física dos produtos no estoque e dar seguimento à separação e retirada/entrega.\n`
+  systemPrompt += `       5. Exemplo de encerramento ideal:\n`
+  systemPrompt += `          "Perfeito! Registrei seu pedido com o resumo abaixo:\n\n`
+  systemPrompt += `          *Resumo do pedido final:*\n`
+  systemPrompt += `          - Item 1 (Qtd: X) - R$ Y\n`
+  systemPrompt += `          - Item 2 (Qtd: Z) - R$ W\n`
+  systemPrompt += `          *Total: R$ Total*\n\n`
+  systemPrompt += `          Como precisamos verificar a disponibilidade física dos produtos no estoque da loja antes de separar, estou transferindo você agora para um de nossos atendentes humanos dar seguimento no seu pedido. Em instantes alguém da nossa equipe vai te responder por aqui! 😊"\n\n`
 
   systemPrompt += `3. PRECIFICAÇÃO OFICIAL:\n`
   systemPrompt += `- Use exclusivamente o motor oficial de precificação via ferramentas. Não calcule ou invente descontos por conta própria.\n`

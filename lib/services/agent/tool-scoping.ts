@@ -111,6 +111,20 @@ const QUOTE_PATTERNS = [
 ]
 
 /**
+ * Padrões de fechamento de pedido, escolha de retirada/entrega ou pagamento.
+ */
+const ORDER_CLOSURE_PATTERNS = [
+  /\b(?:fechar?|finalizar?|concluir?|terminar?)\s+(?:o|meu)?\s*(?:pedido|orcamento|compra)\b/i,
+  /\b(?:retirar?|retirada|pegar|buscar)\s+(?:na|em|no|pela)?\s*(?:loja|balcao|estabelecimento)\b/i,
+  /\b(?:vou|quero|pode)\s+(?:retirar|ir\s+buscar|pegar)\b/i,
+  /\b(?:pagar?|pagamento|pago)\s+(?:no|na|em|via|com|pelo|ato)\b/i,
+  /\b(?:passa|manda|envia|qual\s+e)\s+(?:o\s+)?pix\b/i,
+  /\b(?:e\s+so\s+isso|so\s+isso|pode\s+fechar|pode\s+finalizar|quanto\s+deu\s+tudo|fechou)\b/i,
+  /\b(?:entrega|entregar|envia|enviar)\s+(?:no|na|em|pra|para)\b/i,
+  /\b(?:pode\s+mandar\s+entregar|faz\s+a\s+entrega)\b/i
+]
+
+/**
  * Verifica se a mensagem possui intenção clara de produto ou consulta comercial.
  * Usado pelo engine para evitar disparar fallbacks determinísticos em mensagens
  * puramente institucionais, encerramentos ou dúvidas gerais.
@@ -262,7 +276,7 @@ export function resolveToolScope(
   // Identifica presença de termos institucionais, perguntas de prazo/duração e pedido explícito de handoff
   const isInstitutional = words.some(w => INSTITUTIONAL_KEYWORDS.includes(w))
   const isAskingTimeDuration = isAskingDuration(msg)
-  const hasHandoffIntent = HANDOFF_PATTERNS.some(p => p.test(msg))
+  let hasHandoffIntent = HANDOFF_PATTERNS.some(p => p.test(msg))
 
   // 3. Extrair Intenções Específicas
   let hasTimeIntent = false
@@ -308,6 +322,13 @@ export function resolveToolScope(
   // Padrões de regex para orçamento
   if (QUOTE_PATTERNS.some(p => p.test(msg))) {
     hasQuoteIntent = true
+  }
+
+  // Padrões de fechamento de pedido / checkout / retirada / pagamento
+  const hasOrderClosureIntent = hasCartOrQuote && ORDER_CLOSURE_PATTERNS.some(p => p.test(msg))
+  if (hasOrderClosureIntent) {
+    hasQuoteIntent = true
+    hasHandoffIntent = true
   }
 
   // Padrões de remoção (ignora conversas como "tira uma duvida", "tira duvida")
@@ -375,7 +396,7 @@ export function resolveToolScope(
       selectedTools.add(tool)
     }
 
-    if (name === 'transferir_para_humano' && hasHandoffIntent) {
+    if (name === 'transferir_para_humano' && (hasHandoffIntent || hasOrderClosureIntent || hasCartOrQuote)) {
       selectedTools.add(tool)
     }
     
