@@ -117,6 +117,10 @@ export function humanizeAuditAction(action: string): {
     case 'company.limits_changed':
     case 'company.limits_updated':
       return { label: 'Limites', badgeVariant: 'outline' }
+    case 'company.addon_added':
+      return { label: 'Pacote Extra', badgeVariant: 'default' }
+    case 'company.addon_cancelled':
+      return { label: 'Estorno Extra', badgeVariant: 'outline' }
     case 'company.workflow_updated':
     case 'company.workflow_template_applied':
       return { label: 'Funil', badgeVariant: 'outline' }
@@ -164,6 +168,15 @@ export function humanizeAuditDetails(action: string, payload: any, reason?: stri
       const msgs = payload.max_monthly_messages ? `${payload.max_monthly_messages.toLocaleString('pt-BR')} msgs` : ''
       const agents = payload.max_agents ? `${payload.max_agents} agentes` : ''
       return `Novas quotas: ${[msgs, agents].filter(Boolean).join(' • ')}`
+    }
+    if (action === 'company.addon_added') {
+      const pkg = Number(payload.package_messages || 0).toLocaleString('pt-BR')
+      const price = Number(payload.total_price_brl || 0).toFixed(2).replace('.', ',')
+      return `Pacote +${pkg} msgs (${payload.billing_month || ''}) · R$ ${price}`
+    }
+    if (action === 'company.addon_cancelled') {
+      const pkg = Number(payload.package_messages || 0).toLocaleString('pt-BR')
+      return `Pacote +${pkg} msgs cancelado (${payload.billing_month || ''})`
     }
     if (action === 'company.workflow_template_applied') {
       return `Template "${payload.template_name || payload.template_key}" aplicado com ${payload.stages_count || 0} etapas`

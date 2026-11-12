@@ -131,12 +131,123 @@ export function evaluateQuotaStatus(used: number, limit: number): {
   }
 }
 
+export const ADDON_PACKAGE_SIZES = [1000, 5000, 10000, 15000] as const
+export type AddonPackageSize = (typeof ADDON_PACKAGE_SIZES)[number]
+
+export const DEFAULT_ADDON_UNIT_PRICE_BRL = 0.04
+export const DEFAULT_OVERAGE_UNIT_PRICE_BRL = 0.07
+
+export function getCurrentBillingMonth(date: Date = new Date()): string {
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
+/**
+ * Contagem justa (Etapa 3D): apenas mensagens enviadas pela plataforma (IA ou atendente humano)
+ * consomem franquia/excedente, evitando cobrança por flood de mensagens enviadas pelo cliente final.
+ */
+export function isOutboundSentSenderType(senderType?: string | null): boolean {
+  return senderType === 'agent' || senderType === 'human'
+}
+
+export function resolvePlanBillingKey(planTier?: string | null): 'trial' | 'starter' | 'pro' | 'enterprise' {
+  const tier = String(planTier || 'standard').trim().toLowerCase()
+  if (tier === 'trial') return 'trial'
+  if (tier === 'pro') return 'pro'
+  if (tier === 'enterprise') return 'enterprise'
+  return 'starter'
+}
+
 function getPlanDefaultMessageLimit(planTier?: string | null): number {
-  const tier = String(planTier || 'standard').toLowerCase()
-  if (tier === 'trial') return 1000
-  if (tier === 'pro') return 25000
-  if (tier === 'enterprise') return 100000
+  const key = resolvePlanBillingKey(planTier)
+  if (key === 'trial') return 1000
+  if (key === 'pro') return 25000
+  if (key === 'enterprise') return 100000
   return 5000
+}
+
+export interface CompanyBillingOverageInput {
+  sentMessages: number
+  baseQuotaMessages: number
+  addonMessagesPurchased?: number
+  addonsTotalBrl?: number
+  addonUnitPriceBrl?: number | null
+  overageUnitPriceBrl?: number | null
+  isTrial?: boolean
+}
+
+export interface CompanyBillingOverageResult {
+  sentMessages: number
+  baseQuotaMessages: number
+  addonMessagesPurchased: number
+  effectiveQuotaMessages: number
+  coveredByBaseMessages: number
+  coveredByAddonsMessages: number
+  overageMessages: number
+  addonUnitPriceBrl: number
+  overageUnitPriceBrl: number
+  addonsTotalBrl: number
+  overageTotalBrl: number
+  extraInvoiceTotalBrl: number
+  quota: {
+    used: number
+    limit: number
+    usagePercent: number
+    status: QuotaStatus
+  }
+}
+
+export function calculateCompanyBillingOverage(
+  input: CompanyBillingOverageInput
+): CompanyBillingOverageResult {
+  const sentMessages = Math.max(0, Math.floor(Number(input.sentMessages) || 0))
+  const baseQuotaMessages = Math.max(0, Math.floor(Number(input.baseQuotaMessages) || 0))
+  const addonMessagesPurchased = Math.max(
+    0,
+    Math.floor(Number(input.addonMessagesPurchased) || 0)
+  )
+  const effectiveQuotaMessages = baseQuotaMessages + addonMessagesPurchased
+
+  const resolvedAddonRate =
+    input.addonUnitPriceBrl !== undefined && input.addonUnitPriceBrl !== null
+      ? Math.max(0, Number(input.addonUnitPriceBrl) || 0)
+      : input.isTrial
+      ? 0
+      : DEFAULT_ADDON_UNIT_PRICE_BRL
+
+  const resolvedOverageRate =
+    input.overageUnitPriceBrl !== undefined && input.overageUnitPriceBrl !== null
+      ? Math.max(0, Number(input.overageUnitPriceBrl) || 0)
+      : input.isTrial
+      ? 0
+      : DEFAULT_OVERAGE_UNIT_PRICE_BRL
+
+  const coveredByBaseMessages = Math.min(sentMessages, baseQuotaMessages)
+  const remainingAfterBase = Math.max(0, sentMessages - baseQuotaMessages)
+  const coveredByAddonsMessages = Math.min(remainingAfterBase, addonMessagesPurchased)
+  const overageMessages = Math.max(0, sentMessages - effectiveQuotaMessages)
+
+  const addonsTotalBrl =
+    Math.round(Math.max(0, Number(input.addonsTotalBrl) || 0) * 100) / 100
+  const overageTotalBrl = Math.round(overageMessages * resolvedOverageRate * 100) / 100
+  const extraInvoiceTotalBrl = Math.round((addonsTotalBrl + overageTotalBrl) * 100) / 100
+
+  return {
+    sentMessages,
+    baseQuotaMessages,
+    addonMessagesPurchased,
+    effectiveQuotaMessages,
+    coveredByBaseMessages,
+    coveredByAddonsMessages,
+    overageMessages,
+    addonUnitPriceBrl: resolvedAddonRate,
+    overageUnitPriceBrl: resolvedOverageRate,
+    addonsTotalBrl,
+    overageTotalBrl,
+    extraInvoiceTotalBrl,
+    quota: evaluateQuotaStatus(sentMessages, effectiveQuotaMessages),
+  }
 }
 
 function computePercentile(sortedAsc: number[], percentile: number): number {
@@ -167,9 +278,19 @@ export interface TenantGovernanceRow {
   planTier: string
   companyStatus: string
   monthlyMessagesUsed: number
+  monthlySentMessagesUsed: number
   monthlyAgentMessagesUsed: number
+  monthlyHumanMessagesUsed: number
   monthlyCustomerMessagesUsed: number
   monthlyMessagesLimit: number
+  addonMessagesPurchased: number
+  effectiveMessagesLimit: number
+  overageMessages: number
+  addonUnitPriceBrl: number
+  overageUnitPriceBrl: number
+  addonsTotalBrl: number
+  overageTotalBrl: number
+  extraInvoiceTotalBrl: number
   quotaUsagePercent: number
   quotaStatus: QuotaStatus
   totalRuns: number
@@ -193,6 +314,7 @@ export interface TenantGovernanceRow {
 
 export interface TenantGovernanceReport {
   generatedAt: string
+  billingMonth: string
   windowDays: number
   monthStartIso: string
   usdToBrlRate: number
@@ -203,6 +325,10 @@ export interface TenantGovernanceReport {
     warningTenantsCount: number
     exceededTenantsCount: number
     totalMonthlyMessages: number
+    totalSentMonthlyMessages: number
+    totalAddonMessages: number
+    totalOverageMessages: number
+    totalExtraInvoiceBrl: number
     totalRuns: number
     totalErrorsAndTimeouts: number
     totalFallbacks: number
@@ -226,6 +352,7 @@ export async function getTenantGovernanceReport(options?: {
       : DEFAULT_USD_TO_BRL_RATE
 
   const now = new Date()
+  const billingMonth = getCurrentBillingMonth(now)
   const monthStartIso = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
   ).toISOString()
@@ -236,6 +363,7 @@ export async function getTenantGovernanceReport(options?: {
   if (!supabase) {
     return {
       generatedAt: now.toISOString(),
+      billingMonth,
       windowDays,
       monthStartIso,
       usdToBrlRate,
@@ -246,6 +374,10 @@ export async function getTenantGovernanceReport(options?: {
         warningTenantsCount: 0,
         exceededTenantsCount: 0,
         totalMonthlyMessages: 0,
+        totalSentMonthlyMessages: 0,
+        totalAddonMessages: 0,
+        totalOverageMessages: 0,
+        totalExtraInvoiceBrl: 0,
         totalRuns: 0,
         totalErrorsAndTimeouts: 0,
         totalFallbacks: 0,
@@ -258,24 +390,78 @@ export async function getTenantGovernanceReport(options?: {
     }
   }
 
-  // 1. Empresas + limites (fallback caso company_limits não esteja acessível no join)
+  // 1. Empresas + limites (com fallback compatível caso migration 3D ainda não tenha sido aplicada)
   let companyRows: any[] = []
-  const { data: companiesWithLimits, error: companiesErr } = await supabase
+  const { data: companiesWith3d, error: companies3dErr } = await supabase
     .from('companies')
     .select(
-      'id, name, slug, plan_tier, status, company_limits(max_agents, max_monthly_messages, max_monthly_quotes, max_catalog_items, allowed_llm_providers)'
+      'id, name, slug, plan_tier, status, company_limits(max_agents, max_monthly_messages, max_monthly_quotes, max_catalog_items, allowed_llm_providers, custom_addon_unit_price_brl, custom_overage_unit_price_brl)'
     )
 
-  if (companiesErr) {
-    if (isMissingSchemaFeatureError(companiesErr)) {
-      schemaWarnings.push(`companies/company_limits: ${companiesErr.message}`)
-    }
-    const { data: plainCompanies } = await supabase
+  if (companies3dErr) {
+    const { data: companiesWithLimits, error: companiesErr } = await supabase
       .from('companies')
-      .select('id, name, slug, plan_tier, status')
-    companyRows = plainCompanies || []
+      .select(
+        'id, name, slug, plan_tier, status, company_limits(max_agents, max_monthly_messages, max_monthly_quotes, max_catalog_items, allowed_llm_providers)'
+      )
+    if (companiesErr) {
+      if (isMissingSchemaFeatureError(companiesErr)) {
+        schemaWarnings.push(`companies/company_limits: ${companiesErr.message}`)
+      }
+      const { data: plainCompanies } = await supabase
+        .from('companies')
+        .select('id, name, slug, plan_tier, status')
+      companyRows = plainCompanies || []
+    } else {
+      companyRows = companiesWithLimits || []
+    }
   } else {
-    companyRows = companiesWithLimits || []
+    companyRows = companiesWith3d || []
+  }
+
+  // 1.1 Tarifas dos planos (addon/avulso) e pacotes adicionais do mês
+  const planRateMap = new Map<string, { addonRate: number; overageRate: number }>()
+  try {
+    const { data: planRows, error: planErr } = await supabase
+      .from('platform_plans')
+      .select('key, addon_package_unit_price_brl, overage_unit_price_brl')
+    if (!planErr && Array.isArray(planRows)) {
+      for (const p of planRows) {
+        if (p?.key) {
+          planRateMap.set(String(p.key).toLowerCase(), {
+            addonRate: Number(p.addon_package_unit_price_brl ?? (p.key === 'trial' ? 0 : DEFAULT_ADDON_UNIT_PRICE_BRL)),
+            overageRate: Number(p.overage_unit_price_brl ?? (p.key === 'trial' ? 0 : DEFAULT_OVERAGE_UNIT_PRICE_BRL)),
+          })
+        }
+      }
+    }
+  } catch {
+    // Fallback silencioso para tarifas padrão
+  }
+
+  const addonStatsMap = new Map<string, { messages: number; totalBrl: number }>()
+  try {
+    const { data: addonRows, error: addonErr } = await supabase
+      .from('company_message_addons')
+      .select('company_id, package_messages, total_price_brl, status, billing_month')
+      .eq('billing_month', billingMonth)
+      .eq('status', 'active')
+
+    if (addonErr) {
+      if (isMissingSchemaFeatureError(addonErr)) {
+        schemaWarnings.push('Tabela company_message_addons (Etapa 3D) ainda não migrada; usando excedente avulso compatível.')
+      }
+    } else if (Array.isArray(addonRows)) {
+      for (const a of addonRows) {
+        if (!a?.company_id) continue
+        const bucket = addonStatsMap.get(a.company_id) || { messages: 0, totalBrl: 0 }
+        bucket.messages += Math.max(0, Number(a.package_messages) || 0)
+        bucket.totalBrl += Math.max(0, Number(a.total_price_brl) || 0)
+        addonStatsMap.set(a.company_id, bucket)
+      }
+    }
+  } catch {
+    // Fallback silencioso
   }
 
   // 2. Mensagens do mês corrente por empresa
@@ -330,13 +516,21 @@ export async function getTenantGovernanceReport(options?: {
   // Mapas de agregação por tenant
   const msgStatsMap = new Map<
     string,
-    { total: number; agent: number; customer: number }
+    { total: number; sent: number; agent: number; human: number; customer: number }
   >()
   for (const m of monthlyMessages || []) {
     if (!m.company_id) continue
-    const bucket = msgStatsMap.get(m.company_id) || { total: 0, agent: 0, customer: 0 }
+    const bucket = msgStatsMap.get(m.company_id) || {
+      total: 0,
+      sent: 0,
+      agent: 0,
+      human: 0,
+      customer: 0,
+    }
     bucket.total += 1
+    if (isOutboundSentSenderType(m.sender_type)) bucket.sent += 1
     if (m.sender_type === 'agent') bucket.agent += 1
+    else if (m.sender_type === 'human') bucket.human += 1
     else if (m.sender_type === 'customer') bucket.customer += 1
     msgStatsMap.set(m.company_id, bucket)
   }
@@ -467,6 +661,10 @@ export async function getTenantGovernanceReport(options?: {
 
   const allDurations: number[] = []
   let totalMonthlyMessages = 0
+  let totalSentMonthlyMessages = 0
+  let totalAddonMessages = 0
+  let totalOverageMessages = 0
+  let totalExtraInvoiceBrl = 0
   let totalRuns = 0
   let totalErrorsAndTimeouts = 0
   let totalFallbacks = 0
@@ -485,10 +683,36 @@ export async function getTenantGovernanceReport(options?: {
       getPlanDefaultMessageLimit(company.plan_tier)
     const msgBucket = msgStatsMap.get(company.id) || {
       total: 0,
+      sent: 0,
       agent: 0,
+      human: 0,
       customer: 0,
     }
-    const quota = evaluateQuotaStatus(msgBucket.total, monthlyLimit)
+    const addonBucket = addonStatsMap.get(company.id) || { messages: 0, totalBrl: 0 }
+    const planKey = resolvePlanBillingKey(company.plan_tier)
+    const planRates = planRateMap.get(planKey)
+
+    const customAddonRate =
+      limits?.custom_addon_unit_price_brl !== undefined &&
+      limits?.custom_addon_unit_price_brl !== null
+        ? Number(limits.custom_addon_unit_price_brl)
+        : undefined
+    const customOverageRate =
+      limits?.custom_overage_unit_price_brl !== undefined &&
+      limits?.custom_overage_unit_price_brl !== null
+        ? Number(limits.custom_overage_unit_price_brl)
+        : undefined
+
+    const billing = calculateCompanyBillingOverage({
+      sentMessages: msgBucket.sent,
+      baseQuotaMessages: monthlyLimit,
+      addonMessagesPurchased: addonBucket.messages,
+      addonsTotalBrl: addonBucket.totalBrl,
+      addonUnitPriceBrl: customAddonRate ?? planRates?.addonRate,
+      overageUnitPriceBrl: customOverageRate ?? planRates?.overageRate,
+      isTrial: planKey === 'trial',
+    })
+    const quota = billing.quota
 
     if (quota.status === 'warning') warningTenantsCount += 1
     else if (quota.status === 'exceeded') exceededTenantsCount += 1
@@ -531,6 +755,10 @@ export async function getTenantGovernanceReport(options?: {
     const roundedBrl = Math.round(roundedUsd * usdToBrlRate * 100) / 100
 
     totalMonthlyMessages += msgBucket.total
+    totalSentMonthlyMessages += msgBucket.sent
+    totalAddonMessages += billing.addonMessagesPurchased
+    totalOverageMessages += billing.overageMessages
+    totalExtraInvoiceBrl += billing.extraInvoiceTotalBrl
     totalRuns += runBucket.totalRuns
     totalErrorsAndTimeouts += runBucket.errorRuns + runBucket.timeoutRuns
     totalFallbacks += runBucket.fallbackCount
@@ -544,9 +772,19 @@ export async function getTenantGovernanceReport(options?: {
       planTier: company.plan_tier || 'standard',
       companyStatus: company.status || 'active',
       monthlyMessagesUsed: msgBucket.total,
+      monthlySentMessagesUsed: msgBucket.sent,
       monthlyAgentMessagesUsed: msgBucket.agent,
+      monthlyHumanMessagesUsed: msgBucket.human,
       monthlyCustomerMessagesUsed: msgBucket.customer,
       monthlyMessagesLimit: monthlyLimit,
+      addonMessagesPurchased: billing.addonMessagesPurchased,
+      effectiveMessagesLimit: billing.effectiveQuotaMessages,
+      overageMessages: billing.overageMessages,
+      addonUnitPriceBrl: billing.addonUnitPriceBrl,
+      overageUnitPriceBrl: billing.overageUnitPriceBrl,
+      addonsTotalBrl: billing.addonsTotalBrl,
+      overageTotalBrl: billing.overageTotalBrl,
+      extraInvoiceTotalBrl: billing.extraInvoiceTotalBrl,
       quotaUsagePercent: quota.usagePercent,
       quotaStatus: quota.status,
       totalRuns: runBucket.totalRuns,
@@ -572,17 +810,21 @@ export async function getTenantGovernanceReport(options?: {
   })
 
   tenants.sort((a, b) => {
+    if (b.extraInvoiceTotalBrl !== a.extraInvoiceTotalBrl) {
+      return b.extraInvoiceTotalBrl - a.extraInvoiceTotalBrl
+    }
     if (b.estimatedCostUsd !== a.estimatedCostUsd) {
       return b.estimatedCostUsd - a.estimatedCostUsd
     }
     if (b.quotaUsagePercent !== a.quotaUsagePercent) {
       return b.quotaUsagePercent - a.quotaUsagePercent
     }
-    return b.monthlyMessagesUsed - a.monthlyMessagesUsed
+    return b.monthlySentMessagesUsed - a.monthlySentMessagesUsed
   })
 
   const roundedTotalUsd = Math.round(totalCostUsd * 1_000_000) / 1_000_000
   const roundedTotalBrl = Math.round(roundedTotalUsd * usdToBrlRate * 100) / 100
+  const roundedTotalExtraInvoiceBrl = Math.round(totalExtraInvoiceBrl * 100) / 100
   const globalAvgDuration =
     allDurations.length > 0
       ? Math.round(allDurations.reduce((acc, v) => acc + v, 0) / allDurations.length)
@@ -590,6 +832,7 @@ export async function getTenantGovernanceReport(options?: {
 
   return {
     generatedAt: now.toISOString(),
+    billingMonth,
     windowDays,
     monthStartIso,
     usdToBrlRate,
@@ -600,6 +843,10 @@ export async function getTenantGovernanceReport(options?: {
       warningTenantsCount,
       exceededTenantsCount,
       totalMonthlyMessages,
+      totalSentMonthlyMessages,
+      totalAddonMessages,
+      totalOverageMessages,
+      totalExtraInvoiceBrl: roundedTotalExtraInvoiceBrl,
       totalRuns,
       totalErrorsAndTimeouts,
       totalFallbacks,

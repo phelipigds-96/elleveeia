@@ -17,6 +17,8 @@ export interface PlatformPlan {
   badge?: string | null
   isPopular: boolean
   active: boolean
+  addonPackageUnitPriceBrl?: number
+  overageUnitPriceBrl?: number
   updatedAt?: string
 }
 
@@ -34,6 +36,8 @@ export interface UpdatePlatformPlanInput {
   badge?: string | null
   isPopular?: boolean
   active?: boolean
+  addonPackageUnitPriceBrl?: number
+  overageUnitPriceBrl?: number
   features?: string[]
 }
 
@@ -54,6 +58,8 @@ export const DEFAULT_PLANS: PlatformPlan[] = [
     badge: "Degustação",
     isPopular: false,
     active: true,
+    addonPackageUnitPriceBrl: 0,
+    overageUnitPriceBrl: 0,
     features: [
       "1 Agente de IA Ativo",
       "1.000 mensagens incluídas/mês",
@@ -79,6 +85,8 @@ export const DEFAULT_PLANS: PlatformPlan[] = [
     badge: null,
     isPopular: false,
     active: true,
+    addonPackageUnitPriceBrl: 0.04,
+    overageUnitPriceBrl: 0.07,
     features: [
       "Até 2 Agentes de Atendimento",
       "5.000 mensagens incluídas/mês",
@@ -104,6 +112,8 @@ export const DEFAULT_PLANS: PlatformPlan[] = [
     badge: "Mais Popular · Recomendado Sumel",
     isPopular: true,
     active: true,
+    addonPackageUnitPriceBrl: 0.04,
+    overageUnitPriceBrl: 0.07,
     features: [
       "Até 5 Agentes de IA Especializados",
       "25.000 mensagens incluídas/mês",
@@ -130,6 +140,8 @@ export const DEFAULT_PLANS: PlatformPlan[] = [
     badge: "Corporativo",
     isPopular: false,
     active: true,
+    addonPackageUnitPriceBrl: 0.04,
+    overageUnitPriceBrl: 0.07,
     features: [
       "15+ Agentes e fluxos autônomos",
       "100.000 mensagens incluídas/mês",
@@ -189,6 +201,14 @@ export async function getPlatformPlans(options?: { adminClient?: any }): Promise
         badge: found.badge !== undefined ? found.badge : defPlan.badge,
         isPopular: found.is_popular !== undefined ? Boolean(found.is_popular) : defPlan.isPopular,
         active: found.active !== undefined ? Boolean(found.active) : defPlan.active,
+        addonPackageUnitPriceBrl:
+          found.addon_package_unit_price_brl !== undefined && found.addon_package_unit_price_brl !== null
+            ? Number(found.addon_package_unit_price_brl)
+            : defPlan.addonPackageUnitPriceBrl,
+        overageUnitPriceBrl:
+          found.overage_unit_price_brl !== undefined && found.overage_unit_price_brl !== null
+            ? Number(found.overage_unit_price_brl)
+            : defPlan.overageUnitPriceBrl,
         updatedAt: found.updated_at,
       }
     })

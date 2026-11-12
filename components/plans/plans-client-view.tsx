@@ -180,6 +180,17 @@ export default function PlansClientView({ initialPlans }: PlansClientViewProps) 
                       OpenAI · {plan.defaultAiModel}
                     </span>
                   </div>
+
+                  <div className="flex items-center justify-between text-ellevee-deep-ink pt-1 border-t border-ellevee-border">
+                    <span className="text-[11px] text-ellevee-text-secondary font-medium">
+                      Excedente (Bloco / Avulso)
+                    </span>
+                    <span className="font-mono font-semibold text-[11px] text-ellevee-deep-ink">
+                      {(plan.addonPackageUnitPriceBrl ?? 0) === 0 && (plan.overageUnitPriceBrl ?? 0) === 0
+                        ? "Sem cobrança extra"
+                        : `R$ ${(plan.addonPackageUnitPriceBrl ?? 0.04).toFixed(2).replace(".", ",")} / R$ ${(plan.overageUnitPriceBrl ?? 0.07).toFixed(2).replace(".", ",")}`}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Lista de Features incluídas */}

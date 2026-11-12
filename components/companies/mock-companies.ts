@@ -1,3 +1,17 @@
+export const COMPANY_ADDON_PACKAGE_SIZES = [1000, 5000, 10000, 15000] as const
+export type CompanyAddonPackageSize = (typeof COMPANY_ADDON_PACKAGE_SIZES)[number]
+
+export interface CompanyAddonRecord {
+  id: string
+  billingMonth: string
+  packageMessages: number
+  unitPriceBrl: number
+  totalPriceBrl: number
+  status: "active" | "cancelled"
+  notes?: string | null
+  createdAt: string
+}
+
 export interface CompanyMock {
   id: string
   name: string
@@ -15,6 +29,18 @@ export interface CompanyMock {
   createdAt: string
   adminEmail: string
   requireCloseReason?: boolean
+  sentMessagesUsed?: number
+  totalMessagesUsed?: number
+  addonMessages?: number
+  effectiveMessagesLimit?: number
+  overageMessages?: number
+  addonsTotalBrl?: number
+  overageTotalBrl?: number
+  extraInvoiceBrl?: number
+  addonUnitPriceBrl?: number
+  overageUnitPriceBrl?: number
+  billingMonth?: string
+  activeAddons?: CompanyAddonRecord[]
 }
 
 export const INITIAL_MOCK_COMPANIES: CompanyMock[] = [

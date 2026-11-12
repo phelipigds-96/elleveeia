@@ -15,7 +15,8 @@ import {
   X,
   Kanban,
   Loader2,
-  Users
+  Users,
+  PackagePlus
 } from "lucide-react"
 import { impersonateCompanyAction } from "@/app/(admin)/companies/actions"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +44,7 @@ import {
   getUsageStatus
 } from "./mock-companies"
 import CompanyLimitsDialog from "./company-limits-dialog"
+import CompanyAddonsDialog from "./company-addons-dialog"
 import CompanyPlanDialog from "./company-plan-dialog"
 import CompanyStatusDialog from "./company-status-dialog"
 import CompanyWorkflowDialog from "./company-workflow-dialog"
@@ -67,6 +69,7 @@ export default function CompaniesTable({
   const [activeCompanyForStatus, setActiveCompanyForStatus] = useState<CompanyMock | null>(null)
   const [activeCompanyForWorkflow, setActiveCompanyForWorkflow] = useState<CompanyMock | null>(null)
   const [activeCompanyForUsers, setActiveCompanyForUsers] = useState<CompanyMock | null>(null)
+  const [activeCompanyForAddons, setActiveCompanyForAddons] = useState<CompanyMock | null>(null)
 
   // Filtros ativos?
   const hasActiveFilters = searchTerm !== "" || planFilter !== "ALL" || statusFilter !== "ALL" || providerFilter !== "ALL"
@@ -262,8 +265,12 @@ export default function CompaniesTable({
                 </TableRow>
               ) : (
                 filtered.map((company) => {
-                  const usagePercent = calculateUsagePercent(company.messagesUsed, company.messagesLimit)
+                  const effectiveLimit = company.effectiveMessagesLimit || company.messagesLimit
+                  const sentMessages = company.sentMessagesUsed ?? company.messagesUsed
+                  const usagePercent = calculateUsagePercent(sentMessages, effectiveLimit)
                   const usageStatus = getUsageStatus(usagePercent)
+                  const addonMessages = company.addonMessages || 0
+                  const extraInvoiceBrl = company.extraInvoiceBrl || 0
 
                   return (
                     <TableRow key={company.id} className="hover:bg-ellevee-warm-ivory/40 border-b border-ellevee-border transition-colors">
@@ -312,7 +319,7 @@ export default function CompaniesTable({
                           {/* Linha 1: 48,5K / 50K msgs • 97% */}
                           <div className="flex items-center justify-between text-[11px] font-mono leading-none">
                             <span className="text-ellevee-deep-ink font-medium">
-                              {formatCompactNumber(company.messagesUsed)} / {formatCompactNumber(company.messagesLimit)} msgs
+                              {formatCompactNumber(sentMessages)} / {formatCompactNumber(effectiveLimit)} env.
                             </span>
                             <span className={usageStatus.textColor}>
                               {usagePercent}%
@@ -327,10 +334,15 @@ export default function CompaniesTable({
                             />
                           </div>
 
-                          {/* Linha 3: 3,8M / 5M tokens */}
+                          {/* Linha 3: Tokens + Pacotes/Fatura Extra */}
                           <div className="text-[10px] text-ellevee-text-secondary font-mono leading-none">
                             {formatCompactNumber(company.tokensUsed)} / {formatCompactNumber(company.tokensLimit)} tokens
                           </div>
+                          {(addonMessages > 0 || extraInvoiceBrl > 0) && (
+                            <div className="text-[10px] font-mono leading-none text-ellevee-purple font-semibold">
+                              +{formatCompactNumber(addonMessages)} extra · Fatura extra: R$ {extraInvoiceBrl.toFixed(2).replace(".", ",")}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
 
@@ -373,6 +385,10 @@ export default function CompaniesTable({
                           <DropdownMenuItem onClick={() => setActiveCompanyForLimits(company)}>
                             <Sliders className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
                             Ajustar Limites
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setActiveCompanyForAddons(company)}>
+                            <PackagePlus className="h-3.5 w-3.5 mr-2 text-ellevee-purple" />
+                            Pacotes Extras & Fatura
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setActiveCompanyForWorkflow(company)}>
                             <Kanban className="h-3.5 w-3.5 mr-2 text-ellevee-deep-ink" />
@@ -480,6 +496,16 @@ export default function CompaniesTable({
         company={activeCompanyForUsers}
         open={!!activeCompanyForUsers}
         onClose={() => setActiveCompanyForUsers(null)}
+      />
+
+      <CompanyAddonsDialog
+        company={activeCompanyForAddons}
+        open={!!activeCompanyForAddons}
+        onClose={() => setActiveCompanyForAddons(null)}
+        onUpdated={(updated) => {
+          if (onUpdateCompany) onUpdateCompany(updated)
+          setActiveCompanyForAddons(updated)
+        }}
       />
     </div>
   )
