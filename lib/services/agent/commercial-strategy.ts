@@ -11,7 +11,10 @@ export type CommercialResponseStrategy =
 export const KNOWN_MARKET_BRANDS = [
   'moca', 'leite moca', 'garoto', 'lacta', 'melken', 'harald', 'sicao', 
   'barry', 'callebaut', 'mavalerio', 'piracanjuba', 'itambe', 'tirol', 
-  'italac', 'nestle', 'nestlé', 'parmalat', 'elege'
+  'italac', 'nestle', 'nestlé', 'parmalat', 'elege',
+  'genuine', 'dona jura', 'selecta', 'namur', 'guimaraes', 'guimarães',
+  'bunge', 'richs', 'norcau', 'puratos', 'fleischmann', 'dona benta',
+  'qualimax', 'arcolor', 'mix', 'triangulo', 'triângulo'
 ]
 
 export function extractUniqueBrands(matches: ProductSearchResult[]): string[] {
@@ -39,6 +42,53 @@ export function extractUniqueBrands(matches: ProductSearchResult[]): string[] {
     }
   }
   return Array.from(brandMap.values())
+}
+
+/**
+ * Extrai tamanhos / pesos de embalagem disponíveis a partir dos nomes dos produtos.
+ */
+export function extractAvailableSizes(matches: ProductSearchResult[]): string[] {
+  const sizeMap = new Map<string, string>()
+  for (const m of matches) {
+    const text = (m.name || '').toUpperCase()
+    const matchKg = text.match(/\b(\d+(?:[.,]\d+)?)\s*KG\b/)
+    if (matchKg) {
+      const clean = `${matchKg[1].replace(',', '.')}kg`
+      sizeMap.set(clean, clean)
+    }
+    const matchG = text.match(/\b(\d+)\s*G\b/)
+    if (matchG && !text.includes('1KG') && !text.includes('2KG')) {
+      const clean = `${matchG[1]}g`
+      sizeMap.set(clean, clean)
+    }
+    const matchL = text.match(/\b(\d+(?:[.,]\d+)?)\s*L\b/)
+    if (matchL) {
+      const clean = `${matchL[1].replace(',', '.')}L`
+      sizeMap.set(clean, clean)
+    }
+  }
+  return Array.from(sizeMap.values())
+}
+
+/**
+ * Detecta se a consulta do cliente é ampla/genérica (sem especificação de marca e/ou tamanho).
+ */
+export function isGenericProductQuery(query: string, uniqueBrands: string[]): boolean {
+  const norm = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  // Se o cliente mencionou uma marca conhecida ou marca presente nos resultados
+  const mentionsBrand = uniqueBrands.some(b => {
+    const bNorm = b.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    return new RegExp(`\\b${bNorm}\\b`, 'i').test(norm)
+  }) || KNOWN_MARKET_BRANDS.some(b => {
+    const bNorm = b.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    return new RegExp(`\\b${bNorm}\\b`, 'i').test(norm)
+  })
+
+  // Se o cliente especificou tamanho, peso ou formato claro de embalagem
+  const mentionsSizeOrFormat = /\b(?:\d+(?:[.,]\d+)?\s*(?:kg|kilos?|g|gramas?|ml|l|litros?)|barra|tablete|gotas|bloco|cx|caixa|fardo|fracionad[ao])\b/i.test(norm)
+
+  return !mentionsBrand && !mentionsSizeOrFormat
 }
 
 export interface DiscoveredProductSegments {
@@ -207,18 +257,24 @@ export function applyCommercialStrategy(
   }
 
   // 4. GENERIC DISCOVERY
+  const isGeneric = isGenericProductQuery(normalizedQuery, uniqueBrands)
   const isWholesaleQuery = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
   const nonWholesaleMatches = searchResult.matches.filter(m => !/\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(m.name || ''))
   const displayMatches = (!isWholesaleQuery && nonWholesaleMatches.length > 0) ? nonWholesaleMatches : searchResult.matches
 
   const segments = detectProductSegments(searchResult.matches)
-  const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
+  const availableSizes = extractAvailableSizes(displayMatches)
+
+  // É consulta ampla se o cliente fez uma pergunta genérica (sem marca/tamanho) E há mais de 2 produtos,
+  // ou se o catálogo possui segmentos com finalidades distintas
+  const isBroadQuery = (isGeneric && searchResult.matches.length > 2) || (segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery))
 
   const payload: any = {
     strategy: 'generic_discovery',
-    brands: uniqueBrands.slice(0, 4),
+    brands: uniqueBrands.slice(0, 5),
     product_count: searchResult.matches.length,
-    is_broad_query: isBroadSegmented,
+    is_broad_query: isBroadQuery,
+    available_sizes: availableSizes,
     products: displayMatches.slice(0, 10).map(m => {
       const item: any = {
         id: m.id,
@@ -237,10 +293,14 @@ export function applyCommercialStrategy(
     })
   }
 
-  if (isBroadSegmented) {
+  if (isBroadQuery) {
+    const brandsList = uniqueBrands.slice(0, 5).join(', ')
+    const sizesList = availableSizes.length > 0 ? ` (tamanhos disponíveis: ${availableSizes.slice(0, 4).join(', ')})` : ''
+    payload.available_brands = uniqueBrands.slice(0, 5)
     payload.available_segments = segments.segmentLabels
-    payload.consultative_hint = 'A consulta do cliente é ampla e o catálogo possui opções com finalidades distintas: ' +
-      segments.segmentLabels.join(', ') + '. Não jogue a lista de preços completa. Faça uma pergunta consultiva amigável perguntando se ele procura para confeitaria/receitas ou para consumo próprio/docinho.'
+    payload.consultative_hint = `ATENÇÃO: A pergunta do cliente é GENÉRICA (sem marca ou tamanho especificado). É ESTRITAMENTE PROIBIDO listar 5 a 10 produtos com preços de uma vez! ` +
+      `Responda de forma humana, calorosa e consultiva: confirme que temos excelentes opções, mencione as marcas disponíveis em negrito (${brandsList})${sizesList} ` +
+      `e OBRIGATORIAMENTE PERGUNTE ao cliente se ele tem preferência por marca e/ou tamanho da embalagem antes de listar preços.`
   }
 
   // Verifica se o cliente buscou uma marca de mercado não disponível, mas temos opções equivalentes
