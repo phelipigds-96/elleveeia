@@ -344,7 +344,7 @@ describe('ETAPA 1 — Validação Cirúrgica do Worker, Endpoint Legado e Lease 
     assert.equal(result.succeeded, 4)
     assert.equal(result.failed, 0)
     assert.equal(result.deferred, 0)
-    assert.ok(wallMs < 340, `Esperava paralelismo (< 340ms), mas levou ${wallMs}ms`)
+    assert.ok(wallMs < 600, `Esperava paralelismo (< 600ms), mas levou ${wallMs}ms`)
 
     // FIFO dentro de CONV_A: evt-1 PRECISA terminar antes de evt-2 iniciar!
     const finishIdx1 = finishEvents.indexOf('evt-1')

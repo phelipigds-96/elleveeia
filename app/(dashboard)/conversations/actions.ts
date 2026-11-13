@@ -1575,3 +1575,54 @@ export async function startNewConversationAction(params: {
     return { success: false, error: err?.message || "Erro interno ao iniciar conversa." }
   }
 }
+
+export interface WorkflowStageOption {
+  id: string
+  workflow_id: string
+  name: string
+  position: number
+  stage_type: "initial" | "in_progress" | "final" | string
+  color?: string | null
+  handled_by?: string | null
+}
+
+/**
+ * Busca todas as etapas ativas de workflows da empresa do usuário logado.
+ */
+export async function getCompanyWorkflowStagesAction(): Promise<WorkflowStageOption[]> {
+  try {
+    const supabase = createClient()
+    const { companyId } = await getAuthenticatedAgentContext()
+    const { data, error } = await supabase
+      .from("workflow_stages")
+      .select("id, workflow_id, name, position, stage_type, is_active, color, handled_by")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("position", { ascending: true })
+
+    if (error) {
+      console.error("[getCompanyWorkflowStagesAction] Erro ao buscar etapas:", error.message)
+      return []
+    }
+    return (data || []) as WorkflowStageOption[]
+  } catch (err: any) {
+    console.error("[getCompanyWorkflowStagesAction] Falha:", err?.message || err)
+    return []
+  }
+}
+
+/**
+ * Altera a etapa do funil (workflow_stage) de uma conversa.
+ */
+export async function updateConversationStageAction(conversationId: string, stageId: string) {
+  try {
+    const { moveConversationStage } = await import("@/lib/services/workflows/workflows")
+    await moveConversationStage(conversationId, stageId)
+    revalidatePath("/conversations")
+    revalidatePath("/conversations/kanban")
+    return { success: true }
+  } catch (error: any) {
+    console.error("[updateConversationStageAction] Erro ao mover etapa:", error?.message || error)
+    return { success: false, error: error?.message || "Não foi possível alterar a etapa da conversa." }
+  }
+}

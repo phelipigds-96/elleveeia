@@ -4,6 +4,7 @@ import {
   getConversationMessages,
   getAgentProfileContext,
   getChatOperationsContextAction,
+  getCompanyWorkflowStagesAction,
 } from "./actions"
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +19,12 @@ export default async function ConversationsPage({
 }: {
   searchParams?: { id?: string }
 }) {
-  // Carga base inicial realizada no servidor (RSC) com perfil do atendente, conversas, motivos de finalização e respostas rápidas
-  const [currentUser, initialConversations, chatOps] = await Promise.all([
+  // Carga base inicial realizada no servidor (RSC) com perfil do atendente, conversas, motivos de finalização, respostas rápidas e etapas de funil
+  const [currentUser, initialConversations, chatOps, initialWorkflowStages] = await Promise.all([
     getAgentProfileContext(),
     getConversationsList(),
     getChatOperationsContextAction(),
+    getCompanyWorkflowStagesAction(),
   ])
   const requestedId = typeof searchParams?.id === 'string' ? searchParams.id.trim() : ''
   const matchedRequested = requestedId
@@ -43,6 +45,7 @@ export default async function ConversationsPage({
         initialCloseReasons={chatOps.closeReasons}
         requireCloseReason={chatOps.requireCloseReason}
         initialQuickReplies={chatOps.quickReplies}
+        initialWorkflowStages={initialWorkflowStages}
       />
     </div>
   )
