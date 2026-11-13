@@ -81,7 +81,9 @@ import {
   uploadChatMediaAction,
   sendMediaMessageAction,
   startNewConversationAction,
-  markConversationAsReadAction
+  markConversationAsReadAction,
+  WorkflowStageOption,
+  updateConversationStageAction
 } from "../actions"
 import {
   StatusChip,
@@ -96,6 +98,7 @@ interface PainelClientProps {
   initialCloseReasons?: CloseReason[]
   requireCloseReason?: boolean
   initialQuickReplies?: QuickReply[]
+  initialWorkflowStages?: WorkflowStageOption[]
 }
 
 function timeAgo(isoString: string): string {
@@ -403,6 +406,7 @@ export default function PainelClient({
   initialCloseReasons = [],
   requireCloseReason = false,
   initialQuickReplies = [],
+  initialWorkflowStages = [],
 }: PainelClientProps) {
   // 1. Estados locais de conversas e mensagens
   const [conversations, setConversations] = useState<ConversationData[]>(initialConversations)
@@ -421,6 +425,17 @@ export default function PainelClient({
   const [isQuickRepliesOpen, setIsQuickRepliesOpen] = useState(false)
   const [quickReplySearch, setQuickReplySearch] = useState("")
   const [selectedQuickCategory, setSelectedQuickCategory] = useState<string>("TODAS")
+
+  // 1.3. Etapas de Workflow / Etiquetas
+  const [workflowStages, setWorkflowStages] = useState<WorkflowStageOption[]>(initialWorkflowStages || [])
+  const [isStageModalOpen, setIsStageModalOpen] = useState(false)
+  const [isChangingStage, setIsChangingStage] = useState(false)
+
+  useEffect(() => {
+    if (initialWorkflowStages && initialWorkflowStages.length > 0) {
+      setWorkflowStages(initialWorkflowStages)
+    }
+  }, [initialWorkflowStages])
   
   // 2. Estados de navegação e filtros (Nova Taxonomia corporativa)
   const isMasterOrAdmin = currentUser?.role === "master" || currentUser?.role === "admin"
@@ -1636,6 +1651,66 @@ export default function PainelClient({
   }
 
   // =========================================================================
+  // FASE 2: ALTERAÇÃO DE ETAPA / ETIQUETA DO FUNIL
+  // =========================================================================
+  const handleChangeConversationStage = async (newStageId: string) => {
+    if (!selectedId || !newStageId || isChangingStage) return
+    if (activeConversation?.workflow_stage_id === newStageId) {
+      setIsStageModalOpen(false)
+      return
+    }
+
+    const targetStage = workflowStages.find((s) => s.id === newStageId)
+    if (!targetStage) return
+
+    const previousStageId = activeConversation?.workflow_stage_id
+    const previousStageName = activeConversation?.workflow_stage_name
+    const previousStageColor = activeConversation?.workflow_stage_color
+
+    // Atualização otimista local
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedId
+          ? {
+              ...c,
+              workflow_stage_id: targetStage.id,
+              workflow_stage_name: targetStage.name,
+              workflow_stage_color: targetStage.color || null,
+            }
+          : c
+      )
+    )
+    setIsStageModalOpen(false)
+    setIsChangingStage(true)
+
+    try {
+      const res = await updateConversationStageAction(selectedId, targetStage.id)
+      if (!res.success) {
+        // Reverte otimista
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedId
+              ? {
+                  ...c,
+                  workflow_stage_id: previousStageId,
+                  workflow_stage_name: previousStageName,
+                  workflow_stage_color: previousStageColor,
+                }
+              : c
+          )
+        )
+        toast.error("Erro ao alterar etiqueta", res.error || "Não foi possível mover a conversa.")
+      } else {
+        toast.success("Etiqueta atualizada", `Conversa movida para "${targetStage.name}".`)
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado", err?.message || "Falha ao atualizar etiqueta.")
+    } finally {
+      setIsChangingStage(false)
+    }
+  }
+
+  // =========================================================================
   // FASE 2: SALVAR PERFIL DO CLIENTE
   // =========================================================================
   const handleSaveCustomer = async (e?: React.FormEvent) => {
@@ -2565,22 +2640,62 @@ export default function PainelClient({
                       {activeConversation.customers?.name || "Cliente Desconhecido"}
                     </h2>
 
-                    {/* Etapa do Funil no Desktop */}
-                    {activeConversation.workflow_stage_name ? (
-                      <span
-                        title={`Etapa no funil: ${activeConversation.workflow_stage_name}`}
-                        className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700 font-medium whitespace-nowrap shadow-2xs shrink-0"
+                    {/* Etapa do Funil no Desktop — Clicável com Seletor Rápido */}
+                    <div className="hidden sm:inline-flex items-center">
+                      <DropdownMenu
+                        align="left"
+                        trigger={
+                          <button
+                            type="button"
+                            title={
+                              activeConversation.workflow_stage_name
+                                ? `Etapa: ${activeConversation.workflow_stage_name} (clique para alterar)`
+                                : "Definir etiqueta / etapa"
+                            }
+                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200 px-2.5 py-0.5 text-xs text-slate-700 font-medium whitespace-nowrap shadow-2xs shrink-0 cursor-pointer transition-colors active:scale-95 group"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="h-2 w-2 rounded-full shrink-0 shadow-2xs"
+                              style={{ backgroundColor: stageColorOf(activeConversation) }}
+                            />
+                            <span className="max-w-[120px] sm:max-w-[180px] truncate">
+                              {activeConversation.workflow_stage_name || "Sem Etiqueta"}
+                            </span>
+                            <ChevronDown className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                          </button>
+                        }
                       >
-                        <span
-                          aria-hidden="true"
-                          className="h-2 w-2 rounded-full shrink-0 shadow-2xs"
-                          style={{ backgroundColor: stageColorOf(activeConversation) }}
-                        />
-                        <span className="max-w-[120px] sm:max-w-[180px] truncate">
-                          {activeConversation.workflow_stage_name}
-                        </span>
-                      </span>
-                    ) : null}
+                        <DropdownMenuLabel>Alterar Etiqueta / Funil</DropdownMenuLabel>
+                        {workflowStages.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-gray-500 italic">
+                            Nenhuma etapa encontrada
+                          </div>
+                        ) : (
+                          workflowStages.map((st) => {
+                            const isSelected = activeConversation.workflow_stage_id === st.id
+                            return (
+                              <DropdownMenuItem
+                                key={st.id}
+                                onClick={() => handleChangeConversationStage(st.id)}
+                                className={`flex items-center justify-between gap-3 cursor-pointer ${
+                                  isSelected ? "bg-slate-50 font-semibold text-slate-900" : ""
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span
+                                    className="h-2.5 w-2.5 rounded-full shrink-0 shadow-2xs"
+                                    style={{ backgroundColor: st.color || "#64748b" }}
+                                  />
+                                  <span className="truncate">{st.name}</span>
+                                </div>
+                                {isSelected && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+                              </DropdownMenuItem>
+                            )
+                          })
+                        )}
+                      </DropdownMenu>
+                    </div>
                   </div>
 
                   {/* Linha inferior de status */}
@@ -2607,11 +2722,16 @@ export default function PainelClient({
                       </span>
                     )}
 
-                    {/* Etapa do funil no mobile */}
+                    {/* Etapa do funil no mobile (clicável para abrir seletor) */}
                     {activeConversation.workflow_stage_name && (
                       <>
                         <span className="text-gray-300">•</span>
-                        <span className="inline-flex items-center gap-1 text-[11px] text-gray-600 truncate">
+                        <button
+                          type="button"
+                          onClick={() => setIsStageModalOpen(true)}
+                          title="Alterar etiqueta da conversa"
+                          className="sm:hidden inline-flex items-center gap-1 text-[11px] text-gray-600 truncate hover:text-gray-900 cursor-pointer"
+                        >
                           <span
                             className="h-1.5 w-1.5 rounded-full shrink-0"
                             style={{ backgroundColor: stageColorOf(activeConversation) }}
@@ -2619,7 +2739,7 @@ export default function PainelClient({
                           <span className="truncate max-w-[90px] sm:max-w-[120px]">
                             {activeConversation.workflow_stage_name}
                           </span>
-                        </span>
+                        </button>
                       </>
                     )}
 
@@ -2708,15 +2828,15 @@ export default function PainelClient({
                   </button>
                 )}
 
-                {/* 2. Botão Agendar (Desktop) */}
+                {/* 2. Botão Notas (Desktop) */}
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen((v) => !v)}
                   className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 transition-all shadow-2xs active:scale-95 shrink-0"
-                  title="Agendar follow-up, notas ou ver tarefas"
+                  title="Ver e adicionar notas internas"
                 >
-                  <Calendar className="h-3.5 w-3.5 text-gray-500" />
-                  <span>Agendar</span>
+                  <StickyNote className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Notas</span>
                 </button>
 
                 {/* 3. Botão Finalizar / Reabrir (Desktop) */}
@@ -2760,7 +2880,7 @@ export default function PainelClient({
 
                 <div className="h-5 w-px bg-gray-200 mx-0.5 hidden sm:block" />
 
-                {/* 4. Menu Suspenso Mais Opções (⋮) — Acesso a Agendar, Perfil e Finalizar em Mobile e Desktop */}
+                {/* 4. Menu Suspenso Mais Opções (⋮) — Acesso a Notas, Etiquetas e Perfil em Mobile e Desktop */}
                 <DropdownMenu
                   align="right"
                   trigger={
@@ -2776,11 +2896,11 @@ export default function PainelClient({
                 >
                   <DropdownMenuLabel>Ações da Conversa</DropdownMenuLabel>
                   <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                    <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                    <span>Agendar / Notas</span>
+                    <StickyNote className="h-4 w-4 mr-2 text-amber-600" />
+                    <span>Notas Internas</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                    <Tag className="h-4 w-4 mr-2 text-gray-500" />
+                  <DropdownMenuItem onClick={() => setIsStageModalOpen(true)}>
+                    <Tag className="h-4 w-4 mr-2 text-indigo-600" />
                     <span>Etiquetas e Funil</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
@@ -3296,6 +3416,34 @@ export default function PainelClient({
                       <WhatsAppIcon className="h-2.5 w-2.5 text-ellevee-ink-muted" />
                       WhatsApp
                     </span>
+                  </div>
+                </div>
+
+                {/* Etiqueta / Etapa do Funil da Conversa no Perfil */}
+                <div className="p-3 rounded-xl bg-ellevee-stone-subtle border border-ellevee-stone space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-meta font-semibold uppercase tracking-wider text-ellevee-ink-muted flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-indigo-600" />
+                      Etiqueta / Funil
+                    </span>
+                    {isChangingStage && <Loader2 className="h-3 w-3 animate-spin text-ellevee-ink-muted" />}
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={activeConversation.workflow_stage_id || ""}
+                      onChange={(e) => {
+                        if (e.target.value) handleChangeConversationStage(e.target.value)
+                      }}
+                      disabled={isChangingStage}
+                      className="w-full text-xs font-medium px-3 py-2 rounded-lg border border-ellevee-stone bg-white text-ellevee-ink focus:outline-none focus:border-ellevee-ink focus:ring-1 focus:ring-ellevee-ink cursor-pointer"
+                    >
+                      <option value="" disabled>Selecione uma etapa...</option>
+                      {workflowStages.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.name} {st.stage_type === "final" ? "✓ (Final)" : ""}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -3992,6 +4140,108 @@ export default function PainelClient({
                 type="button"
                 onClick={() => setIsQuickRepliesOpen(false)}
                 className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium shrink-0"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: SELETOR DE ETIQUETA / ETAPA DO FUNIL                               */}
+      {/* ========================================================================= */}
+      {isStageModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isChangingStage) setIsStageModalOpen(false)
+          }}
+        >
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[85dvh] flex flex-col p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl border border-ellevee-border space-y-4 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+            <div className="sm:hidden w-10 h-1 rounded-full bg-slate-200 mx-auto shrink-0" />
+            <div className="flex items-start justify-between border-b border-ellevee-border pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+                  <Tag className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-ellevee-deep-ink">
+                    Etiquetas e Funil
+                  </h3>
+                  <p className="text-xs text-ellevee-text-secondary mt-0.5">
+                    Selecione a etapa para categorizar este atendimento.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsStageModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-ellevee-deep-ink hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Lista de Etapas */}
+            <div className="flex-1 min-h-0 overflow-y-auto scroll-slim space-y-2 py-1 pr-1">
+              {workflowStages.length === 0 ? (
+                <div className="text-center py-6 text-sm text-gray-500 italic">
+                  Nenhuma etapa de funil encontrada para esta empresa.
+                </div>
+              ) : (
+                workflowStages.map((st) => {
+                  const isSelected = activeConversation?.workflow_stage_id === st.id
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => handleChangeConversationStage(st.id)}
+                      disabled={isChangingStage}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-500"
+                          : "border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className="h-3.5 w-3.5 rounded-full shrink-0 shadow-2xs"
+                          style={{ backgroundColor: st.color || "#64748b" }}
+                        />
+                        <div className="min-w-0">
+                          <p className={`text-sm font-semibold truncate ${isSelected ? "text-emerald-950" : "text-slate-800"}`}>
+                            {st.name}
+                          </p>
+                          <p className="text-xs text-slate-500 capitalize">
+                            {st.stage_type === "initial"
+                              ? "Etapa inicial"
+                              : st.stage_type === "final"
+                              ? "Etapa de conclusão"
+                              : "Em andamento"}
+                          </p>
+                        </div>
+                      </div>
+                      {isSelected ? (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full shrink-0">
+                          <Check className="h-3 w-3" /> Atual
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">
+                          Selecionar
+                        </span>
+                      )}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-ellevee-border flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsStageModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
                 Fechar
               </button>
