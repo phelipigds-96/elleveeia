@@ -3,6 +3,7 @@ import { getOperationalTelemetry } from "@/lib/services/platform/observability"
 import { getTenantGovernanceReport } from "@/lib/services/platform/tenant-governance"
 import AdminObservabilityClient from "@/components/admin/admin-observability-client"
 import AdminGovernancePanel from "@/components/admin/admin-governance-panel"
+import { requirePlatformAdmin } from "@/lib/services/platform/admin"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -14,6 +15,7 @@ export const metadata = {
 }
 
 export default async function AdminSettingsPage() {
+  await requirePlatformAdmin()
   const [telemetry, governance] = await Promise.all([
     getOperationalTelemetry({ cronLimit: 25, dlqLimit: 30 }),
     getTenantGovernanceReport({ daysWindow: 30 }),

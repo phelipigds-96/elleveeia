@@ -6,12 +6,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export default async function AdminProvidersPage() {
-  try {
-    await requirePlatformAdmin()
-  } catch (err: any) {
-    console.warn("[ProvidersPage] Acesso não-operador à visualização de provedores:", err?.message)
-  }
-
+  await requirePlatformAdmin()
   const { providers, infraConfig } = await getPlatformProvidersData()
 
   return (

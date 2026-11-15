@@ -44,39 +44,15 @@ export interface ActionResult<T = any> {
  * Obtém o operador admin autenticado para vincular aos logs de auditoria
  */
 async function getAuditActor(): Promise<{ id: string; email: string }> {
-  try {
-    const supabase = createClient()
-    const { data } = await supabase.auth.getUser()
-    if (data?.user?.id && data.user.email) {
-      return { id: data.user.id, email: data.user.email }
-    }
-  } catch {
-    // Caso ocorra em ambiente dev ou sem cookie de sessão
-  }
-
-  // Fallback para o superadministrador padrão da plataforma cadastrado no Supabase
-  const adminClient = createAdminClient()
-  const { data: admin } = await adminClient
-    .from("platform_admins")
-    .select("id, email")
-    .eq("active", true)
-    .limit(1)
-    .maybeSingle()
-
-  if (admin?.id && admin?.email) {
-    return { id: admin.id, email: admin.email }
-  }
-
-  return {
-    id: "71ee00c9-e22b-479d-bc34-9d596448c3f9",
-    email: "admin@ellevee.com",
-  }
+  const { user } = await requirePlatformAdmin()
+  return { id: user.id, email: user.email }
 }
 
 /**
  * Consulta a lista real de empresas no Supabase com limites, contagem de mensagens e dados de contato
  */
 export async function getCompaniesList(): Promise<CompanyMock[]> {
+  await requirePlatformAdmin()
   try {
     const adminClient = createAdminClient()
 
@@ -470,6 +446,8 @@ export async function createCompanyAction(
   userCreated?: boolean
 }>> {
   try {
+    await requirePlatformAdmin()
+
     let name = ""
     let slug = ""
     let plan: "Trial" | "Starter" | "Pro" | "Enterprise" = "Pro"
@@ -809,6 +787,8 @@ export async function updateCompanyStatusAction(
   reason?: string
 ): Promise<ActionResult<{ id: string; status: string; suspension_reason: string | null }>> {
   try {
+    await requirePlatformAdmin()
+
     if (!companyId) {
       return { success: false, error: "Identificador da empresa inválido." }
     }
@@ -906,6 +886,8 @@ export async function updateCompanyPlanAction(
   newPlan: "Trial" | "Starter" | "Pro" | "Enterprise"
 ): Promise<ActionResult<{ id: string; plan: string; plan_tier: string }>> {
   try {
+    await requirePlatformAdmin()
+
     if (!companyId) {
       return { success: false, error: "Identificador da empresa inválido." }
     }
@@ -1049,6 +1031,8 @@ export async function updateCompanyLimitsAction(
   newLimits: UpdateLimitsInput
 ): Promise<ActionResult<any>> {
   try {
+    await requirePlatformAdmin()
+
     if (!companyId) {
       return { success: false, error: "Identificador da empresa inválido." }
     }
@@ -1219,6 +1203,7 @@ export async function getCompanyWorkflowAction(companyId: string): Promise<Actio
   templates: Record<string, WorkflowTemplate>
 }>> {
   try {
+    await requirePlatformAdmin()
     const adminClient = createAdminClient()
     const workflow = await getCompanyWorkflowForAdmin(companyId, adminClient)
 
@@ -1254,6 +1239,7 @@ export async function saveCompanyWorkflowAction(params: {
   stages: SaveStagesInput[]
 }): Promise<ActionResult<any>> {
   try {
+    await requirePlatformAdmin()
     const adminClient = createAdminClient()
     const { companyId, workflowId, stages } = params
 
@@ -1317,6 +1303,7 @@ export async function applyCompanyWorkflowTemplateAction(params: {
   templateKey: string
 }): Promise<ActionResult<any>> {
   try {
+    await requirePlatformAdmin()
     const adminClient = createAdminClient()
     const { companyId, workflowId, templateKey } = params
 
@@ -1611,6 +1598,7 @@ export interface AdminCompanyUser {
  * SuperAdmin: Consulta usuários de uma organização específica
  */
 export async function getCompanyUsersAction(companyId: string): Promise<AdminCompanyUser[]> {
+  await requirePlatformAdmin()
   const adminClient = createAdminClient()
   const { data: profiles, error } = await adminClient
     .from("profiles")
@@ -1643,6 +1631,7 @@ export async function createCompanyAttendantAction(input: {
   role: "attendant" | "admin"
 }): Promise<ActionResult<{ id: string; fullName: string; email: string; password: string; role: string }>> {
   try {
+    await requirePlatformAdmin()
     const { companyId, fullName, email } = input
     const role = input.role === "admin" ? "admin" : "attendant"
 
@@ -1743,6 +1732,7 @@ export async function deleteCompanyAttendantAction(
   userId: string
 ): Promise<ActionResult> {
   try {
+    await requirePlatformAdmin()
     const adminClient = createAdminClient()
     await adminClient.from("profiles").delete().eq("id", userId).eq("company_id", companyId)
     await adminClient.auth.admin.deleteUser(userId)

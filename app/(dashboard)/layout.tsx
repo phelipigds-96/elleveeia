@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Toaster } from "@/components/ui/toast"
+import { redirect } from "next/navigation"
 import { getImpersonateStatus } from "@/app/(admin)/companies/actions"
 import { ImpersonateBanner } from "@/components/admin/impersonate-banner"
 import { getCurrentUserProfile } from "@/lib/services/auth/guard"
@@ -19,6 +20,10 @@ export default async function DashboardLayout({
     getImpersonateStatus(),
     getCurrentUserProfile(),
   ])
+
+  if (!profile && !impersonate.isImpersonating) {
+    redirect("/login")
+  }
 
   // Se estiver em modo Impersonate do SuperAdmin, opera com poderes de Admin
   const userRole = impersonate.isImpersonating ? "admin" : (profile?.role || "admin")

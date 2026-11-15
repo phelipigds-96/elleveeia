@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // 1. Permite acesso aos webhooks e crons sem exigir sessão de usuário
-  // 2. Permite acesso às rotas do SuperAdmin e Chat durante homologação visual
+  // Permite acesso exclusivo a recursos públicos estáticos PWA e endpoints M2M protegidos por token/assinatura
   if (
     request.nextUrl.pathname === '/sw.js' ||
     request.nextUrl.pathname === '/manifest.webmanifest' ||
@@ -11,15 +10,7 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/api/push') ||
     request.nextUrl.pathname.startsWith('/api/webhooks') ||
     request.nextUrl.pathname.startsWith('/api/cron') ||
-    request.nextUrl.pathname.startsWith('/api/outbox') ||
-    request.nextUrl.pathname.startsWith('/paineladmin') ||
-    request.nextUrl.pathname.startsWith('/companies') ||
-    request.nextUrl.pathname.startsWith('/plans') ||
-    request.nextUrl.pathname.startsWith('/agents') ||
-    request.nextUrl.pathname.startsWith('/providers') ||
-    request.nextUrl.pathname.startsWith('/audit') ||
-    request.nextUrl.pathname.startsWith('/admin-settings') ||
-    request.nextUrl.pathname.startsWith('/conversations')
+    request.nextUrl.pathname.startsWith('/api/outbox')
   ) {
     return NextResponse.next()
   }

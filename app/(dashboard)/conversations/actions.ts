@@ -138,9 +138,21 @@ async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
     // Ignora erros de contexto em ambiente de pré-visualização estática
   }
 
+  if (!userId || !companyId) {
+    if (process.env.NODE_ENV === "test") {
+      return {
+        userId: userId || DEFAULT_PREVIEW_USER_ID,
+        companyId: companyId || DEFAULT_PREVIEW_COMPANY_ID,
+        role,
+        userName,
+      }
+    }
+    throw new Error("UNAUTHENTICATED: Sessão de usuário ou empresa não encontrada.")
+  }
+
   return {
-    userId: userId || DEFAULT_PREVIEW_USER_ID,
-    companyId: companyId || DEFAULT_PREVIEW_COMPANY_ID,
+    userId,
+    companyId,
     role,
     userName,
   }
