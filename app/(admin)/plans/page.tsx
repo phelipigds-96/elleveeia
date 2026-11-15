@@ -6,12 +6,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export default async function PlansPage() {
-  try {
-    await requirePlatformAdmin()
-  } catch (err: any) {
-    console.warn("[PlansPage] Acesso não-operador à visualização de planos:", err?.message)
-  }
-
+  await requirePlatformAdmin()
   const plans = await getPlatformPlans()
 
   return <PlansClientView initialPlans={plans} />

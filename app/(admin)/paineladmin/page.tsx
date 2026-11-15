@@ -20,6 +20,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { getAdminDashboardMetrics } from "@/lib/services/platform/admin-metrics"
+import { requirePlatformAdmin } from "@/lib/services/platform/admin"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -30,6 +31,7 @@ export const metadata = {
 }
 
 export default async function SuperAdminDashboardPage() {
+  await requirePlatformAdmin()
   const metrics = await getAdminDashboardMetrics()
 
   // Calcula o valor máximo para a proporção das barras do gráfico

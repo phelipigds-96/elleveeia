@@ -47,11 +47,7 @@ export interface AdminInstancesOverview {
  * Obtém a visão geral de instâncias da plataforma para o SuperAdmin.
  */
 export async function getAdminInstancesDataAction(): Promise<AdminInstancesOverview> {
-  try {
-    await requirePlatformAdmin()
-  } catch (authErr: any) {
-    console.warn('[AdminInstances] Acesso sem perfil platform_admin:', authErr?.message)
-  }
+  await requirePlatformAdmin()
 
   const fallback: AdminInstancesOverview = {
     globalConfig: { apiUrl: '', apiKey: '', isConfigured: false },
@@ -198,11 +194,7 @@ export async function saveGlobalEvolutionConfigAction(params: {
   apiUrl: string
   apiKey: string
 }): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite fallback se a sessão for do admin da empresa
-  }
+  await requirePlatformAdmin()
   const res = await saveGlobalEvolutionConfig(params)
   revalidatePath('/instances')
   revalidatePath('/integrations')
@@ -216,11 +208,7 @@ export async function testGlobalEvolutionConnectionAction(params: {
   apiUrl: string
   apiKey: string
 }): Promise<{ success: boolean; totalInstances?: number; error?: string }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   const res = await fetchServerInstances(params)
   if (!res.success) {
     return { success: false, error: res.error }
@@ -237,11 +225,7 @@ export async function linkCompanyInstanceAction(params: {
   customApiUrl?: string
   customApiKey?: string
 }): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   const adminClient = createAdminClient()
 
   const cleanInstance = params.instanceName.trim()
@@ -313,11 +297,7 @@ export async function linkCompanyInstanceAction(params: {
 export async function unlinkCompanyInstanceAction(params: {
   companyId: string
 }): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   const adminClient = createAdminClient()
 
   const { error } = await adminClient
@@ -341,11 +321,7 @@ export async function createEvolutionInstanceAction(params: {
   instanceName: string
   webhookUrl?: string
 }): Promise<{ success: boolean; error?: string; data?: any }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
 
   const cleanInstance = params.instanceName.trim()
   if (!cleanInstance) {
@@ -392,11 +368,7 @@ export async function deleteEvolutionInstanceFromServerAction(params: {
   companyId?: string
   instanceName: string
 }): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
 
   const deleteRes = await deleteEvolutionInstanceOnServer({
     instanceName: params.instanceName,
@@ -419,11 +391,7 @@ export async function deleteEvolutionInstanceFromServerAction(params: {
  * Obtém o QR Code da instância selecionada para o SuperAdmin visualizar ou auxiliar o cliente.
  */
 export async function getInstanceQrCodeAction(companyId: string) {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   return await getEvolutionWhatsAppQrCode(companyId)
 }
 
@@ -431,11 +399,7 @@ export async function getInstanceQrCodeAction(companyId: string) {
  * Reinicia a instância do WhatsApp.
  */
 export async function restartInstanceAction(companyId: string) {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   const res = await restartEvolutionWhatsApp(companyId)
   revalidatePath('/instances')
   return res
@@ -445,11 +409,7 @@ export async function restartInstanceAction(companyId: string) {
  * Desconecta (logout) a instância do WhatsApp.
  */
 export async function disconnectInstanceAction(companyId: string) {
-  try {
-    await requirePlatformAdmin()
-  } catch {
-    // Permite
-  }
+  await requirePlatformAdmin()
   const res = await disconnectEvolutionWhatsApp(companyId)
   revalidatePath('/instances')
   return res
