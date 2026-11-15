@@ -661,5 +661,105 @@ describe('ETAPA 2A — Verificação Completa (Timeouts, Memória, Scoping, Míd
       false,
       'Falha ambígua NÃO deve concluir outbox — deve permanecer em processing para reconciliação'
     )
+
+    // 8. Validação de recusa atômica e proteção contra envio sem posse do Outbox
+    let dispatchFetchAttempted = false
+    globalThis.fetch = async () => {
+      dispatchFetchAttempted = true
+      return new Response('{}', { status: 200 })
+    }
+
+    // 8.1. Falha RPC ao reivindicar outbox
+    const errRpcClient = {
+      async rpc(fn) {
+        if (fn === 'claim_outbox_message') return { data: null, error: { message: 'Supabase connection timeout' } }
+        return { data: null, error: null }
+      }
+    }
+    const errClaimRes = await dispatchOutboxRecordHardened({
+      adminClient: errRpcClient,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-err-claim', message: { content: 'oi' } }
+    })
+    assert.equal(errClaimRes.outcome, 'claim_lost')
+    assert.equal(dispatchFetchAttempted, false, 'Falha RPC no claim NÃO pode prosseguir para despacho de saída')
+
+    // 8.2. Claim negado: already_sent (short-circuit seguro sem duplicidade)
+    const alreadySentClient = {
+      async rpc(fn) {
+        if (fn === 'claim_outbox_message') {
+          return { data: [{ was_claimed: false, error_reason: 'already_sent' }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    }
+    const alreadySentRes = await dispatchOutboxRecordHardened({
+      adminClient: alreadySentClient,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-sent-claim', message: { content: 'oi' } }
+    })
+    assert.equal(alreadySentRes.outcome, 'already_sent')
+    assert.equal(dispatchFetchAttempted, false, 'already_sent NÃO pode enviar mensagem duplicada')
+
+    // 8.3. Claim negado: active_lease (concorrência ativa)
+    const leaseBusyClient = {
+      async rpc(fn) {
+        if (fn === 'claim_outbox_message') {
+          return { data: [{ was_claimed: false, error_reason: 'active_lease' }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    }
+    const leaseBusyRes = await dispatchOutboxRecordHardened({
+      adminClient: leaseBusyClient,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-lease-claim', message: { content: 'oi' } }
+    })
+    assert.equal(leaseBusyRes.outcome, 'claim_lost')
+    assert.equal(dispatchFetchAttempted, false, 'active_lease NÃO pode disparar sem posse')
+
+    // 8.4. Claim negado: max_attempts_exceeded (DLQ)
+    const maxAttemptsClient = {
+      async rpc(fn) {
+        if (fn === 'claim_outbox_message') {
+          return { data: [{ was_claimed: false, error_reason: 'max_attempts_exceeded' }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    }
+    const maxAttemptsRes = await dispatchOutboxRecordHardened({
+      adminClient: maxAttemptsClient,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-max-claim', message: { content: 'oi' } }
+    })
+    assert.equal(maxAttemptsRes.outcome, 'claim_lost')
+    assert.equal(dispatchFetchAttempted, false, 'max_attempts_exceeded NÃO pode continuar disparos')
+
+    // 8.5. Claim negado: suppressed (quota / governança)
+    const suppressedClient = {
+      async rpc(fn) {
+        if (fn === 'claim_outbox_message') {
+          return { data: [{ was_claimed: false, error_reason: 'suppressed' }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    }
+    const suppressedRes = await dispatchOutboxRecordHardened({
+      adminClient: suppressedClient,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-suppressed-claim', message: { content: 'oi' } }
+    })
+    assert.equal(suppressedRes.outcome, 'suppressed')
+    assert.equal(dispatchFetchAttempted, false, 'suppressed NÃO pode disparar externamente')
   })
 })
