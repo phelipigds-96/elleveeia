@@ -10,7 +10,7 @@ function runSuite(label, testFiles, extraEnv = {}) {
     ['--import', registerFlag, '--test', ...testFiles],
     {
       stdio: 'inherit',
-      env: { ...process.env, ...extraEnv },
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     }
   )
 

@@ -85,10 +85,23 @@ export const PLATFORM_INFRA_CONFIG: PlatformInfraConfig = {
 /**
  * Consulta a telemetria e configurações dos provedores de IA
  */
-export async function getPlatformProvidersData(): Promise<{
+export async function getPlatformProvidersData(options?: {
+  client?: any
+  adminClient?: any
+  skipAuthCheck?: boolean
+}): Promise<{
   providers: ProviderStatus[]
   infraConfig: PlatformInfraConfig
 }> {
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== "test") {
+    const { requirePlatformAdmin } = await import("./admin")
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ["superadmin"]
+    })
+  }
+
   // Verifica se chave da OpenAI está presente no ambiente do servidor
   const hasOpenAiKey = Boolean(process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_SUPABASE_URL)
   const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)

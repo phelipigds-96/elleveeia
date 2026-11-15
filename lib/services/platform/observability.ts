@@ -553,9 +553,20 @@ export function getRuntimeEnvironmentStatus(): RuntimeEnvironmentStatus {
  */
 export async function getOperationalTelemetry(options?: {
   adminClient?: any
+  client?: any
   cronLimit?: number
   dlqLimit?: number
+  skipAuthCheck?: boolean
 }): Promise<OperationalTelemetrySummary> {
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== 'test') {
+    const { requirePlatformAdmin } = await import('./admin')
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ['superadmin']
+    })
+  }
+
   const cronLimit = Math.min(Math.max(options?.cronLimit ?? 25, 1), 100)
   const dlqLimit = Math.min(Math.max(options?.dlqLimit ?? 25, 1), 100)
   const envFlags = getRuntimeEnvironmentStatus()

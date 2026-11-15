@@ -216,7 +216,21 @@ export function humanizeAuditDetails(action: string, payload: any, reason?: stri
 /**
  * Consulta todas as métricas reais consolidadas para o Dashboard do SuperAdmin
  */
-export async function getAdminDashboardMetrics(options?: { adminClient?: any }): Promise<AdminDashboardMetrics> {
+export async function getAdminDashboardMetrics(options?: {
+  adminClient?: any
+  client?: any
+  skipAuthCheck?: boolean
+}): Promise<AdminDashboardMetrics> {
+  // Defesa em Profundidade: autorização explícita no nível do serviço
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== 'test') {
+    const { requirePlatformAdmin } = await import('./admin')
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ['superadmin']
+    })
+  }
+
   let adminClient = options?.adminClient
   if (!adminClient) {
     const { createAdminClient } = await import('@/lib/supabase/service')
@@ -460,7 +474,20 @@ export async function getAdminDashboardMetrics(options?: { adminClient?: any }):
 /**
  * Consulta a lista completa de logs de auditoria com resolução de empresa e texto amigável
  */
-export async function getPlatformAuditLogs(limit: number = 100, options?: { adminClient?: any }): Promise<FormattedAuditLog[]> {
+export async function getPlatformAuditLogs(
+  limit: number = 100,
+  options?: { adminClient?: any; client?: any; skipAuthCheck?: boolean }
+): Promise<FormattedAuditLog[]> {
+  // Defesa em Profundidade: autorização explícita no nível do serviço
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== 'test') {
+    const { requirePlatformAdmin } = await import('./admin')
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ['superadmin']
+    })
+  }
+
   let adminClient = options?.adminClient
   if (!adminClient) {
     const { createAdminClient } = await import('@/lib/supabase/service')

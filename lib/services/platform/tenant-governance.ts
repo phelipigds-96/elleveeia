@@ -342,9 +342,20 @@ export interface TenantGovernanceReport {
 
 export async function getTenantGovernanceReport(options?: {
   adminClient?: any
+  client?: any
   daysWindow?: number
   usdToBrlRate?: number
+  skipAuthCheck?: boolean
 }): Promise<TenantGovernanceReport> {
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== "test") {
+    const { requirePlatformAdmin } = await import("./admin")
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ["superadmin"]
+    })
+  }
+
   const windowDays = Math.min(90, Math.max(1, options?.daysWindow ?? 30))
   const usdToBrlRate =
     options?.usdToBrlRate && options.usdToBrlRate > 0

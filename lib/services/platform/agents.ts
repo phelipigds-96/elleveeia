@@ -76,7 +76,20 @@ export const AGENT_BLUEPRINTS: AgentBlueprintTemplate[] = [
 /**
  * Consulta a lista consolidada de agentes de todas as empresas clientes
  */
-export async function getPlatformAgentsList(options?: { adminClient?: any }): Promise<PlatformAgent[]> {
+export async function getPlatformAgentsList(options?: {
+  adminClient?: any
+  client?: any
+  skipAuthCheck?: boolean
+}): Promise<PlatformAgent[]> {
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== "test") {
+    const { requirePlatformAdmin } = await import("./admin")
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ["superadmin"]
+    })
+  }
+
   try {
     let adminClient = options?.adminClient
     if (!adminClient) {

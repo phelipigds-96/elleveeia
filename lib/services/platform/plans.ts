@@ -159,7 +159,20 @@ export const DEFAULT_PLANS: PlatformPlan[] = [
  * Lê do Supabase quando a tabela platform_plans estiver disponível,
  * ou recorre aos defaults resilientes de produção.
  */
-export async function getPlatformPlans(options?: { adminClient?: any }): Promise<PlatformPlan[]> {
+export async function getPlatformPlans(options?: {
+  adminClient?: any
+  client?: any
+  skipAuthCheck?: boolean
+}): Promise<PlatformPlan[]> {
+  if (!options?.skipAuthCheck && process.env.NODE_ENV !== "test") {
+    const { requirePlatformAdmin } = await import("./admin")
+    await requirePlatformAdmin({
+      client: options?.client,
+      adminClient: options?.adminClient,
+      requiredRoles: ["superadmin"]
+    })
+  }
+
   try {
     let adminClient = options?.adminClient
     if (!adminClient) {
