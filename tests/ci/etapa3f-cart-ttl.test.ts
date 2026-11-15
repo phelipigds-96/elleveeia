@@ -18,8 +18,12 @@ import {
 import {
   resolveToolScope,
   hasClearProductIntent,
-  COMPLAINT_AND_FRUSTRATION_PATTERNS
+  COMPLAINT_AND_FRUSTRATION_PATTERNS,
+  isExplicitHandoffIntent,
+  isComplaintOrFrustrationIntent,
+  isOrderClosureIntent
 } from '@/lib/services/agent/tool-scoping'
+import { sendEvolutionWithGatewayLock } from '@/lib/services/conversations-internal'
 
 test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil', async (t) => {
   await t.test('1. isWorkingMemoryExpired lida com valores vazios e inválidos sem explodir', () => {
@@ -307,5 +311,140 @@ test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil
     )
     const names2 = tools2.map((t: any) => t.name)
     assert.deepStrictEqual(names2, ['transferir_para_humano'], 'Deve conter apenas transferir_para_humano')
+  })
+
+  await t.test('14. isOrderClosureIntent, isExplicitHandoffIntent e isComplaintOrFrustrationIntent detectam intenções com precisão', () => {
+    // Intenções de fechamento com carrinho ativo
+    assert.strictEqual(
+      isOrderClosureIntent('Ok, vou retirar na loja, dai ja pago no ato da retirada', true),
+      true,
+      'Retirar na loja e pagar no ato deve acionar fechamento de pedido com carrinho ativo'
+    )
+    assert.strictEqual(
+      isOrderClosureIntent('Ok, vou retirar na loja, dai ja pago no ato da retirada', false),
+      false,
+      'Sem carrinho ou orçamento ativo, não deve disparar fechamento'
+    )
+    assert.strictEqual(
+      isOrderClosureIntent('pode fechar o pedido e mandar a chave pix', true),
+      true
+    )
+    assert.strictEqual(
+      isOrderClosureIntent('quanto fica o frete para vargas?', true),
+      false
+    )
+
+    // Intenções explícitas de handoff
+    assert.strictEqual(
+      isExplicitHandoffIntent('quero falar com um atendente humano por favor'),
+      true
+    )
+    assert.strictEqual(
+      isExplicitHandoffIntent('qual o horário de funcionamento da loja?'),
+      false
+    )
+
+    // Intenções de reclamação / SAC
+    assert.strictEqual(
+      isComplaintOrFrustrationIntent('o chocolate veio estragado e mofado, exijo meu dinheiro de volta'),
+      true
+    )
+    assert.strictEqual(
+      isComplaintOrFrustrationIntent('tem chocolate sicao 50%?'),
+      false
+    )
+  })
+
+  await t.test('15. sendEvolutionWithGatewayLock utiliza safeHttpRequest e neutraliza tentativas de SSRF', async () => {
+    const TEST_COMPANY_ID = '11111111-1111-1111-1111-111111111111'
+    const mockAdminClient = {
+      from: (table: string) => {
+        const queryHandler = {
+          select: () => queryHandler,
+          eq: () => queryHandler,
+          not: () => queryHandler,
+          limit: () => queryHandler,
+          single: async () => {
+            if (table === 'companies') return { data: { id: TEST_COMPANY_ID, is_active: true, status: 'active' }, error: null }
+            if (table === 'integrations') return {
+              data: {
+                status: 'active',
+                config: {
+                  api_url: 'https://evil-internal.example.com',
+                  instance_name: 'test-instance'
+                },
+                credentials: {
+                  api_key: 'test-key'
+                }
+              },
+              error: null
+            }
+            return { data: null, error: null }
+          },
+          maybeSingle: async () => {
+            if (table === 'companies') return { data: { id: TEST_COMPANY_ID, is_active: true, status: 'active' }, error: null }
+            if (table === 'integrations') return {
+              data: {
+                status: 'active',
+                config: {
+                  api_url: 'https://evil-internal.example.com',
+                  instance_name: 'test-instance'
+                },
+                credentials: {
+                  api_key: 'test-key'
+                }
+              },
+              error: null
+            }
+            return { data: null, error: null }
+          }
+        }
+        return queryHandler
+      },
+      rpc: async (fn: string) => {
+        if (fn === 'acquire_gateway_outbound_lock') {
+          return { data: [{ was_acquired: true, claim_token: 'tok-123', status: 'acquired' }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    }
+
+    // Caso 1: isSafeUrl bloqueia antecipadamente URLs com IP privado/metadata
+    const blockedRes = await sendEvolutionWithGatewayLock({
+      adminClient: mockAdminClient,
+      companyId: TEST_COMPANY_ID,
+      outboxId: 'outbox-1',
+      messageId: 'msg-1',
+      outboundPayload: { text: 'teste', recipient: '555199999999' },
+      leaseSeconds: 60,
+      isSafeUrl: () => false,
+      isAmbiguousNetworkError: () => false
+    })
+
+    assert.strictEqual(blockedRes?.success, false)
+    assert.strictEqual(blockedRes?.reason, 'unsafe_url')
+
+    // Caso 2: safeHttpRequest bloqueia requisição em runtime (DNS rebinding / redirect)
+    let safeHttpCalled = false
+    const mockSafeHttpRequest = async () => {
+      safeHttpCalled = true
+      throw new Error('SSRF_BLOCKED: Redirecionamentos HTTP são bloqueados por políticas de segurança (SSRF).')
+    }
+
+    const ssrfRes = await sendEvolutionWithGatewayLock({
+      adminClient: mockAdminClient,
+      companyId: TEST_COMPANY_ID,
+      outboxId: 'outbox-2',
+      messageId: 'msg-2',
+      outboundPayload: { text: 'teste', recipient: '555199999999' },
+      leaseSeconds: 60,
+      isSafeUrl: () => true, // Passou pelo check inicial, mas rebinding/redirect pego em runtime
+      isAmbiguousNetworkError: () => false,
+      safeHttpRequest: mockSafeHttpRequest
+    })
+
+    assert.strictEqual(safeHttpCalled, true, 'Deve ter chamado safeHttpRequest')
+    assert.strictEqual(ssrfRes?.success, false)
+    assert.strictEqual(ssrfRes?.reason, 'ssrf_blocked')
   })
 })

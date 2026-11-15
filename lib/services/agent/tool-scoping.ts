@@ -49,12 +49,18 @@ function isAskingDuration(msg: string): boolean {
  * Padrões explícitos de pedido de atendimento humano ou transferência para pessoa real.
  * Não dispara em perguntas institucionais gerais (ex: "horário de atendimento", "telefone do suporte").
  */
-const HANDOFF_PATTERNS = [
+export const HANDOFF_PATTERNS = [
   /\b(?:falar|conversar|passa|passe|transfere|transferir|chamar?|manda|encaminh(?:ar?|e))\b.*\b(?:humano|atendente|pessoa|vendedor|vendedora|gerente|consultor|consultora|especialista|suporte|alguem)\b/i,
   /\b(?:quero|preciso|gostaria|prefiro|pode)\b.*\b(?:humano|atendente|pessoa|vendedor|vendedora|gerente|atendimento\s+humano)\b/i,
   /\b(?:atendimento\s+humano|falar\s+com\s+(?:um\s+|uma\s+)?(?:pessoa|alguem|atendente|vendedor|vendedora|gerente)|transferir\s+para\s+(?:um\s+)?humano)\b/i,
   /^(?:sim|ok|beleza|por\s+favor|pfv)?\s*(?:pode\s+)?transfer(?:ir|e)(?:\s+(?:pfv|por\s+favor|sim))?$/i
 ]
+
+export function isExplicitHandoffIntent(text?: string): boolean {
+  if (!text) return false
+  const msg = normalizeText(text)
+  return HANDOFF_PATTERNS.some(p => p.test(msg))
+}
 
 /**
  * Termos institucionais e operacionais que indicam perguntas sobre a empresa,
@@ -113,7 +119,7 @@ const QUOTE_PATTERNS = [
 /**
  * Padrões de fechamento de pedido, escolha de retirada/entrega ou pagamento.
  */
-const ORDER_CLOSURE_PATTERNS = [
+export const ORDER_CLOSURE_PATTERNS = [
   /\b(?:fechar?|finalizar?|concluir?|terminar?)\s+(?:o|meu)?\s*(?:pedido|orcamento|compra)\b/i,
   /\b(?:retirar?|retirada|pegar|buscar)\s+(?:na|em|no|pela)?\s*(?:loja|balcao|estabelecimento)\b/i,
   /\b(?:vou|quero|pode)\s+(?:retirar|ir\s+buscar|pegar)\b/i,
@@ -123,6 +129,18 @@ const ORDER_CLOSURE_PATTERNS = [
   /\b(?:entrega|entregar|envia|enviar)\s+(?:no|na|em|pra|para)\b/i,
   /\b(?:pode\s+mandar\s+entregar|faz\s+a\s+entrega)\b/i
 ]
+
+export function isOrderClosureIntent(text?: string, hasCartOrQuote: boolean = false): boolean {
+  if (!text || !hasCartOrQuote) return false
+  const msg = normalizeText(text)
+  return ORDER_CLOSURE_PATTERNS.some(p => p.test(msg))
+}
+
+export function isComplaintOrFrustrationIntent(text?: string): boolean {
+  if (!text) return false
+  const msg = normalizeText(text)
+  return COMPLAINT_AND_FRUSTRATION_PATTERNS.some(p => p.test(msg))
+}
 
 /**
  * Padrões de reclamação, insatisfação, problemas com pedidos/produtos, termos jurídicos

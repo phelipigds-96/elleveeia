@@ -528,7 +528,7 @@ async function safeCompleteGatewayLock(
   }
 }
 
-async function sendEvolutionWithGatewayLock(params: {
+export async function sendEvolutionWithGatewayLock(params: {
   adminClient: any
   companyId: string
   outboxId: string
@@ -537,6 +537,7 @@ async function sendEvolutionWithGatewayLock(params: {
   leaseSeconds: number
   isSafeUrl: (url: string) => boolean
   isAmbiguousNetworkError: (err: any) => boolean
+  safeHttpRequest?: any
 }): Promise<any | null> {
   const { adminClient, companyId, outboxId, messageId, outboundPayload, leaseSeconds, isSafeUrl, isAmbiguousNetworkError } = params
   const evo = await resolveEvolutionDispatchConfig(adminClient, companyId)
@@ -605,20 +606,23 @@ async function sendEvolutionWithGatewayLock(params: {
     }
   }
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 15000)
+  const httpRequest = params.safeHttpRequest
+    ? async (url: string, opts: any) => params.safeHttpRequest(url, opts)
+    : async (url: string, opts: any) => {
+        const { fetchWithTimeout } = await import('@/lib/services/n8n-internal')
+        return fetchWithTimeout(url, opts, opts?.timeoutMs || 15000)
+      }
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await httpRequest(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: evo.apiKey
       },
       body: JSON.stringify(bodyPayload),
-      signal: controller.signal
+      timeoutMs: 15000
     })
-    clearTimeout(timeoutId)
 
     const rawText = await response.text().catch(() => '')
     let data: any = null
@@ -658,8 +662,10 @@ async function sendEvolutionWithGatewayLock(params: {
 
     return { success: true, provider_message_id: providerMessageId }
   } catch (err: any) {
-    clearTimeout(timeoutId)
-    const isAmbiguous = isAmbiguousNetworkError(err)
+    const isSsrfBlocked = Boolean(
+      err?.message && (err.message.includes('SSRF') || err.message.includes('Redirecionamentos'))
+    )
+    const isAmbiguous = !isSsrfBlocked && isAmbiguousNetworkError(err)
     if (!isAmbiguous) {
       await safeCompleteGatewayLock(rpcClient, {
         companyId,
@@ -671,7 +677,7 @@ async function sendEvolutionWithGatewayLock(params: {
     }
     return {
       success: false,
-      reason: isAmbiguous ? 'gateway_timeout' : 'fetch_error',
+      reason: isSsrfBlocked ? 'ssrf_blocked' : (isAmbiguous ? 'gateway_timeout' : 'fetch_error'),
       error: err?.message || String(err)
     }
   }
