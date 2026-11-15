@@ -14,7 +14,13 @@ import { consultarOrcamentoTool } from './tools/consultar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
 import { salvarNomeClienteTool } from './tools/salvar-nome-cliente'
 import { transferirParaHumanoTool } from './tools/transferir-para-humano'
-import { resolveToolScope, hasClearProductIntent } from './tool-scoping'
+import { 
+  resolveToolScope, 
+  hasClearProductIntent,
+  isExplicitHandoffIntent,
+  isComplaintOrFrustrationIntent,
+  isOrderClosureIntent
+} from './tool-scoping'
 import { applyWorkingMemoryUpdate } from './working-memory'
 import { maybeRefreshConversationSummary } from './conversation-summary'
 import { DEFAULT_LLM_TIMEOUT_MS, LLMTimeoutError } from '../llm/timeout'
@@ -287,6 +293,53 @@ export async function runAgentEngine({
         }
       }
 
+      // Fallback Determinístico de Handoff (Reclamação ou Pedido Explícito de Atendente)
+      if (
+        iteration === 1 &&
+        (!response.tool_calls || response.tool_calls.length === 0) &&
+        (isComplaintOrFrustrationIntent(userMessage) || isExplicitHandoffIntent(userMessage))
+      ) {
+        const handoffTool = scopedTools.find(t => t.name === 'transferir_para_humano')
+        if (handoffTool) {
+          fallbackTriggered = true
+          const isComp = isComplaintOrFrustrationIntent(userMessage)
+          response.tool_calls = [{
+            callId: 'fallback_handoff_1',
+            toolName: handoffTool.name,
+            arguments: {
+              reason: isComp ? 'Reclamação ou insatisfação do cliente' : 'Solicitação de atendimento humano',
+              department: isComp ? 'suporte' : 'atendimento'
+            }
+          }]
+          response.content = null
+        }
+      }
+
+      // Fallback Determinístico de Fechamento de Pedido com Carrinho Ativo
+      const hasCartForClosureTurn = Boolean(
+        (currentWorkingMemory?.activeCart && currentWorkingMemory.activeCart.length > 0) ||
+        currentWorkingMemory?.activeQuote?.id
+      )
+      if (
+        iteration === 1 &&
+        (!response.tool_calls || response.tool_calls.length === 0) &&
+        isOrderClosureIntent(userMessage, hasCartForClosureTurn)
+      ) {
+        const handoffTool = scopedTools.find(t => t.name === 'transferir_para_humano')
+        if (handoffTool) {
+          fallbackTriggered = true
+          response.tool_calls = [{
+            callId: 'fallback_order_closure_1',
+            toolName: handoffTool.name,
+            arguments: {
+              reason: 'Orçamento fechado pelo cliente. Verificar disponibilidade física de estoque e dar seguimento ao pedido.',
+              department: 'vendas'
+            }
+          }]
+          response.content = null
+        }
+      }
+
       llm_rounds.push({
         round: iteration,
         provider: providerUsed,
@@ -365,6 +418,61 @@ export async function runAgentEngine({
     // Não inventamos dados, apenas parseamos resultados determinísticos de forma segura
     const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
 
+    // Defesa em Profundidade: Handoff Pós-Loop Garantido
+    // Se a mensagem exigia handoff (reclamação, atendente humano ou fechamento com carrinho)
+    // e transferir_para_humano não foi executado pelo LLM, executamos diretamente aqui.
+    const hasCartOrQuoteForClosure = Boolean(
+      (newWorkingMemory?.activeCart && newWorkingMemory.activeCart.length > 0) ||
+      newWorkingMemory?.activeQuote?.id ||
+      (currentWorkingMemory?.activeCart && currentWorkingMemory.activeCart.length > 0) ||
+      currentWorkingMemory?.activeQuote?.id
+    )
+    const isOrderClosure = isOrderClosureIntent(userMessage, hasCartOrQuoteForClosure)
+    const isHandoffReq = isExplicitHandoffIntent(userMessage)
+    const isComplaintReq = isComplaintOrFrustrationIntent(userMessage)
+    const requiresHandoff = isOrderClosure || isHandoffReq || isComplaintReq
+
+    let handoffTriggered = allToolResults.some(
+      (r) => r?.toolName === 'transferir_para_humano' && r?.success === true && r?.data?.transferred === true
+    )
+
+    if (requiresHandoff && !handoffTriggered) {
+      const handoffReason = isComplaintReq
+        ? 'Reclamação ou insatisfação do cliente (enforcement de segurança)'
+        : isOrderClosure
+        ? 'Orçamento fechado pelo cliente. Verificar disponibilidade física de estoque e dar seguimento ao pedido (enforcement de segurança)'
+        : 'Solicitação de atendimento humano (enforcement de segurança)'
+
+      const forcedHandoffResult = await transferirParaHumanoTool.execute({
+        reason: handoffReason,
+        department: isComplaintReq ? 'suporte' : 'vendas'
+      }, {
+        companyId,
+        agentId,
+        conversationId,
+        adminClient: supabase
+      })
+
+      if (forcedHandoffResult.success && forcedHandoffResult.transferred) {
+        handoffTriggered = true
+        allToolResults.push({ toolName: 'transferir_para_humano', success: true, data: forcedHandoffResult })
+      }
+    }
+
+    // Sanitização de Conteúdo em Fechamento de Pedido:
+    // Garante que o cliente NUNCA receba confirmação de reserva ou "pode vir retirar" sem intervenção humana
+    if (isOrderClosure && finalContent) {
+      finalContent = finalContent
+        .replace(/Pode vir retirar quando for mais conveniente\.?/gi, '')
+        .replace(/Vou reservar seu pedido para retirada na loja\.?/gi, 'Registrei os detalhes do seu pedido para retirada na loja.')
+        .replace(/Se precisar de mais alguma coisa, é só avisar!/gi, '')
+        .trim()
+
+      if (!/transferindo|atendente humano|equipe|confirmar a disponibilidade|estoque/i.test(finalContent)) {
+        finalContent += '\n\nComo precisamos verificar a disponibilidade física dos produtos no estoque da loja antes de separar, estou transferindo você agora para um de nossos atendentes humanos dar seguimento no seu pedido. Em instantes alguém da nossa equipe vai te responder por aqui! 😊'
+      }
+    }
+
     // 3. Preparar metadados da mensagem do agente contendo a nova memória de trabalho
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
@@ -401,10 +509,6 @@ export async function runAgentEngine({
         throw new Error(`Falha ao atualizar conversa após resposta do agente: ${convUpdateErr.message}`)
       }
     }
-
-    const handoffTriggered = allToolResults.some(
-      (r) => r?.toolName === 'transferir_para_humano' && r?.success === true && r?.data?.transferred === true
-    )
 
     runStatus = 'success'
 
