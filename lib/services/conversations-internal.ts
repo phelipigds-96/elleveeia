@@ -306,6 +306,46 @@ export async function sendManualMessageInternal(
 
   const outboundRes = dispatchRes.outboundRes
 
+  if (dispatchRes.outcome === 'already_sent') {
+    return {
+      success: true,
+      gatewayDispatched: true,
+      externalDeliveryConfirmed: true,
+      persistedStatus: 'sent',
+      message: {
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
+        metadata: { delivery_status: 'sent' }
+      }
+    }
+  }
+
+  if (dispatchRes.outcome === 'claim_lost') {
+    return {
+      success: false,
+      error: dispatchRes.finalError || 'Mensagem já em processamento por outro worker ou bloqueada por concorrência.',
+      code: 'OUTBOX_CLAIM_DENIED',
+      reason: outboundRes?.reason || 'claim_lost',
+      gatewayDispatched: false,
+      externalDeliveryConfirmed: false,
+      message: {
+        id: messageId,
+        company_id: companyId,
+        conversation_id: conversationId,
+        sender_type: 'human',
+        sender_id: userId,
+        content: content.trim(),
+        message_type: 'text',
+        metadata: { delivery_status: 'pending' }
+      }
+    }
+  }
+
   if (dispatchRes.outcome === 'ambiguous') {
     console.warn(`[sendMessageInternal] Timeout ou falha de rede ambígua para outbox ${outboxId}. Mantendo outbox como processing para reconciliação pelo worker.`)
     return {
@@ -448,7 +488,7 @@ export interface HardenedOutboxDispatchParams {
 }
 
 export interface HardenedOutboxDispatchResult {
-  outcome: 'sent' | 'ambiguous' | 'failed' | 'suppressed'
+  outcome: 'sent' | 'ambiguous' | 'failed' | 'suppressed' | 'claim_lost' | 'already_sent'
   outboundRes: any
   providerMessageId: string | null
   msgStatusErr: any
@@ -703,8 +743,54 @@ export async function dispatchOutboxRecordHardened(
       p_outbox_id: outboxId,
       p_lease_seconds: leaseSeconds
     })
-    if (!claimErr && claimData) {
+
+    if (claimErr) {
+      console.error(`[dispatchOutboxRecordHardened] Falha RPC ao reivindicar outbox ${outboxId}:`, claimErr)
+      return {
+        outcome: 'claim_lost',
+        outboundRes: { success: false, reason: 'claim_rpc_error', error: claimErr.message },
+        providerMessageId: null,
+        msgStatusErr: null,
+        finalError: `Falha ao reivindicar outbox: ${claimErr.message}`
+      }
+    }
+
+    if (claimData) {
       claim = Array.isArray(claimData) ? claimData[0] : claimData
+    }
+
+    const wasClaimed = claim ? (claim.was_claimed !== undefined ? Boolean(claim.was_claimed) : Boolean(claim.claim_token)) : false
+
+    if (!wasClaimed) {
+      const reason = claim?.error_reason || 'claim_denied'
+      console.warn(`[dispatchOutboxRecordHardened] Reivindicação negada para outbox ${outboxId}: ${reason}`)
+
+      if (reason === 'already_sent') {
+        return {
+          outcome: 'already_sent',
+          outboundRes: { success: true, reason: 'already_sent', cached: true },
+          providerMessageId: claim?.provider_message_id || null,
+          msgStatusErr: null
+        }
+      }
+
+      if (reason === 'suppressed') {
+        return {
+          outcome: 'suppressed',
+          outboundRes: { success: false, reason: 'suppressed' },
+          providerMessageId: null,
+          msgStatusErr: null,
+          finalError: 'Mensagem suprimida pela governança'
+        }
+      }
+
+      return {
+        outcome: 'claim_lost',
+        outboundRes: { success: false, reason, error: `Posse não concedida: ${reason}` },
+        providerMessageId: null,
+        msgStatusErr: null,
+        finalError: `Reivindicação de outbox negada (${reason})`
+      }
     }
   }
 
