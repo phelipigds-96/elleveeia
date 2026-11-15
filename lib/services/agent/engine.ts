@@ -476,6 +476,9 @@ export async function runAgentEngine({
     // 3. Preparar metadados da mensagem do agente contendo a nova memória de trabalho
     const messageMetadata: any = {}
     if (Object.keys(newWorkingMemory).length > 0) {
+      if (!newWorkingMemory.updatedAt) {
+        newWorkingMemory.updatedAt = new Date().toISOString()
+      }
       messageMetadata.working_memory = newWorkingMemory
     }
 

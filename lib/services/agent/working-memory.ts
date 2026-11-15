@@ -286,20 +286,30 @@ export function getConfiguredCartTtlMs(): number {
   return DEFAULT_WORKING_MEMORY_TTL_MS
 }
 
+export interface WorkingMemoryExpiryOptions {
+  /**
+   * Se true, timestamps ausentes, vazios ou inválidos são tratados como expirados (Fail-Closed).
+   * Padrão: false para retrocompatibilidade direta quando chamado sem opções.
+   */
+  failClosed?: boolean
+}
+
 /**
  * Verifica se a Working Memory expirou devido a inatividade prolongada (> TTL).
- * Aceita timestamp ISO, Date ou milissegundos. Retorna false para timestamps inválidos ou ausentes.
+ * Aceita timestamp ISO, Date ou milissegundos.
+ * Quando options.failClosed for true, timestamps ausentes ou inválidos retornam true (expirados por segurança).
  */
 export function isWorkingMemoryExpired(
   timestamp: string | Date | number | null | undefined,
   now: number = Date.now(),
-  ttlMs: number = getConfiguredCartTtlMs()
+  ttlMs: number = getConfiguredCartTtlMs(),
+  options?: WorkingMemoryExpiryOptions
 ): boolean {
-  if (!timestamp) return false
+  if (!timestamp) return Boolean(options?.failClosed)
   const timeMs = typeof timestamp === 'number'
     ? timestamp
     : new Date(timestamp).getTime()
-  if (isNaN(timeMs)) return false
+  if (isNaN(timeMs)) return Boolean(options?.failClosed)
   return (now - timeMs) > ttlMs
 }
 
@@ -546,6 +556,9 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
   }
 
   if (hasValidToolResult) {
+    next.updatedAt = new Date().toISOString()
+  } else if (!next.updatedAt && (Boolean(next.activeCart?.length) || Boolean(next.activeProduct) || Boolean(next.activePrice) || Boolean(next.activeQuote))) {
+    // Garante que qualquer memória operacional com dados ativos possua timestamp inicial
     next.updatedAt = new Date().toISOString()
   }
   

@@ -27,10 +27,17 @@ import { sendEvolutionWithGatewayLock } from '@/lib/services/conversations-inter
 
 test('ETAPA 3F — TTL e Expiração Automática de Carrinho e Memória Volátil', async (t) => {
   await t.test('1. isWorkingMemoryExpired lida com valores vazios e inválidos sem explodir', () => {
+    // Modo padrão (retrocompatibilidade)
     assert.strictEqual(isWorkingMemoryExpired(null), false)
     assert.strictEqual(isWorkingMemoryExpired(undefined), false)
     assert.strictEqual(isWorkingMemoryExpired(''), false)
     assert.strictEqual(isWorkingMemoryExpired('data-invalida'), false)
+
+    // Modo failClosed: true (blindagem de runtime contra memórias zumbis)
+    assert.strictEqual(isWorkingMemoryExpired(null, undefined, undefined, { failClosed: true }), true)
+    assert.strictEqual(isWorkingMemoryExpired(undefined, undefined, undefined, { failClosed: true }), true)
+    assert.strictEqual(isWorkingMemoryExpired('', undefined, undefined, { failClosed: true }), true)
+    assert.strictEqual(isWorkingMemoryExpired('data-invalida', undefined, undefined, { failClosed: true }), true)
   })
 
   await t.test('2. isWorkingMemoryExpired preserva carrinho recente (< 24h) e expira carrinho antigo (> 24h)', () => {

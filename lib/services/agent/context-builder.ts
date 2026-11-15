@@ -193,13 +193,13 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
 
   // 4.1 Validação de TTL e Inatividade (Expiração Automática de Carrinho)
   if (workingMemory) {
-    const isExpiredByTime = isWorkingMemoryExpired(workingMemoryTimestamp)
+    const isExpiredByTime = isWorkingMemoryExpired(workingMemoryTimestamp, Date.now(), undefined, { failClosed: true })
 
     // Se a conversa foi fechada anteriormente ou se a memória é anterior ao closed_at
+    // Se a conversa foi fechada e a memória não tem timestamp comprovável após o closed_at, expira compulsoriamente
     const isClosedSession = Boolean(
       conversation.closed_at &&
-      workingMemoryTimestamp &&
-      new Date(workingMemoryTimestamp).getTime() <= new Date(conversation.closed_at).getTime()
+      (!workingMemoryTimestamp || new Date(workingMemoryTimestamp).getTime() <= new Date(conversation.closed_at).getTime())
     )
 
     if (isExpiredByTime || isClosedSession) {
