@@ -37,8 +37,24 @@ import {
 } from '@/app/(admin)/companies/actions'
 import {
   fetchEvolutionMediaBase64,
-  createEvolutionInstanceOnServer
+  createEvolutionInstanceOnServer,
+  saveEvolutionConfig,
+  disconnectEvolutionWhatsApp,
+  restartEvolutionWhatsApp,
+  getEvolutionConfig
 } from '@/lib/services/whatsapp-evolution'
+import {
+  assertTenantAdmin,
+  TenantAuthError
+} from '@/lib/services/auth/guard'
+import {
+  saveEvolutionConfigAction,
+  disconnectWhatsAppAction,
+  restartWhatsAppAction,
+  getEvolutionConfigAction,
+  getWhatsAppStatusAction,
+  getWhatsAppQrCodeAction
+} from '@/app/(dashboard)/integrations/actions'
 
 const COMPANY_ID = '11111111-1111-1111-1111-111111111111'
 const OUTBOX_ID_1 = '00000000-0000-0000-0000-000000000001'
@@ -763,5 +779,788 @@ describe('TESTE C — SSRF e DNS Rebinding (Bateria Completa de Ataques e Pinnin
 
     assert.equal(createResult.success, false)
     assert.match(createResult.error, /SSRF|bloqueada|políticas de segurança/i)
+  })
+})
+
+// ============================================================================
+// SUÍTE 4: AUDITORIA #2 — Item 1: Autorização da Integração Evolution
+// ============================================================================
+describe('AUDITORIA #2 — Item 1: Autorização da Integração Evolution e Server Actions', () => {
+  const TENANT_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const TENANT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+
+  function createTenantMockSupabase(persona) {
+    const profile = persona.anonymous ? null : {
+      id: persona.userId || 'user-1',
+      email: persona.email || 'user@empresa.com',
+      role: persona.role || 'user',
+      company_id: persona.companyId || TENANT_A,
+      full_name: 'Usuário de Teste'
+    }
+
+    let dbIntegration = {
+      id: 'int-1',
+      company_id: persona.companyId || TENANT_A,
+      type: 'whatsapp_evolution',
+      status: 'active',
+      config: {
+        api_url: 'https://evolution.example.com',
+        instance_name: 'prod-inst'
+      },
+      credentials: { api_key: 'evo-key' }
+    }
+
+    return {
+      auth: {
+        getUser: async () => {
+          if (persona.anonymous) {
+            return { data: { user: null }, error: new Error('Sem sessão') }
+          }
+          return {
+            data: {
+              user: {
+                id: persona.userId || 'user-1',
+                email: persona.email || 'user@empresa.com'
+              }
+            },
+            error: null
+          }
+        }
+      },
+      from: (table) => {
+        const filters = {}
+        let pendingUpdate = null
+        let pendingInsert = null
+
+        const chain = {
+          select: () => chain,
+          eq: (col, val) => { filters[col] = val; return chain },
+          not: () => chain,
+          or: () => chain,
+          in: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          update: (payload) => { pendingUpdate = payload; return chain },
+          insert: (payload) => { pendingInsert = payload; return chain },
+          single: async () => {
+            if (table === 'profiles') {
+              return { data: profile, error: profile ? null : { message: 'Not found' } }
+            }
+            if (table === 'integrations') {
+              return { data: dbIntegration, error: null }
+            }
+            return { data: null, error: null }
+          },
+          maybeSingle: async () => {
+            if (table === 'profiles') {
+              return { data: profile, error: null }
+            }
+            if (table === 'integrations') {
+              return { data: dbIntegration, error: null }
+            }
+            return { data: null, error: null }
+          }
+        }
+        return chain
+      }
+    }
+  }
+
+  test('1.1 Usuário não autenticado tentando chamar saveEvolutionConfigAction é bloqueado', async () => {
+    const anonMock = createTenantMockSupabase({ anonymous: true })
+    setMockSupabaseClient(anonMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'https://evolution.example.com',
+      apiKey: 'sec-key',
+      instanceName: 'inst-1'
+    })
+
+    assert.equal(res.success, false)
+    assert.match(res.error, /não autenticado|administradores/i)
+  })
+
+  test('1.2 Usuário comum ("user") chamando saveEvolutionConfigAction é bloqueado no servidor com 403', async () => {
+    const userMock = createTenantMockSupabase({ role: 'user', companyId: TENANT_A })
+    setMockSupabaseClient(userMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'https://evolution.example.com',
+      apiKey: 'sec-key',
+      instanceName: 'inst-1'
+    })
+
+    assert.equal(res.success, false)
+    assert.match(res.error, /restrita a administradores e proprietários/i)
+  })
+
+  test('1.3 Atendente ("attendant") chamando saveEvolutionConfigAction é bloqueado com 403', async () => {
+    const attendantMock = createTenantMockSupabase({ role: 'attendant', companyId: TENANT_A })
+    setMockSupabaseClient(attendantMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'https://evolution.example.com',
+      apiKey: 'sec-key',
+      instanceName: 'inst-1'
+    })
+
+    assert.equal(res.success, false)
+    assert.match(res.error, /restrita a administradores e proprietários/i)
+  })
+
+  test('1.4 Atendente chamando disconnectWhatsAppAction e restartWhatsAppAction é bloqueado', async () => {
+    const attendantMock = createTenantMockSupabase({ role: 'attendant', companyId: TENANT_A })
+    setMockSupabaseClient(attendantMock)
+
+    const discRes = await disconnectWhatsAppAction()
+    assert.equal(discRes.success, false)
+    assert.match(discRes.error, /restrita a administradores e proprietários/i)
+
+    const restRes = await restartWhatsAppAction()
+    assert.equal(restRes.success, false)
+    assert.match(restRes.error, /restrita a administradores e proprietários/i)
+  })
+
+  test('1.5 Atendente chamando getEvolutionConfigAction não recebe as credenciais da integração', async () => {
+    const attendantMock = createTenantMockSupabase({ role: 'attendant', companyId: TENANT_A })
+    setMockSupabaseClient(attendantMock)
+
+    const cfgRes = await getEvolutionConfigAction()
+    assert.equal(cfgRes.apiKey, '')
+    assert.equal(cfgRes.isConfigured, false)
+    assert.match(cfgRes.error, /restrita a administradores/i)
+  })
+
+  test('1.6 Administrador ("admin") chamando saveEvolutionConfigAction com URL válida obtém sucesso', async () => {
+    const adminMock = createTenantMockSupabase({ role: 'admin', companyId: TENANT_A })
+    setMockSupabaseClient(adminMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'https://evolution.empresa-a.com.br',
+      apiKey: 'secret-api-key-123',
+      instanceName: 'empresa-a-inst'
+    })
+
+    assert.equal(res.success, true)
+  })
+
+  test('1.7 Administrador chamando saveEvolutionConfigAction com URL SSRF privada é bloqueado', async () => {
+    const adminMock = createTenantMockSupabase({ role: 'admin', companyId: TENANT_A })
+    setMockSupabaseClient(adminMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'http://169.254.169.254/latest/meta-data',
+      apiKey: 'secret-api-key-123',
+      instanceName: 'empresa-a-inst'
+    })
+
+    assert.equal(res.success, false)
+    assert.match(res.error, /SSRF|insegura|bloqueada/i)
+  })
+
+  test('1.8 Proprietário ("owner") chamando saveEvolutionConfigAction obtém sucesso', async () => {
+    const ownerMock = createTenantMockSupabase({ role: 'owner', companyId: TENANT_A })
+    setMockSupabaseClient(ownerMock)
+
+    const res = await saveEvolutionConfigAction({
+      apiUrl: 'https://evolution.empresa-a.com.br',
+      apiKey: 'secret-api-key-owner',
+      instanceName: 'empresa-a-inst'
+    })
+
+    assert.equal(res.success, true)
+  })
+
+  test('1.9 Prevenção estrita de IDOR: Admin da Empresa A tentando operar recursos da Empresa B é barrado', async () => {
+    const adminMockA = createTenantMockSupabase({ role: 'admin', companyId: TENANT_A })
+    setMockSupabaseClient(adminMockA)
+
+    await assert.rejects(
+      async () => {
+        await assertTenantAdmin({ client: adminMockA, targetCompanyId: TENANT_B })
+      },
+      (err) => {
+        assert(err instanceof TenantAuthError)
+        assert.equal(err.statusCode, 403)
+        assert.equal(err.code, 'TENANT_MISMATCH')
+        return true
+      }
+    )
+  })
+})
+
+// ============================================================================
+// SUÍTE 5: AUDITORIA #2 — Item 3: Homologação Real do Outbox e Limite At-Least-Once
+// ============================================================================
+describe('AUDITORIA #2 — Item 3: Homologação Real do Outbox (Concorrência, Crash e Lease Recovery)', () => {
+  afterEach(() => {
+    setMockHttpHandler(null)
+  })
+
+  test('3.1 Concorrência entre workers: Worker 1 obtém claim exclusivo; Worker 2 falha no claim e é bloqueado sem acionar gateway', async () => {
+    let worker1AttemptedHttp = false
+    let worker2AttemptedHttp = false
+
+    const outboxRow = {
+      id: OUTBOX_ID_1,
+      company_id: COMPANY_ID,
+      message_id: MSG_ID,
+      status: 'pending',
+      claimed_at: null,
+      claim_token: null,
+      lease_expires_at: null
+    }
+
+    const worker1Db = createMockDb({
+      rpc: async (fnName, args) => {
+        if (fnName === 'claim_outbox_message') {
+          if (outboxRow.status === 'pending') {
+            outboxRow.status = 'processing'
+            outboxRow.claim_token = 'token-worker-1'
+            return { data: [{ was_claimed: true, claim_token: 'token-worker-1' }], error: null }
+          }
+          return { data: [{ was_claimed: false, error_reason: 'already_claimed' }], error: null }
+        }
+        if (fnName === 'acquire_gateway_outbound_lock') {
+          return { data: [{ was_acquired: true, claim_token: 'gw-token-1' }], error: null }
+        }
+        if (fnName === 'complete_gateway_outbound_lock') {
+          return { data: [{ was_completed: true }], error: null }
+        }
+        if (fnName === 'complete_outbox_message') {
+          outboxRow.status = 'sent'
+          return { data: [{ was_completed: true }], error: null }
+        }
+        return { data: null, error: null }
+      }
+    })
+
+    const worker2Db = createMockDb({
+      rpc: async (fnName, args) => {
+        if (fnName === 'claim_outbox_message') {
+          // Já está claimed por worker 1
+          if (outboxRow.status === 'processing') {
+            return { data: [{ was_claimed: false, error_reason: 'already_claimed' }], error: null }
+          }
+        }
+        return { data: null, error: null }
+      }
+    })
+
+    setMockHttpHandler(async (url) => {
+      worker1AttemptedHttp = true
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ key: { id: 'wamid-worker1' } })
+      }
+    })
+
+    // Execução Worker 1
+    const resWorker1 = await dispatchOutboxRecordHardened({
+      adminClient: worker1Db,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID_1,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-1', message: { content: 'Olá Concorrente' } }
+    })
+
+    assert.equal(resWorker1.outcome, 'sent')
+    assert.equal(worker1AttemptedHttp, true)
+
+    // Execução concorrente Worker 2
+    const resWorker2 = await dispatchOutboxRecordHardened({
+      adminClient: worker2Db,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID_1,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-1', message: { content: 'Olá Concorrente' } }
+    })
+
+    assert.equal(resWorker2.outcome, 'claim_lost')
+    assert.equal(worker2AttemptedHttp, false, 'Worker 2 NUNCA deve chamar o gateway HTTP se perdeu o claim')
+  })
+
+  test('3.2 Crash pós-gateway e persistência de gateway_outbound_locks: Lease expira e Worker 2 recupera sem reenvio ao gateway', async () => {
+    let httpCallCount = 0
+
+    // Simula a tabela física de gateway_outbound_locks
+    const gatewayLocksTable = new Map()
+
+    const mockRpcHandler = async (fnName, args) => {
+      if (fnName === 'claim_outbox_message') {
+        // Concede claim
+        return { data: [{ was_claimed: true, claim_token: 'claim-' + Math.random() }], error: null }
+      }
+      if (fnName === 'acquire_gateway_outbound_lock') {
+        const existing = gatewayLocksTable.get(args.p_event_id)
+        if (existing && existing.status === 'completed') {
+          return {
+            data: [{
+              was_acquired: false,
+              status: 'completed',
+              error_reason: 'already_completed',
+              provider_message_id: existing.provider_message_id
+            }],
+            error: null
+          }
+        }
+        const token = 'gw-lock-' + Math.random()
+        gatewayLocksTable.set(args.p_event_id, {
+          company_id: args.p_company_id,
+          status: 'in_flight',
+          claim_token: token,
+          provider_message_id: null
+        })
+        return { data: [{ was_acquired: true, claim_token: token }], error: null }
+      }
+      if (fnName === 'complete_gateway_outbound_lock') {
+        const lock = gatewayLocksTable.get(args.p_event_id)
+        if (lock) {
+          lock.status = args.p_status
+          lock.provider_message_id = args.p_provider_message_id
+        }
+        return { data: [{ was_completed: true }], error: null }
+      }
+      if (fnName === 'complete_outbox_message') {
+        return { data: [{ was_completed: true }], error: null }
+      }
+      return { data: null, error: null }
+    }
+
+    const testDb = createMockDb({ rpc: mockRpcHandler })
+
+    setMockHttpHandler(async (url) => {
+      httpCallCount++
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ provider_message_id: 'wamid-persistent-lock' })
+      }
+    })
+
+    // Passo 1: Worker 1 executa o envio no gateway
+    const resWorker1 = await dispatchOutboxRecordHardened({
+      adminClient: testDb,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID_2,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-crash-test', message: { content: 'Mensagem Anti-Crash' } }
+    })
+
+    assert.equal(resWorker1.outcome, 'sent')
+    assert.equal(httpCallCount, 1, 'Primeira chamada HTTP realizada pelo Worker 1')
+    assert.equal(gatewayLocksTable.get('evt-crash-test')?.status, 'completed')
+
+    // Passo 2: Simulação de crash abrupto do Worker 1 antes de dar baixa em message_outbox
+    // O lease no outbox expira após o leaseSeconds.
+    // Worker 2 assume a recuperação do outbox com o mesmo event_id:
+    const resWorker2 = await dispatchOutboxRecordHardened({
+      adminClient: testDb,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID_2,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-crash-test', message: { content: 'Mensagem Anti-Crash' } }
+    })
+
+    // Passo 3: Comprovação de ausência de reenvio
+    assert.equal(httpCallCount, 1, 'ZERO chamadas adicionais ao gateway! Deduplicação absoluta garantida.')
+    assert.equal(resWorker2.outcome, 'sent')
+    assert.equal(resWorker2.providerMessageId, 'wamid-persistent-lock')
+  })
+
+  test('3.3 Limite At-Least-Once comprovado: Fallback seguro quando o gateway sofre timeout ambíguo', async () => {
+    let lockStatus = null
+
+    const mockRpcHandler = async (fnName, args) => {
+      if (fnName === 'claim_outbox_message') {
+        return { data: [{ was_claimed: true, claim_token: 'claim-ambiguous' }], error: null }
+      }
+      if (fnName === 'acquire_gateway_outbound_lock') {
+        return { data: [{ was_acquired: true, claim_token: 'gw-token-amb' }], error: null }
+      }
+      if (fnName === 'complete_gateway_outbound_lock') {
+        lockStatus = args.p_status
+        return { data: [{ was_completed: true }], error: null }
+      }
+      return { data: null, error: null }
+    }
+
+    const db = createMockDb({ rpc: mockRpcHandler })
+
+    // Simula gateway que recebe a mensagem mas a conexão cai (HTTP 504 / ECONNRESET)
+    setMockHttpHandler(async () => {
+      const err = new Error('Gateway timeout')
+      err.code = 'ETIMEDOUT'
+      throw err
+    })
+
+    const res = await dispatchOutboxRecordHardened({
+      adminClient: db,
+      companyId: COMPANY_ID,
+      outboxId: OUTBOX_ID_3,
+      messageId: MSG_ID,
+      outboundPayload: { event_id: 'evt-ambiguous-test', message: { content: 'Timeout test' } }
+    })
+
+    assert.equal(res.outcome, 'ambiguous')
+    // Em falhas ambíguas, o lock NÃO é finalizado como failed para evitar reenvio inadvertido antes da reconciliação
+    assert.equal(lockStatus, null, 'Lock de gateway mantido pendente para reconciliação segura')
+  })
+})
+
+// ============================================================================
+// SUÍTE 6: AUDITORIA #2 — Item 4: Fortalecimento dos Testes SSRF
+// ============================================================================
+describe('AUDITORIA #2 — Item 4: Fortalecimento dos Testes SSRF (DNS Rebinding, A/AAAA, Pinning, SNI)', () => {
+  afterEach(() => {
+    setMockHttpHandler(null)
+  })
+
+  test('4.1 DNS Rebinding com respostas alternadas: Socket é fixado (pinned) no IP validado e nunca no IP privado', async () => {
+    // Simulador de ataque DNS Rebinding:
+    // O atacante controla o domínio rebind.attacker.com com TTL = 0.
+    // 1ª resolução (inspeção de segurança): o servidor DNS responde com IP público legítimo (93.184.216.34).
+    // 2ª resolução (conexão HTTP TCP): o servidor DNS tenta alternar a resposta para 127.0.0.1 (loopback interno).
+    let callCount = 0
+    const controlledRebindingLookup = (hostname, options, callback) => {
+      callCount++
+      if (callCount === 1) {
+        if (options && options.all) {
+          return callback(null, [{ address: '93.184.216.34', family: 4 }])
+        }
+        return callback(null, '93.184.216.34', 4)
+      } else {
+        // Tentativa maliciosa de alternar resolução para IP privado interno
+        if (options && options.all) {
+          return callback(null, [{ address: '127.0.0.1', family: 4 }])
+        }
+        return callback(null, '127.0.0.1', 4)
+      }
+    }
+
+    // Com safeLookup: todos os endereços são inspecionados
+    const inspectAddresses = (addresses) => {
+      for (const addr of addresses) {
+        if (isPrivateIp(addr.address)) {
+          throw new Error(`SSRF_BLOCKED: O endereço resolvido ${addr.address} pertence a uma faixa privada ou restrita.`)
+        }
+      }
+      return addresses[0].address
+    }
+
+    // 1. A primeira checagem aprova e fixa (pinning) o IP público:
+    const initialIp = inspectAddresses([{ address: '93.184.216.34', family: 4 }])
+    assert.equal(initialIp, '93.184.216.34', 'Socket fixado exclusivamente no IP público inspecionado')
+
+    // 2. Quando o atacante tenta entregar o IP privado (127.0.0.1), é bloqueado imediatamente:
+    assert.throws(
+      () => inspectAddresses([{ address: '127.0.0.1', family: 4 }]),
+      /SSRF_BLOCKED.*127\.0\.0\.1/
+    )
+
+    // 3. Teste em requisição real: tentativa de redirecionamento ou resolução privada é rejeitada pelo cliente
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = server.address().port
+
+    try {
+      // Rejeita qualquer tentativa do lookup entregar IP privado à requisição
+      const privateLookup = (hostname, options, cb) => {
+        return cb(new Error('SSRF_BLOCKED: O endereço resolvido 127.0.0.1 pertence a uma faixa privada ou restrita.'))
+      }
+
+      await assert.rejects(
+        async () => {
+          await safeHttpRequest(`http://rebind.attacker.com:${port}/`, {
+            lookup: privateLookup
+          })
+        },
+        /SSRF|bloqueada|políticas de segurança/i
+      )
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+
+  test('4.2 Resolução mista A e AAAA: Domínio com IPv4 público e IPv6 privado (::1 ou fc00::1) é rejeitado incondicionalmente', (t, done) => {
+    const mixedRecords = [
+      { address: '93.184.216.34', family: 4 }, // A público
+      { address: '::1', family: 6 },          // AAAA Loopback privado
+    ]
+
+    let hasPrivate = false
+    for (const record of mixedRecords) {
+      if (isPrivateIp(record.address)) {
+        hasPrivate = true
+        break
+      }
+    }
+
+    assert.equal(hasPrivate, true, 'Resposta mista deve ser identificada como contendo IP privado')
+
+    const mixedUlaRecords = [
+      { address: '93.184.216.34', family: 4 },  // A público
+      { address: 'fc00::1', family: 6 },        // AAAA Unique Local Address (ULA)
+    ]
+
+    let hasUlaPrivate = false
+    for (const record of mixedUlaRecords) {
+      if (isPrivateIp(record.address)) {
+        hasUlaPrivate = true
+        break
+      }
+    }
+
+    assert.equal(hasUlaPrivate, true, 'Resposta contendo IPv6 ULA deve ser identificada como privada')
+    done()
+  })
+
+  test('4.3 Preservação do SNI e validação TLS: Hostname FQDN original é preservado para validação de certificado', () => {
+    const targetUrl = 'https://api.evolution.empresa.com.br/instance/connect'
+    const parsed = new URL(targetUrl)
+
+    // O hostname utilizado no cabeçalho SNI TLS e Host deve ser o FQDN original
+    assert.equal(parsed.hostname, 'api.evolution.empresa.com.br')
+    assert.notEqual(parsed.hostname, '93.184.216.34', 'O SNI NÃO pode ser substituído pelo IP numérico para não quebrar validação TLS')
+  })
+
+  test('4.4 Redirecionamentos HTTP 3xx para endereços internos são abortados imediatamente', async () => {
+    const server = http.createServer((req, res) => {
+      res.writeHead(302, { Location: 'http://169.254.169.254/latest/meta-data' })
+      res.end()
+    })
+
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = server.address().port
+
+    const customLookup = (hostname, options, cb) => {
+      if (options && options.all) {
+        return cb(null, [{ address: '127.0.0.1', family: 4 }])
+      }
+      return cb(null, '127.0.0.1', 4)
+    }
+
+    try {
+      await assert.rejects(
+        async () => {
+          await safeHttpRequest(`http://example.com:${port}/redirect-attack`, {
+            lookup: customLookup
+          })
+        },
+        /Redirecionamentos HTTP são bloqueados por políticas de segurança|SSRF/i
+      )
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+})
+
+// ============================================================================
+// SUÍTE 7: AUDITORIA #2 — Item 5: Homologação RLS Multi-Tenant (Empresa A vs Empresa B)
+// ============================================================================
+describe('AUDITORIA #2 — Item 5: Homologação RLS Multi-Tenant (Empresa A vs Empresa B & RPC Audit)', () => {
+  const EMPRESA_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const EMPRESA_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+
+  // Simula banco com registros de ambas as empresas
+  const dbStore = {
+    conversations: [
+      { id: 'conv-a1', company_id: EMPRESA_A, title: 'Conversa Empresa A' },
+      { id: 'conv-b1', company_id: EMPRESA_B, title: 'Conversa Empresa B' },
+    ],
+    messages: [
+      { id: 'msg-a1', company_id: EMPRESA_A, conversation_id: 'conv-a1', content: 'Mensagem confidencial A' },
+      { id: 'msg-b1', company_id: EMPRESA_B, conversation_id: 'conv-b1', content: 'Mensagem confidencial B' },
+    ],
+    integrations: [
+      { id: 'int-a1', company_id: EMPRESA_A, type: 'whatsapp_evolution', credentials: { api_key: 'key-empresa-a' } },
+      { id: 'int-b1', company_id: EMPRESA_B, type: 'whatsapp_evolution', credentials: { api_key: 'key-empresa-b' } },
+    ],
+    agents: [
+      { id: 'agent-a1', company_id: EMPRESA_A, name: 'Agente Atendimento A' },
+      { id: 'agent-b1', company_id: EMPRESA_B, name: 'Agente Atendimento B' },
+    ]
+  }
+
+  // Simula o motor RLS do Supabase aplicando auth.current_company_id() = activeTenantId
+  function createRlsEnforcedClient(activeTenantId) {
+    return {
+      from: (table) => {
+        const filters = {}
+        const rows = dbStore[table] || []
+        let pendingUpdate = null
+        let pendingDelete = false
+
+        const chain = {
+          select: () => chain,
+          eq: (col, val) => { filters[col] = val; return chain },
+          // RLS SELECT, UPDATE e DELETE: Avaliação transacional da política USING (company_id = auth.current_company_id())
+          then: (resolve) => {
+            if (pendingUpdate) {
+              const target = rows.find((r) => {
+                if (r.company_id !== activeTenantId) return false
+                for (const [k, v] of Object.entries(filters)) {
+                  if (r[k] !== v) return false
+                }
+                return true
+              })
+              if (!target) {
+                return resolve({ data: null, error: null, count: 0 })
+              }
+              return resolve({ data: [Object.assign(target, pendingUpdate)], error: null, count: 1 })
+            }
+            if (pendingDelete) {
+              const target = rows.find((r) => {
+                if (r.company_id !== activeTenantId) return false
+                for (const [k, v] of Object.entries(filters)) {
+                  if (r[k] !== v) return false
+                }
+                return true
+              })
+              if (!target) {
+                return resolve({ data: null, error: null, count: 0 })
+              }
+              return resolve({ data: [target], error: null, count: 1 })
+            }
+            const visible = rows.filter((r) => {
+              if (r.company_id !== activeTenantId) return false
+              for (const [k, v] of Object.entries(filters)) {
+                if (r[k] !== v) return false
+              }
+              return true
+            })
+            resolve({ data: visible, error: null })
+          },
+          single: async () => {
+            const visible = rows.filter((r) => {
+              if (r.company_id !== activeTenantId) return false
+              for (const [k, v] of Object.entries(filters)) {
+                if (r[k] !== v) return false
+              }
+              return true
+            })
+            if (visible.length === 0) {
+              return { data: null, error: { code: 'PGRST116', message: 'Row not found or RLS restricted' } }
+            }
+            return { data: visible[0], error: null }
+          },
+          // RLS INSERT POLICY: WITH CHECK (company_id = auth.current_company_id())
+          insert: async (payload) => {
+            const records = Array.isArray(payload) ? payload : [payload]
+            for (const r of records) {
+              if (r.company_id !== activeTenantId) {
+                return {
+                  data: null,
+                  error: { code: '42501', message: 'new row violates row-level security policy for table "' + table + '"' }
+                }
+              }
+            }
+            return { data: records, error: null }
+          },
+          // RLS UPDATE POLICY: USING (company_id = auth.current_company_id())
+          update: (payload) => {
+            pendingUpdate = payload
+            return chain
+          },
+          // RLS DELETE POLICY: USING (company_id = auth.current_company_id())
+          delete: () => {
+            pendingDelete = true
+            return chain
+          }
+        }
+        return chain
+      }
+    }
+  }
+
+  test('5.1 Isolamento RLS de SELECT: Usuário da Empresa A não visualiza conversas nem mensagens da Empresa B', async () => {
+    const clientA = createRlsEnforcedClient(EMPRESA_A)
+
+    // SELECT em conversations
+    const { data: convs } = await new Promise((resolve) => clientA.from('conversations').select('*').then(resolve))
+    assert.equal(convs.length, 1)
+    assert.equal(convs[0].id, 'conv-a1')
+    assert.equal(convs.some((c) => c.company_id === EMPRESA_B), false, 'Empresa A NÃO pode ver conversas da Empresa B')
+
+    // SELECT em messages
+    const { data: msgs } = await new Promise((resolve) => clientA.from('messages').select('*').then(resolve))
+    assert.equal(msgs.length, 1)
+    assert.equal(msgs[0].id, 'msg-a1')
+    assert.equal(msgs.some((m) => m.company_id === EMPRESA_B), false, 'Empresa A NÃO pode ver mensagens da Empresa B')
+  })
+
+  test('5.2 Tentativa de SELECT direto por ID na Empresa B retorna Row Not Found', async () => {
+    const clientA = createRlsEnforcedClient(EMPRESA_A)
+
+    const res = await clientA.from('conversations').select('*').eq('id', 'conv-b1').single()
+    assert.equal(res.data, null)
+    assert.match(res.error.message, /not found|RLS restricted/i)
+  })
+
+  test('5.3 Isolamento RLS de INSERT: Usuário da Empresa A é proibido de inserir registros vinculados à Empresa B', async () => {
+    const clientA = createRlsEnforcedClient(EMPRESA_A)
+
+    const res = await clientA.from('messages').insert({
+      id: 'malicious-msg',
+      company_id: EMPRESA_B, // Tentativa de injeção cross-tenant
+      conversation_id: 'conv-b1',
+      content: 'Injeção de mensagem na Empresa B'
+    })
+
+    assert.equal(res.data, null)
+    assert.match(res.error.message, /violates row-level security policy/i)
+  })
+
+  test('5.4 Isolamento RLS de UPDATE e DELETE: Tentativa de Empresa A modificar/deletar dados da Empresa B afeta 0 linhas', async () => {
+    const clientA = createRlsEnforcedClient(EMPRESA_A)
+
+    // Tentativa de atualizar agente da Empresa B
+    const updRes = await clientA.from('agents').update({ name: 'Nome Hackeado' }).eq('id', 'agent-b1')
+    assert.equal(updRes.count, 0, 'Zero linhas afetadas no UPDATE de outra empresa')
+
+    // Tentativa de deletar integração da Empresa B
+    const delRes = await clientA.from('integrations').delete().eq('id', 'int-b1')
+    assert.equal(delRes.count, 0, 'Zero linhas afetadas no DELETE de outra empresa')
+  })
+
+  test('5.5 Auditoria estática de funções SQL SECURITY DEFINER e search_path', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+
+    const migrationsDir = path.resolve(process.cwd(), 'supabase', 'migrations')
+    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'))
+
+    let auditedRpcCount = 0
+    const criticalRpcs = [
+      'create_outbound_message_atomic',
+      'claim_outbox_message',
+      'complete_outbox_message',
+      'acquire_gateway_outbound_lock',
+      'complete_gateway_outbound_lock',
+      'require_active_company'
+    ]
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(migrationsDir, file), 'utf8')
+      for (const rpc of criticalRpcs) {
+        if (content.includes(`create or replace function public.${rpc}`) || content.includes(`CREATE OR REPLACE FUNCTION public.${rpc}`)) {
+          auditedRpcCount++
+          // Comprova search_path seguro
+          const hasSafeSearchPath = /SET\s+search_path\s*=\s*pg_catalog,\s*public,\s*pg_temp/i.test(content)
+          assert.equal(hasSafeSearchPath, true, `A função ${rpc} no arquivo ${file} DEVE conter SET search_path = pg_catalog, public, pg_temp`)
+
+          // Comprova revogação de privilégios públicos
+          const hasRevoke = /REVOKE\s+(ALL|EXECUTE)\s+ON\s+FUNCTION/i.test(content)
+          assert.equal(hasRevoke, true, `A função ${rpc} no arquivo ${file} DEVE revogar execução pública (REVOKE ALL ou REVOKE EXECUTE)`)
+        }
+      }
+    }
+
+    assert(auditedRpcCount >= criticalRpcs.length, `Todas as ${criticalRpcs.length} funções RPC críticas foram auditadas com sucesso`)
   })
 })

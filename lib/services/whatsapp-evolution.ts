@@ -2,7 +2,8 @@ import 'server-only'
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/service'
-import { fetchWithTimeout } from '@/lib/services/n8n-internal'
+import { fetchWithTimeout, isSafeUrl } from '@/lib/services/n8n-internal'
+import { assertTenantAdmin, TenantAuthError } from '@/lib/services/auth/guard'
 
 interface SafeHttpResponse {
   ok: boolean
@@ -120,13 +121,21 @@ export async function saveGlobalEvolutionConfig(params: {
   apiKey: string
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const adminClient = createAdminClient()
+    const { requirePlatformAdmin } = await import('@/lib/services/platform/admin')
+    await requirePlatformAdmin()
+
     const cleanUrl = params.apiUrl.trim().replace(/\/+$/, '')
     const cleanKey = params.apiKey.trim()
 
     if (!cleanUrl || !cleanKey) {
       return { success: false, error: 'URL e API Key da Evolution API são obrigatórias.' }
     }
+
+    if (!isSafeUrl(cleanUrl)) {
+      return { success: false, error: 'URL da Evolution API inválida ou insegura (bloqueada por políticas de SSRF).' }
+    }
+
+    const adminClient = createAdminClient()
 
     // 1. Localiza ou seleciona o ID da empresa admin
     let { data: adminCompany } = await adminClient
@@ -279,10 +288,12 @@ export async function resolveEvolutionContext(targetCompanyId?: string) {
 }
 
 /**
- * Retorna as configurações atuais da Evolution API (compatibilidade legada).
+ * Retorna as configurações atuais da Evolution API da empresa autenticada.
+ * Exige autorização administrativa (admin ou owner) para prevenir vazamento de API Key a atendentes.
  */
-export async function getEvolutionConfig() {
-  const ctx = await resolveEvolutionContext()
+export async function getEvolutionConfig(targetCompanyId?: string) {
+  const profile = await assertTenantAdmin({ targetCompanyId })
+  const ctx = await resolveEvolutionContext(profile.company_id || undefined)
   return {
     apiUrl: ctx.apiUrl,
     apiKey: ctx.apiKey,
@@ -292,33 +303,19 @@ export async function getEvolutionConfig() {
 }
 
 /**
- * Salva as configurações da Evolution API para a empresa (SuperAdmin ou legada).
+ * Salva as configurações da Evolution API para a empresa associada à sessão.
+ * Exige autorização administrativa no servidor (admin ou owner).
+ * Bloqueia estritamente SSRF validando isSafeUrl.
  */
 export async function saveEvolutionConfig(params: {
   apiUrl: string
   apiKey: string
   instanceName?: string
+  targetCompanyId?: string
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, error: 'Usuário não autenticado.' }
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('company_id, role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.company_id) {
-      return { success: false, error: 'Perfil de empresa não localizado.' }
-    }
-
-    const companyId = profile.company_id
-    const adminClient = createAdminClient()
+    const profile = await assertTenantAdmin({ targetCompanyId: params.targetCompanyId })
+    const companyId = profile.company_id!
 
     const cleanUrl = params.apiUrl.trim().replace(/\/+$/, '')
     const cleanKey = params.apiKey.trim()
@@ -327,6 +324,12 @@ export async function saveEvolutionConfig(params: {
     if (!cleanUrl || !cleanKey) {
       return { success: false, error: 'URL e API Key da Evolution API são obrigatórias.' }
     }
+
+    if (!isSafeUrl(cleanUrl)) {
+      return { success: false, error: 'URL de integração inválida ou insegura (bloqueada por políticas de SSRF).' }
+    }
+
+    const adminClient = createAdminClient()
 
     const { data: existing } = await adminClient
       .from('integrations')
@@ -378,6 +381,9 @@ export async function saveEvolutionConfig(params: {
 
     return { success: true }
   } catch (err: any) {
+    if (err instanceof TenantAuthError) {
+      return { success: false, error: err.message }
+    }
     return { success: false, error: err?.message || 'Erro ao salvar configuração da Evolution API.' }
   }
 }
@@ -572,17 +578,20 @@ export async function getEvolutionWhatsAppQrCode(targetCompanyId?: string): Prom
 
 /**
  * Desconecta (logout) a instância de WhatsApp na Evolution API.
+ * Exige autorização administrativa (admin ou owner) da empresa associada à sessão.
  */
 export async function disconnectEvolutionWhatsApp(targetCompanyId?: string): Promise<{ success: boolean; error?: string }> {
-  const ctx = await resolveEvolutionContext(targetCompanyId)
-
-  if (!ctx.apiUrl || !ctx.apiKey || !ctx.instanceName) {
-    return { success: false, error: 'Evolution API não configurada.' }
-  }
-
-  const { apiUrl, apiKey, instanceName } = ctx
-
   try {
+    const profile = await assertTenantAdmin({ targetCompanyId })
+    const effectiveCompanyId = profile.company_id || targetCompanyId
+    const ctx = await resolveEvolutionContext(effectiveCompanyId || undefined)
+
+    if (!ctx.apiUrl || !ctx.apiKey || !ctx.instanceName) {
+      return { success: false, error: 'Evolution API não configurada.' }
+    }
+
+    const { apiUrl, apiKey, instanceName } = ctx
+
     const response = await safeEvolutionFetch(`${apiUrl}/instance/logout/${instanceName}`, {
       method: 'DELETE',
       headers: {
@@ -596,6 +605,9 @@ export async function disconnectEvolutionWhatsApp(targetCompanyId?: string): Pro
 
     return { success: true }
   } catch (err: any) {
+    if (err instanceof TenantAuthError) {
+      return { success: false, error: err.message }
+    }
     console.error('[WhatsAppEvolution] Erro ao desconectar:', err)
     return { success: false, error: err?.message || 'Erro ao desconectar WhatsApp.' }
   }
@@ -603,17 +615,20 @@ export async function disconnectEvolutionWhatsApp(targetCompanyId?: string): Pro
 
 /**
  * Reinicia a instância do WhatsApp na Evolution API para destravar conexões.
+ * Exige autorização administrativa (admin ou owner) da empresa associada à sessão.
  */
 export async function restartEvolutionWhatsApp(targetCompanyId?: string): Promise<{ success: boolean; error?: string }> {
-  const ctx = await resolveEvolutionContext(targetCompanyId)
-
-  if (!ctx.apiUrl || !ctx.apiKey || !ctx.instanceName) {
-    return { success: false, error: 'Evolution API não configurada.' }
-  }
-
-  const { apiUrl, apiKey, instanceName } = ctx
-
   try {
+    const profile = await assertTenantAdmin({ targetCompanyId })
+    const effectiveCompanyId = profile.company_id || targetCompanyId
+    const ctx = await resolveEvolutionContext(effectiveCompanyId || undefined)
+
+    if (!ctx.apiUrl || !ctx.apiKey || !ctx.instanceName) {
+      return { success: false, error: 'Evolution API não configurada.' }
+    }
+
+    const { apiUrl, apiKey, instanceName } = ctx
+
     const response = await safeEvolutionFetch(`${apiUrl}/instance/restart/${instanceName}`, {
       method: 'POST',
       headers: {
@@ -627,6 +642,9 @@ export async function restartEvolutionWhatsApp(targetCompanyId?: string): Promis
 
     return { success: true }
   } catch (err: any) {
+    if (err instanceof TenantAuthError) {
+      return { success: false, error: err.message }
+    }
     console.error('[WhatsAppEvolution] Erro ao reiniciar:', err)
     return { success: false, error: err?.message || 'Erro ao reiniciar WhatsApp.' }
   }

@@ -69,6 +69,13 @@ export async function resolve(specifier, context, nextResolve) {
     }
   }
 
+  if (specifier === 'next/navigation') {
+    return {
+      shortCircuit: true,
+      url: 'data:text/javascript,export function redirect(url){ const err = new Error("NEXT_REDIRECT"); err.digest = "NEXT_REDIRECT;" + url; throw err; } export function notFound(){ const err = new Error("NEXT_NOT_FOUND"); err.digest = "NEXT_NOT_FOUND"; throw err; }',
+    }
+  }
+
   if (specifier === '@google/genai') {
     return {
       shortCircuit: true,
