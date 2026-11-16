@@ -220,7 +220,7 @@ export async function resolveEvolutionContext(targetCompanyId?: string) {
 
   if (!companyId) {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {

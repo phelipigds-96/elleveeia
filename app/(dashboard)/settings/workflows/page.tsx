@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function WorkflowsSettingsPage() {
   await requireCompanyAdmin()
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: userData } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', userData.user?.id).single()
   

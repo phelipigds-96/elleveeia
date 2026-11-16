@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     let companyId: string | null = null
 
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: authData } = await supabase.auth.getUser()
 
       if (authData?.user) {

@@ -27,7 +27,7 @@ function cleanPrice(priceRaw: string | undefined | null): number | null {
 export async function parseCsvFileAction(formData: FormData, options?: CatalogActionOptions) {
   let supabase: any
   try {
-    supabase = options?.supabaseClient || createClient()
+    supabase = options?.supabaseClient || (await createClient())
   } catch {
     supabase = options?.supabaseClient
   }
@@ -190,7 +190,7 @@ export async function parseCsvFileAction(formData: FormData, options?: CatalogAc
 export async function confirmImportAction(rows: CatalogImportRow[], options?: CatalogActionOptions) {
   let supabase: any
   try {
-    supabase = options?.supabaseClient || createClient()
+    supabase = options?.supabaseClient || (await createClient())
   } catch {
     supabase = options?.supabaseClient
   }

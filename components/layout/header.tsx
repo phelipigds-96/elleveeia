@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export async function Header({ userRole = 'admin' }: HeaderProps) {
-  const supabase = createClient()
+  const supabase = await createClient()
   let profile = null
   let company = null
 

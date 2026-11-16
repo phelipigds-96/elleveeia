@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 
 export async function updateCompany(name: string) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Não autenticado' }

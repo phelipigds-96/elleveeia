@@ -125,7 +125,7 @@ export async function getDashboardData(period: 'today' | '7days' | '30days'): Pr
   }
 
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const adminClient = createAdminClient()
 
     // 1. Obter usuário logado e sua empresa (respeitando Impersonate do SuperAdmin)
@@ -136,7 +136,7 @@ export async function getDashboardData(period: 'today' | '7days' | '30days'): Pr
 
     // Verifica se há impersonate ativo (SuperAdmin visualizando painel de um cliente)
     try {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
       if (impersonateId) {
         const { data: impComp } = await adminClient

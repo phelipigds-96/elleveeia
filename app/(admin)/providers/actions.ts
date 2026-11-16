@@ -41,7 +41,7 @@ export async function testProviderConnectionAction(
       const adminClient = createAdminClient()
 
       const { createClient } = await import("@/lib/supabase/server")
-      const userClient = createClient()
+      const userClient = await createClient()
       const { data: authData } = await userClient.auth.getUser()
 
       let actorId = authData?.user?.id

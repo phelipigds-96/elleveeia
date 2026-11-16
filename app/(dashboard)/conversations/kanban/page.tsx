@@ -30,7 +30,7 @@ type ConversationRow = {
 }
 
 export default async function ConversationsKanbanPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const {
     data: { user },

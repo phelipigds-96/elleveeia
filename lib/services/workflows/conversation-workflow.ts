@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
  * Safe: deriva companyId da sessão autenticada, nunca do chamador.
  */
 export async function assignDefaultWorkflowToConversation(conversationId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: userData } = await supabase.auth.getUser()
   if (!userData?.user) return

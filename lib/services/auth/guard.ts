@@ -33,7 +33,7 @@ export interface AssertTenantAdminOptions {
  * Previne IDOR garantindo que o tenant autenticado corresponda ao targetCompanyId especificado.
  */
 export async function assertTenantAdmin(options: AssertTenantAdminOptions = {}): Promise<CurrentUserProfile> {
-  const supabase = options.client || createClient()
+  const supabase = options.client || (await createClient())
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
@@ -76,7 +76,7 @@ export async function assertTenantAdmin(options: AssertTenantAdminOptions = {}):
  */
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
 
@@ -97,7 +97,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
  * Se for Atendente (ou usuário comum restrito), redireciona compulsoriamente para /conversations.
  */
 export async function requireCompanyAdmin(): Promise<CurrentUserProfile> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
@@ -118,7 +118,7 @@ export async function requireCompanyAdmin(): Promise<CurrentUserProfile> {
   if (profile.role === 'master') {
     try {
       const { cookies } = await import('next/headers')
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
       if (impersonateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(impersonateId)) {
         return {

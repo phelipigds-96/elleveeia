@@ -441,7 +441,7 @@ export async function testN8nConnectionActionInternal(
 ): Promise<{ success: boolean; message: string; error?: string; code?: string }> {
   let supabase: any
   try {
-    supabase = options?.supabaseClient || createClient()
+    supabase = options?.supabaseClient || (await createClient())
   } catch {
     supabase = options?.supabaseClient || null
   }

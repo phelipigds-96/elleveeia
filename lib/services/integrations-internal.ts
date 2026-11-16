@@ -11,9 +11,9 @@ export interface IntegrationInternalOptions {
   adminClient?: any
 }
 
-function resolveSupabase(options?: IntegrationInternalOptions) {
+async function resolveSupabase(options?: IntegrationInternalOptions) {
   try {
-    return options?.supabaseClient || createClient()
+    return options?.supabaseClient || (await createClient())
   } catch {
     return options?.supabaseClient || null
   }
@@ -67,7 +67,7 @@ async function resolveAdminSession(supabase: any) {
 export async function getInboundWebhookInfoInternal(
   options?: IntegrationInternalOptions
 ): Promise<{ token: string } | null> {
-  const supabase = resolveSupabase(options)
+  const supabase = await resolveSupabase(options)
   const session = await resolveAdminSession(supabase)
   if (!session.ok) return null
 
@@ -168,7 +168,7 @@ export async function rotateInboundWebhookTokenInternal(
   options?: IntegrationInternalOptions
 ): Promise<{ success: boolean; token?: string; error?: string; code?: string }> {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     const session = await resolveAdminSession(supabase)
     if (!session.ok) {
       return { success: false, error: session.error }
@@ -319,7 +319,7 @@ export async function rotateInboundWebhookTokenInternal(
  * O segredo é mascarado antes do envio ao cliente.
  */
 export async function getN8nIntegrationInternal(options?: IntegrationInternalOptions) {
-  const supabase = resolveSupabase(options)
+  const supabase = await resolveSupabase(options)
   const session = await resolveAdminSession(supabase)
   if (!session.ok) return null
 
@@ -356,7 +356,7 @@ export async function saveN8nIntegrationInternal(
   options?: IntegrationInternalOptions
 ): Promise<{ success: boolean; error?: string; code?: string }> {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     const session = await resolveAdminSession(supabase)
     if (!session.ok) {
       return { success: false, error: session.error }
@@ -450,7 +450,7 @@ export async function disconnectN8nInternal(
   options?: IntegrationInternalOptions
 ): Promise<{ success: boolean; error?: string; code?: string }> {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     const session = await resolveAdminSession(supabase)
     if (!session.ok) {
       return { success: false, error: session.error }

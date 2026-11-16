@@ -93,7 +93,7 @@ export async function sendManualMessageInternal(
     }
   }
 
-  const supabase = context.supabaseClient || context.adminClient || createClient()
+  const supabase = context.supabaseClient || context.adminClient || (await createClient())
   const adminClient = context.adminClient || supabase
 
   // 1. Validar que a conversa existe e pertence a esta empresa (Prevenção Cross-Tenant)

@@ -17,8 +17,9 @@ export const metadata = {
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams?: { id?: string }
+  searchParams?: Promise<{ id?: string }>
 }) {
+  const resolvedSearchParams = await searchParams
   // Carga base inicial realizada no servidor (RSC) com perfil do atendente, conversas, motivos de finalização, respostas rápidas e etapas de funil
   const [currentUser, initialConversations, chatOps, initialWorkflowStages] = await Promise.all([
     getAgentProfileContext(),
@@ -26,7 +27,7 @@ export default async function ConversationsPage({
     getChatOperationsContextAction(),
     getCompanyWorkflowStagesAction(),
   ])
-  const requestedId = typeof searchParams?.id === 'string' ? searchParams.id.trim() : ''
+  const requestedId = typeof resolvedSearchParams?.id === 'string' ? resolvedSearchParams.id.trim() : ''
   const matchedRequested = requestedId
     ? initialConversations.find((c: any) => c.id === requestedId)
     : undefined

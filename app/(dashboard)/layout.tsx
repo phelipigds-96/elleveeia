@@ -31,7 +31,7 @@ export default async function DashboardLayout({
   let companyName = "Ellevee IA"
   if (profile?.company_id) {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data: comp } = await supabase
         .from("companies")
         .select("name")

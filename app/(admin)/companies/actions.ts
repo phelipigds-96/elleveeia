@@ -1420,7 +1420,7 @@ export async function impersonateCompanyAction(
       currentProfile?.company_id || "90e69b50-1b4e-4f4a-94f2-78be1cf82833"
 
     // 4. Grava os cookies seguros de impersonação
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.set("ellevee_impersonate_active", targetCompanyId, {
       path: "/",
       httpOnly: true,
@@ -1490,7 +1490,7 @@ export async function stopImpersonateAction(): Promise<ActionResult<{ redirectUr
   try {
     const { user } = await requirePlatformAdmin()
     const adminClient = createAdminClient()
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
 
     const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
     const originalCompanyId =
@@ -1558,7 +1558,7 @@ export async function getImpersonateStatus(): Promise<{
   targetCompanySlug?: string
 }> {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
     if (!targetCompanyId) {
       return { isImpersonating: false }

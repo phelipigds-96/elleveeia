@@ -106,7 +106,7 @@ async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
   let userName = "Atendente"
 
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: authData } = await supabase.auth.getUser()
 
     if (authData?.user) {
@@ -126,7 +126,7 @@ async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
 
     // Suporte ao Impersonate do SuperAdmin
     try {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
       if (impersonateId) {
         companyId = impersonateId
@@ -1603,7 +1603,7 @@ export interface WorkflowStageOption {
  */
 export async function getCompanyWorkflowStagesAction(): Promise<WorkflowStageOption[]> {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { companyId } = await getAuthenticatedAgentContext()
     const { data, error } = await supabase
       .from("workflow_stages")

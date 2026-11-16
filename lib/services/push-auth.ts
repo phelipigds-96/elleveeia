@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/service'
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function resolvePushSessionContext() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
     error: authError,
@@ -25,7 +25,7 @@ export async function resolvePushSessionContext() {
   let companyId = profile?.company_id || null
 
   if (profile?.role === 'master') {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
     if (impersonateId && UUID_REGEX.test(impersonateId)) {
       companyId = impersonateId

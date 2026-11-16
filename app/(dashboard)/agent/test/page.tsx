@@ -3,7 +3,8 @@ import { TestPlayground } from './components/test-playground'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AgentTestPage({ searchParams }: { searchParams: { agentId?: string } }) {
+export default async function AgentTestPage({ searchParams }: { searchParams: Promise<{ agentId?: string }> }) {
+  const resolvedSearchParams = await searchParams
   const context = await getTestContext()
 
   if (!context) {
@@ -17,7 +18,7 @@ export default async function AgentTestPage({ searchParams }: { searchParams: { 
         <p className="text-muted-foreground">Área interna e protegida para testar e auditar o Agent Engine localmente.</p>
       </div>
 
-      <TestPlayground agents={context.agents} conversations={context.conversations} defaultAgentId={searchParams.agentId} />
+      <TestPlayground agents={context.agents} conversations={context.conversations} defaultAgentId={resolvedSearchParams?.agentId} />
     </div>
   )
 }

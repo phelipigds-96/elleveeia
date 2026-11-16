@@ -9,9 +9,9 @@ export interface AgentActionOptions {
   adminClient?: any
 }
 
-function resolveSupabase(options?: AgentActionOptions) {
+async function resolveSupabase(options?: AgentActionOptions) {
   try {
-    return options?.supabaseClient || createClient()
+    return options?.supabaseClient || (await createClient())
   } catch {
     return options?.supabaseClient || null
   }
@@ -31,7 +31,7 @@ async function getAuthenticatedProfile(supabase: any) {
 }
 
 export async function listAgents(options?: AgentActionOptions) {
-  const supabase = resolveSupabase(options)
+  const supabase = await resolveSupabase(options)
   const profile = await getAuthenticatedProfile(supabase)
   if (!profile?.company_id) return []
 
@@ -50,7 +50,7 @@ export async function listAgents(options?: AgentActionOptions) {
 }
 
 export async function getAgent(id: string, options?: AgentActionOptions) {
-  const supabase = resolveSupabase(options)
+  const supabase = await resolveSupabase(options)
   const profile = await getAuthenticatedProfile(supabase)
   if (!profile?.company_id) return null
 
@@ -82,7 +82,7 @@ export async function createAgent(
   options?: AgentActionOptions
 ) {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     if (!supabase) return { error: 'Falha ao inicializar contexto de autenticação.' }
 
     const profile = await getAuthenticatedProfile(supabase)
@@ -162,7 +162,7 @@ export async function updateAgent(
   options?: AgentActionOptions
 ) {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     if (!supabase) return { error: 'Falha ao inicializar contexto de autenticação.' }
 
     const profile = await getAuthenticatedProfile(supabase)
@@ -231,7 +231,7 @@ export async function toggleAgentStatus(
   options?: AgentActionOptions
 ) {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     if (!supabase) return { error: 'Falha ao inicializar contexto de autenticação.' }
 
     const profile = await getAuthenticatedProfile(supabase)
@@ -285,7 +285,7 @@ export async function toggleAgentStatus(
 
 export async function deleteAgent(id: string, options?: AgentActionOptions) {
   try {
-    const supabase = resolveSupabase(options)
+    const supabase = await resolveSupabase(options)
     if (!supabase) return { error: 'Falha ao inicializar contexto de autenticação.' }
 
     const profile = await getAuthenticatedProfile(supabase)

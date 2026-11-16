@@ -21,7 +21,7 @@ export async function testAgentEngine(agentId: string, conversationId: string, m
 }
 
 export async function getTestContext() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const companyId = await getCompanyId()
   if (!companyId) return null
 

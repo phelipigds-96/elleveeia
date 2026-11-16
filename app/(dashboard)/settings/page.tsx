@@ -19,7 +19,7 @@ export default async function SettingsPage() {
   // Barreira de proteção: apenas Admin ou Owner da empresa pode acessar Configurações
   const currentProfile = await requireCompanyAdmin()
   
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
   let company = null

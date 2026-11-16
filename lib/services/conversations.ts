@@ -43,7 +43,7 @@ async function getAuthConversationContext(
 ): Promise<ConversationAuthContext | null> {
   let supabase: any
   try {
-    supabase = options?.supabaseClient || createClient()
+    supabase = options?.supabaseClient || (await createClient())
   } catch {
     supabase = options?.supabaseClient
   }
@@ -255,7 +255,7 @@ export async function sendMessage(
 
   let supabase: any
   try {
-    supabase = untrustedOptions?.supabaseClient || createClient()
+    supabase = untrustedOptions?.supabaseClient || (await createClient())
   } catch {
     supabase = untrustedOptions?.supabaseClient
   }

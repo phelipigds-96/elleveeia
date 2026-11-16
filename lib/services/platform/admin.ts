@@ -55,7 +55,7 @@ export async function requirePlatformAdmin(
   if (!supabase) {
     try {
       const { createClient } = await import('@/lib/supabase/server')
-      supabase = createClient()
+      supabase = await createClient()
     } catch (err: any) {
       throw new PlatformAuthError('Falha ao inicializar contexto de autenticação.', 401, 'AUTH_CONTEXT_MISSING')
     }

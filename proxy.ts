@@ -1,13 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { updateSession } from '@/lib/supabase/middleware'
+import { updateSession } from '@/lib/supabase/proxy'
 
-export async function middleware(request: NextRequest) {
+/**
+ * Proxy de Perímetro Next.js 16 (convenção oficial de proxy de rede)
+ * Executa a renovação transparente de sessão Supabase e roteamento de proteção.
+ */
+export async function proxy(request: NextRequest) {
   // Permite acesso exclusivo a recursos públicos estáticos PWA e endpoints M2M protegidos por token/assinatura
   if (
     request.nextUrl.pathname === '/sw.js' ||
     request.nextUrl.pathname === '/manifest.webmanifest' ||
     request.nextUrl.pathname.startsWith('/icons/') ||
-    request.nextUrl.pathname.startsWith('/api/push') ||
     request.nextUrl.pathname.startsWith('/api/webhooks') ||
     request.nextUrl.pathname.startsWith('/api/cron') ||
     request.nextUrl.pathname.startsWith('/api/outbox')
@@ -18,15 +21,10 @@ export async function middleware(request: NextRequest) {
   return await updateSession(request)
 }
 
+export default proxy
+
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

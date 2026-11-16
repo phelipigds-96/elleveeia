@@ -86,13 +86,13 @@ function requireMovePermission(role: string): void {
   }
 }
 
-function getSupabaseClient(options?: WorkflowServiceOptions): any {
+async function getSupabaseClient(options?: WorkflowServiceOptions): Promise<any> {
   if (options?.supabaseClient) return options.supabaseClient
-  return createClient()
+  return await createClient()
 }
 
 export async function getCompanyWorkflows(options?: WorkflowServiceOptions) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId } = await getAuthContext(supabase)
   
   const { data, error } = await supabase
@@ -153,7 +153,7 @@ async function ensureDefaultStages(
   currentStages: any[] = [],
   options?: WorkflowServiceOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
 
   let stagesList = currentStages
   if (!stagesList || stagesList.length === 0) {
@@ -223,7 +223,7 @@ async function ensureDefaultStages(
  * 8. Recuperação idempotente de etapas padrão ausentes se houver falha parcial anterior.
  */
 export async function getOrCreateDefaultWorkflow(options?: WorkflowServiceOptions) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
 
   requireAdminRole(role)
@@ -375,7 +375,7 @@ export async function getOrCreateDefaultWorkflow(options?: WorkflowServiceOption
 }
 
 export async function createWorkflow(name: string, description?: string, options?: WorkflowServiceOptions) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
 
   // RBAC: apenas admin ou owner podem criar workflow
@@ -463,7 +463,7 @@ export async function createWorkflowStage(
   stageType: string = 'in_progress',
   options?: CreateWorkflowStageOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
 
   // RBAC: apenas admin ou owner podem criar etapas
@@ -538,7 +538,7 @@ export async function updateWorkflowStage(
   updates: any,
   options?: WorkflowServiceOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
 
   // RBAC: apenas admin ou owner podem atualizar etapas
@@ -641,7 +641,7 @@ export async function deleteWorkflowStage(
   stageId: string,
   options?: WorkflowServiceOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role } = await getAuthContext(supabase)
 
   // RBAC: apenas admin ou owner podem excluir etapas
@@ -692,7 +692,7 @@ export async function moveConversationStage(
   stageId: string,
   options?: WorkflowServiceOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId, role, userId } = await getAuthContext(supabase)
 
   // RBAC: atendentes, admins e owners têm permissão operacional no Kanban
@@ -791,7 +791,7 @@ export async function moveConversationToStageType(
   stageType: 'initial' | 'in_progress' | 'final',
   options?: WorkflowServiceOptions
 ) {
-  const supabase = getSupabaseClient(options)
+  const supabase = await getSupabaseClient(options)
   const { companyId } = await getAuthContext(supabase)
 
   if (!isValidUuid(conversationId)) {

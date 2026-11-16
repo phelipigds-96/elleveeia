@@ -4,8 +4,9 @@ import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
-export default async function EditAgentPage({ params }: { params: { id: string } }) {
-  const agent = await getAgent(params.id)
+export default async function EditAgentPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const agent = await getAgent(id)
 
   if (!agent) {
     redirect('/agent')

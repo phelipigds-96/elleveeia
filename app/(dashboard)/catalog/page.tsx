@@ -6,7 +6,7 @@ import type { CatalogItem } from "@/components/catalog/product-dialog"
 
 export default async function CatalogPage() {
   const currentProfile = await requireCompanyAdmin()
-  const supabase = createClient()
+  const supabase = await createClient()
   const companyId = currentProfile.company_id || (await getCompanyId())
 
   if (!companyId) {

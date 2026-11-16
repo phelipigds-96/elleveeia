@@ -22,10 +22,11 @@ import { requireCompanyAdmin } from '@/lib/services/auth/guard'
 export const dynamic = 'force-dynamic'
 
 interface DashboardPageProps {
-  searchParams?: { period?: string }
+  searchParams?: Promise<{ period?: string }>
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const resolvedSearchParams = await searchParams
   // Barreira de proteção: autenticação obrigatória
   let profile = null
   try {
@@ -40,7 +41,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     ? profile.full_name.split(' ')[0]
     : 'Usuário'
 
-  const periodParam = searchParams?.period
+  const periodParam = resolvedSearchParams?.period
   const period =
     periodParam === 'today' || periodParam === '30days'
       ? periodParam

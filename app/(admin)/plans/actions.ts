@@ -109,7 +109,7 @@ export async function updatePlatformPlanAction(
     try {
       // Coleta dados do operador autenticado
       const { createClient } = await import("@/lib/supabase/server")
-      const userClient = createClient()
+      const userClient = await createClient()
       const { data: authData } = await userClient.auth.getUser()
 
       let actorId = authData?.user?.id

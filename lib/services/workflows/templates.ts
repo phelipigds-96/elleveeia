@@ -315,7 +315,7 @@ export async function applyWorkflowTemplate(
   let companyId = params.companyId
 
   if (!client) {
-    client = createClient()
+    client = await createClient()
   }
 
   if (!companyId) {

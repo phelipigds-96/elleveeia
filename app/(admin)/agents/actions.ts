@@ -47,7 +47,7 @@ export async function toggleAgentStatusAction(
     // 3. Registrar auditoria em platform_audit_logs
     try {
       const { createClient } = await import("@/lib/supabase/server")
-      const userClient = createClient()
+      const userClient = await createClient()
       const { data: authData } = await userClient.auth.getUser()
 
       let actorId = authData?.user?.id
