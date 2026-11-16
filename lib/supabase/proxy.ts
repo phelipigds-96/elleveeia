@@ -1,6 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+/**
+ * Cria uma resposta de redirecionamento preservando todos os cookies
+ * acumulados/atualizados na resposta base (ex: tokens renovados pelo Supabase).
+ */
+function redirectWithCookies(url: URL, sourceResponse?: NextResponse): NextResponse {
+  const redirectResponse = NextResponse.redirect(url)
+  if (sourceResponse) {
+    sourceResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie)
+    })
+  }
+  return redirectResponse
+}
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
@@ -84,7 +98,7 @@ export async function updateSession(request: NextRequest) {
     if (!isPublicRoute) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
-      return NextResponse.redirect(url)
+      return redirectWithCookies(url, supabaseResponse)
     }
     return supabaseResponse
   }
@@ -92,13 +106,13 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url, supabaseResponse)
   }
 
   if (user && isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/conversations'
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url, supabaseResponse)
   }
 
   return supabaseResponse

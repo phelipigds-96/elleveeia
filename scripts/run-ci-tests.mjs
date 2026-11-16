@@ -42,4 +42,8 @@ runSuite('Três Testes Forenses de Auditoria (Outbox/Crash, 5-Role Auth, SSRF/DN
   'tests/ci/audit-deep-verification.test.ts',
 ])
 
+runSuite('Homologação do Proxy e Preservação Cirúrgica de Cookies SSR (9 Cenários)', [
+  'tests/ci/proxy-ssr-cookie-preservation.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

@@ -11,9 +11,12 @@ export function createClient() {
   return activeClient
 }
 
-export function createServerClient() {
+export function createServerClient(url, key, options) {
   if (!activeClient) {
     throw new Error('Mock Supabase client not configured via setMockSupabaseClient()')
+  }
+  if (typeof activeClient === 'function') {
+    return activeClient(url, key, options)
   }
   return activeClient
 }
