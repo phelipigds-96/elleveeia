@@ -10,3 +10,10 @@ export function createClient() {
   }
   return activeClient
 }
+
+export function createServerClient() {
+  if (!activeClient) {
+    throw new Error('Mock Supabase client not configured via setMockSupabaseClient()')
+  }
+  return activeClient
+}

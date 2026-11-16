@@ -2,6 +2,24 @@ import 'server-only'
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/service'
+import { fetchWithTimeout } from '@/lib/services/n8n-internal'
+
+interface SafeHttpResponse {
+  ok: boolean
+  status: number
+  text: () => Promise<string>
+  json: () => Promise<any>
+}
+
+async function safeEvolutionFetch(url: string, options: RequestInit = {}, timeoutMs = 12000): Promise<SafeHttpResponse> {
+  const res = await fetchWithTimeout(url, options, timeoutMs)
+  return {
+    ok: res.ok,
+    status: res.status,
+    text: async () => (typeof res.text === 'function' ? await res.text() : ''),
+    json: async () => (typeof res.json === 'function' ? await res.json() : JSON.parse(await res.text()))
+  }
+}
 
 export interface WhatsAppStatusResult {
   configured: boolean
@@ -391,18 +409,12 @@ export async function getEvolutionWhatsAppStatus(targetCompanyId?: string): Prom
   const { apiUrl, apiKey, instanceName } = ctx
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-    const response = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
       method: 'GET',
       headers: {
         apikey: apiKey,
       },
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-    clearTimeout(timeoutId)
+    }, 8000)
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -436,15 +448,9 @@ export async function getEvolutionWhatsAppStatus(targetCompanyId?: string): Prom
 
     if (normalizedState === 'open') {
       try {
-        const fetchController = new AbortController()
-        const fetchTimeout = setTimeout(() => fetchController.abort(), 4000)
-
-        const fetchRes = await fetch(`${apiUrl}/instance/fetchInstances?instanceName=${instanceName}`, {
+        const fetchRes = await safeEvolutionFetch(`${apiUrl}/instance/fetchInstances?instanceName=${instanceName}`, {
           headers: { apikey: apiKey },
-          signal: fetchController.signal,
-          cache: 'no-store',
-        })
-        clearTimeout(fetchTimeout)
+        }, 4000)
 
         if (fetchRes.ok) {
           const fetchList = await fetchRes.json()
@@ -507,18 +513,12 @@ export async function getEvolutionWhatsAppQrCode(targetCompanyId?: string): Prom
   const { apiUrl, apiKey, instanceName } = ctx
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 12000)
-
-    const response = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/connect/${instanceName}`, {
       method: 'GET',
       headers: {
         apikey: apiKey,
       },
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-    clearTimeout(timeoutId)
+    }, 12000)
 
     if (!response.ok) {
       return {
@@ -583,17 +583,12 @@ export async function disconnectEvolutionWhatsApp(targetCompanyId?: string): Pro
   const { apiUrl, apiKey, instanceName } = ctx
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-    const response = await fetch(`${apiUrl}/instance/logout/${instanceName}`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/logout/${instanceName}`, {
       method: 'DELETE',
       headers: {
         apikey: apiKey,
       },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    }, 8000)
 
     if (!response.ok) {
       return { success: false, error: `Falha ao desconectar (HTTP ${response.status}).` }
@@ -619,17 +614,12 @@ export async function restartEvolutionWhatsApp(targetCompanyId?: string): Promis
   const { apiUrl, apiKey, instanceName } = ctx
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-    const response = await fetch(`${apiUrl}/instance/restart/${instanceName}`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/restart/${instanceName}`, {
       method: 'POST',
       headers: {
         apikey: apiKey,
       },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    }, 8000)
 
     if (!response.ok) {
       return { success: false, error: `Falha ao reiniciar (HTTP ${response.status}).` }
@@ -659,18 +649,12 @@ export async function fetchServerInstances(params?: { apiUrl?: string; apiKey?: 
   }
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-    const response = await fetch(`${apiUrl}/instance/fetchInstances`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/fetchInstances`, {
       method: 'GET',
       headers: {
         apikey: apiKey,
       },
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-    clearTimeout(timeoutId)
+    }, 8000)
 
     if (!response.ok) {
       return { success: false, instances: [], error: `Servidor retornou HTTP ${response.status}` }
@@ -706,9 +690,6 @@ export async function createEvolutionInstanceOnServer(params: {
   }
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
-
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
     const defaultWebhook = appUrl ? `${appUrl.replace(/\/+$/, '')}/api/webhooks/messages` : ''
     const webhookUrl = params.webhookUrl || defaultWebhook
@@ -729,16 +710,14 @@ export async function createEvolutionInstanceOnServer(params: {
       ]
     }
 
-    const response = await fetch(`${apiUrl}/instance/create`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: apiKey,
       },
       body: JSON.stringify(bodyPayload),
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    }, 15000)
 
     const data = await response.json().catch(() => null)
 
@@ -771,15 +750,10 @@ export async function deleteEvolutionInstanceOnServer(params: {
   }
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
-
-    const response = await fetch(`${apiUrl}/instance/delete/${cleanInstance}`, {
+    const response = await safeEvolutionFetch(`${apiUrl}/instance/delete/${cleanInstance}`, {
       method: 'DELETE',
       headers: { apikey: apiKey },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    }, 10000)
 
     if (!response.ok) {
       return { success: false, error: `Falha ao deletar (HTTP ${response.status}).` }
@@ -817,11 +791,8 @@ export async function fetchEvolutionMediaBase64(params: {
   }
 
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 12000)
-
     const endpoint = `${apiUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`
-    const response = await fetch(endpoint, {
+    const response = await safeEvolutionFetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -835,9 +806,7 @@ export async function fetchEvolutionMediaBase64(params: {
         },
         convertToMp4: false,
       }),
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    }, 12000)
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '')

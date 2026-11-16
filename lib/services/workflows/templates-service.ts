@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/service"
 import { 
-  WorkflowTemplate, 
-  StageTemplate, 
+  type WorkflowTemplate, 
+  type StageTemplate, 
   WORKFLOW_TEMPLATES 
 } from "./template-catalog"
 

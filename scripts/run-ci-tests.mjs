@@ -38,4 +38,8 @@ runSuite('Etapas 2A, 2B, 3A, 3B, 3D, 3E, 3F & Regressão Core', [
   'lib/services/agent/tools/etapa8.4.3s-admin-metrics-and-audit.test.ts',
 ])
 
+runSuite('Três Testes Forenses de Auditoria (Outbox/Crash, 5-Role Auth, SSRF/DNS Rebinding)', [
+  'tests/ci/audit-deep-verification.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

@@ -44,7 +44,7 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === '@supabase/ssr') {
     return {
       shortCircuit: true,
-      url: 'data:text/javascript,export function createServerClient(){return {}}',
+      url: pathToFileURL(path.join(MOCKS_DIR, 'supabase-mock.mjs')).href,
     }
   }
 

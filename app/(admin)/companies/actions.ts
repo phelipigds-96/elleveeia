@@ -5,10 +5,10 @@ import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/service"
 import { createClient } from "@/lib/supabase/server"
 import { requirePlatformAdmin } from "@/lib/services/platform/admin"
-import { CompanyAddonRecord, CompanyMock } from "@/components/companies/mock-companies"
+import type { CompanyAddonRecord, CompanyMock } from "@/components/companies/mock-companies"
 import {
   ADDON_PACKAGE_SIZES,
-  AddonPackageSize,
+  type AddonPackageSize,
   calculateCompanyBillingOverage,
   getCurrentBillingMonth,
   isOutboundSentSenderType,
@@ -18,8 +18,8 @@ import {
   WORKFLOW_TEMPLATES,
   getCompanyWorkflowForAdmin,
   applyStagesToCompanyWorkflow,
-  SaveStagesInput,
-  WorkflowTemplate,
+  type SaveStagesInput,
+  type WorkflowTemplate,
 } from "@/lib/services/workflows/templates"
 import { getPlatformWorkflowTemplatesList } from "@/lib/services/workflows/templates-service"
 

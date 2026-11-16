@@ -1,15 +1,15 @@
 import { createAdminClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveCompany } from '@/lib/services/platform/tenant-access'
-import { WorkflowStage } from './workflows'
+import { type WorkflowStage } from './workflows'
 
 export * from './template-catalog'
 import {
   WORKFLOW_TEMPLATES,
-  WorkflowTemplate,
-  StageTemplate,
-  SaveStagesInput,
   getWorkflowTemplate,
+  type WorkflowTemplate,
+  type StageTemplate,
+  type SaveStagesInput,
 } from './template-catalog'
 
 export interface ApplyWorkflowTemplateParams {
