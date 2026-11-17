@@ -70,4 +70,9 @@ runSuite('AC-SEC-01.4-H1 — Validação de Estabilidade do JWT Refresh e Víncu
   'tests/ci/ac-sec-01-4-token-refresh.test.ts',
 ])
 
+runSuite('Etapa AC-02 — Compreensão Comercial e Memória Contextual (10 Cenários)', [
+  'tests/ci/ac02-commercial-understanding.test.ts',
+])
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

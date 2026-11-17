@@ -90,6 +90,11 @@ export async function searchProducts(companyId: string, query: string, limit: nu
     }
   }
 
+  // Se a consulta for sobre aplicação de casquinha/moldagem, garante recuperação de coberturas e chocolates
+  if (parsed.applicationNeed === 'casquinha') {
+    dbQuery = dbQuery.or('normalized_name.ilike."%cobertura%",normalized_name.ilike."%chocolate%"')
+  }
+
   let { data, error } = await dbQuery.limit(200)
 
   // CAMADA C - Fallback de RecuperaÃ§Ã£o Ampla

@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import type { ToolDefinition } from '../tools'
 import { searchProducts } from '../../catalog/products'
+import { parseQuery } from '../../catalog/search-logic'
 import { resolveProductPrice } from '../../commercial/pricing'
-import { applyCommercialStrategy } from '../commercial-strategy'
+import { applyCommercialStrategy, resolveReferenceQuery } from '../commercial-strategy'
 
 export const consultarProdutoComercialTool: ToolDefinition = {
   name: 'consultar_produto_comercial',
@@ -16,9 +17,43 @@ export const consultarProdutoComercialTool: ToolDefinition = {
   execute: async (input, context) => {
     const { product_query, quantity = 1, price_type } = input
     
-    const searchResult = await searchProducts(context.companyId, product_query, 12)
+    // 1. Resolução Anafórica e Ordinal via Working Memory
+    const refResolution = resolveReferenceQuery(product_query, context.workingMemory)
 
-    // Resolução individual de preços para os candidatos retornados (máximo 5)
+    // Se a referência for ambígua e exigir desambiguação amigável
+    if (refResolution.isAmbiguous) {
+      return {
+        success: true,
+        data: {
+          strategy: 'ambiguous_product',
+          consultative_hint: refResolution.ambiguityMessage,
+          options: refResolution.candidateOptions?.map((o: any) => ({
+            id: o.id || o.product?.id,
+            name: o.name || o.product?.name
+          }))
+        }
+      }
+    }
+
+    const effectiveQuery = refResolution.resolvedQuery || product_query
+    const parsedQuery = parseQuery(effectiveQuery)
+
+    const searchResult = await searchProducts(context.companyId, effectiveQuery, 12)
+
+    // Se o cliente pediu outra marca e temos a marca anterior identificada para exclusão
+    if (refResolution.excludeBrand && searchResult.matches.length > 0) {
+      const excl = refResolution.excludeBrand.toLowerCase()
+      const nonExcluded = searchResult.matches.filter(m => {
+        const b = (m.brand || '').toLowerCase()
+        const n = (m.name || '').toLowerCase()
+        return !b.includes(excl) && !n.includes(excl)
+      })
+      if (nonExcluded.length > 0) {
+        searchResult.matches = nonExcluded
+      }
+    }
+
+    // Resolução individual de preços para os candidatos retornados (máximo 10)
     const candidatePrices = new Map<string, { unit_price: number, subtotal: number }>()
     const candidateErrors = new Map<string, string>()
 
@@ -61,7 +96,15 @@ export const consultarProdutoComercialTool: ToolDefinition = {
       }
     }
 
-    const strategyPayload = applyCommercialStrategy(product_query, searchResult, quantity, pricingData, candidatePrices)
+    const strategyPayload = applyCommercialStrategy(
+      effectiveQuery,
+      searchResult,
+      quantity,
+      pricingData,
+      candidatePrices,
+      refResolution,
+      parsedQuery
+    )
 
     if (hasPricingError && (searchResult.status === 'exact_match' || (searchResult.matches && searchResult.matches.length === 1))) {
       return {

@@ -12,6 +12,11 @@ export type ParsedProductQuery = {
   normalizedQuery: string
   weight?: number
   unit?: string
+  targetCount?: number
+  targetCountUnit?: string
+  applicationNeed?: 'casquinha' | 'recheio' | 'cobertura' | 'receita_festa' | 'geral'
+  isCostBenefitQuery?: boolean
+  isCheapestQuery?: boolean
   identifiers: string[]
   significantTokens: string[]
   genericTokens: string[]
@@ -160,6 +165,42 @@ export function parseQuery(query: string): ParsedProductQuery {
     }
   }
 
+  // 3.0 Detectar menções a contagem de peças/unidades para receitas e festas
+  // (ex: "200 doces", "100 brigadeiros", "50 pessoas", "fazer 200 doces", "para 100 brigadeiros")
+  // para NUNCA confundir contagem de doces com peso em gramas (ex: 200 doces NÃO É 200g!)
+  let targetCountValue: number | undefined
+  let targetCountUnitValue: string | undefined
+
+  const countPattern = /\b(\d+)\s*(doces?|brigadeiros?|salgados?|unidades?|un|und|pessoas?|convidados?|lembrancinhas?|trufas?|bombons?|bolos?|ovos?|itens?|pecas?|pçs?|copos?)\b/i
+  const countMatch = text.match(countPattern)
+  if (countMatch) {
+    targetCountValue = parseInt(countMatch[1], 10)
+    targetCountUnitValue = countMatch[2].toLowerCase()
+    text = text.replace(countMatch[0], ' ')
+  }
+
+  const recipeActionPattern = /\b(?:fazer|preparar|produzir|atender|servir|encomenda\s+de)\s+(\d+)\b/i
+  const recipeActionMatch = text.match(recipeActionPattern)
+  if (recipeActionMatch && !targetCountValue) {
+    targetCountValue = parseInt(recipeActionMatch[1], 10)
+    targetCountUnitValue = 'unidades'
+    text = text.replace(recipeActionMatch[0], ' ')
+  }
+
+  // Detectar aplicações culinárias específicas e intenções de otimização comercial
+  let applicationNeed: 'casquinha' | 'recheio' | 'cobertura' | 'receita_festa' | 'geral' | undefined
+  const norm = normalizedQuery
+  if (/\b(?:casquinha|casquinhas|ovo\s+de\s+pascoa|ovos\s+de\s+pascoa|moldar|moldagem|banhar|banho)\b/i.test(norm)) {
+    applicationNeed = 'casquinha'
+  } else if (/\b(?:recheio|rechear|recheios|para\s+recheio)\b/i.test(norm)) {
+    applicationNeed = 'recheio'
+  } else if (/\b(?:festa|doces\s+para\s+festa|receita|fazer\s+doces)\b/i.test(norm) || targetCountValue) {
+    applicationNeed = 'receita_festa'
+  }
+
+  const isCostBenefitQuery = /\b(?:qual\s+compensa\s+mais|compensa\s+mais|mais\s+em\s+conta|melhor\s+custo\s+beneficio|mais\s+economico|economizar|qual\s+compensa)\b/i.test(norm)
+  const isCheapestQuery = /\b(?:o\s+mais\s+barato|mais\s+barato|mais\s+barata|menor\s+preco|mais\s+em\s+conta)\b/i.test(norm)
+
   // 3.1 Extrair números isolados que representam gramagens no varejo (ex: 395, 400, 900, 200, 500, 126, 90)
   // quando o cliente não digita a unidade 'g' (ex: "leite condensado italac 395")
   const standaloneWeightMatches = text.match(/\b(?:390|395|400|900|200|250|500|126|130|140|90|85|80|60|40|32|150|300|350|750|800|1000)\b/g)
@@ -229,6 +270,11 @@ export function parseQuery(query: string): ParsedProductQuery {
     normalizedQuery,
     weight: weightValue,
     unit: unitValue,
+    targetCount: targetCountValue,
+    targetCountUnit: targetCountUnitValue,
+    applicationNeed,
+    isCostBenefitQuery,
+    isCheapestQuery,
     identifiers,
     significantTokens,
     genericTokens,
@@ -286,10 +332,28 @@ export function calculateMatchScore(
       if (group.isUnit) {
         penalty += 35 // Penaliza severamente quando o produto não atende a gramagem solicitada
       } else if (!group.isGeneric) {
-        penalty += 20 // Penaliza fortemente falta de termos importantes (ex: branco vs meio amargo)
+        // Se a busca for de casquinha/moldagem, não penaliza o produto por termos da aplicação (casquinha, ovo, páscoa)
+        const isAppTerm = parsed.applicationNeed === 'casquinha' && 
+          (group.original.includes('casquinha') || group.original.includes('ovo') || group.original.includes('pascoa'))
+        if (isAppTerm) {
+          // ignora penalidade de termos da aplicação
+        } else {
+          penalty += 20 // Penaliza fortemente falta de termos importantes (ex: branco vs meio amargo)
+        }
       } else {
         penalty += 2 // Penaliza levemente termos genéricos faltando
       }
+    }
+  }
+
+  // Bonificação contextual para aplicação de casquinha/moldagem (cobertura fracionada ou chocolate para moldar)
+  if (parsed.applicationNeed === 'casquinha') {
+    const isCoverage = /\b(?:cobertura|fracionad[ao]|top|sicao\s+mais|harald\s+top)\b/i.test(productName)
+    const isChocolate = /\b(?:chocolate|choc)\b/i.test(productName)
+    if (isCoverage) {
+      score += 50
+    } else if (isChocolate) {
+      score += 25
     }
   }
 

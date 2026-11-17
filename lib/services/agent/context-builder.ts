@@ -75,11 +75,12 @@ export function formatWorkingMemoryPrompt(workingMemory: WorkingMemory | null | 
   // Exposição do Buffer de Produtos Apresentados Recentemente
   if (workingMemory.discoveredProducts && workingMemory.discoveredProducts.length > 0) {
     prompt += `\n[PRODUTOS APRESENTADOS RECENTEMENTE]\n`
-    for (const p of workingMemory.discoveredProducts.slice(0, 15)) {
+    workingMemory.discoveredProducts.slice(0, 15).forEach((p, idx) => {
       const priceStr = p.unitPrice ? ` | Preço: R$ ${p.unitPrice.toFixed(2)}` : ''
-      prompt += `- ${p.name} | ID: ${p.id}${priceStr}\n`
-    }
-    prompt += `ATENÇÃO: A lista acima é APENAS o histórico de opções recentemente visualizadas nesta conversa, NÃO É O CATÁLOGO COMPLETO DA LOJA.\n`
+      prompt += `Opção ${idx + 1}: ${p.name} | ID: ${p.id}${priceStr}\n`
+    })
+    prompt += `ATENÇÃO: A numeração "Opção 1", "Opção 2"... corresponde à ordem em que foram apresentados. Se o cliente disser "aquele primeiro", "o segundo", "opcao 1", etc., refira-se exatamente à opção correspondente acima!\n`
+    prompt += `A lista acima é APENAS o histórico de opções recentemente visualizadas nesta conversa, NÃO É O CATÁLOGO COMPLETO DA LOJA.\n`
     prompt += `A loja possui milhares de produtos. Para qualquer novo produto ou marca perguntado pelo cliente (ex: "tem trakinas?", "tem nutella?"), VOCÊ DEVE OBRIGATORIAMENTE consultar o catálogo via consultar_produto_comercial. NUNCA diga que não localizou sem antes pesquisar na ferramenta!\n`
   }
 
@@ -386,7 +387,25 @@ export async function buildAgentContext({ companyId, agentId, conversationId }: 
   systemPrompt += `- FORMATAÇÃO VISUAL E DESTACADA DE PRODUTOS E GRAMAGEM:\n`
   systemPrompt += `  1. Ao listar produtos para o cliente escolher ou confirmar, destaque SEMPRE o nome e a gramagem/peso de forma clara e legível em negrito.\n`
   systemPrompt += `  2. NUNCA use caixa alta pura de ERP nem siglas técnicas brutas (como "CHOC. EM PO", "TP", "PET", "FD", "C/5", "GF"). Converta para escrita natural e humanizada (ex: "*Chocolate em Pó Genuine 50% (1.05kg)* - R$ 61,49").\n`
-  systemPrompt += `  3. Exemplo de formatação ideal: "*Leite Condensado Italac Semidesnatado (395g)* - R$ 5,69".\n\n`
+  systemPrompt += `  3. Exemplo de formatação ideal: "*Leite Condensado Italac Semidesnatado (395g)* - R$ 5,69".\n`
+  systemPrompt += `- ORIENTAÇÃO TÉCNICA E APLICAÇÃO DE PRODUTOS (EX: NOBRE vs COBERTURA FRACIONADA):\n`
+  systemPrompt += `  1. O vendedor consultivo não apenas vende, mas orienta o cliente com autoridade técnica para que ele tenha o melhor resultado nas suas receitas:\n`
+  systemPrompt += `     a) **Cobertura Fracionada (ex: Sicao Mais, Harald Top/Melken Cobertura):** À base de gordura vegetal fracionada de alta qualidade. Dispensa têmpera / choque térmico! Seca com brilho firme e rápido, não derrete facilmente à temperatura ambiente. Ideal para casquinhas de ovos de Páscoa, banho de trufas, pães de mel, picolés e decorações.\n`
+  systemPrompt += `     b) **Chocolate Nobre (puro cacau / manteiga de cacau):** Feito com manteiga de cacau pura. Entrega sabor nobre incomparável e derretimento aveludado na boca. Exige têmpera (pré-cristalização) para moldar e desformar sem derreter nas mãos. Excelente para recheios, brigadeiros gourmet, ganaches e casquinhas finas para quem domina a têmpera.\n`
+  systemPrompt += `  2. Ao responder dúvidas técnicas, pergunte sempre qual é a aplicação que o cliente deseja fazer e apresente as opções correspondentes disponíveis no catálogo.\n`
+  systemPrompt += `- COMPARAÇÃO DE CUSTO-BENEFÍCIO (QUAL COMPENSA MAIS?):\n`
+  systemPrompt += `  1. Quando o cliente perguntar "qual compensa mais?", "qual vale mais a pena?" ou comparar tamanhos (ex: barra de 1kg vs 2kg):\n`
+  systemPrompt += `     a) Use a ferramenta oficial para consultar os preços e compare o valor proporcional por quilo (R$/kg).\n`
+  systemPrompt += `     b) Mostre a diferença de forma didática e transparente (ex: "A embalagem de 2,05kg sai por R$ 38,97/kg, enquanto a de 1,01kg sai por R$ 44,50/kg. Portanto, a embalagem maior de 2kg é mais econômica e proporciona maior rendimento!").\n`
+  systemPrompt += `- RENDIMENTO DE RECEITAS E FESTAS (PEÇAS vs PESO DE EMBALAGEM):\n`
+  systemPrompt += `  1. NUNCA confunda contagem de doces (ex: "vou fazer 200 doces para festa") com peso de embalagem (200g).\n`
+  systemPrompt += `  2. Oriente o cliente com cálculo prático de confeitaria:\n`
+  systemPrompt += `     - 1 lata de leite condensado tradicional (395g) rende em média 25 a 30 brigadeiros tradicionais de 15g-20g.\n`
+  systemPrompt += `     - Para 200 doces, são necessárias cerca de 7 a 8 latas/caixas de leite condensado, mais cerca de 200g a 300g de chocolate em pó e confeitos.\n`
+  systemPrompt += `     - Apresente a quantidade sugerida de latas e pergunte se gostaria de adicioná-las ao pedido!\n`
+  systemPrompt += `- DESAMBIGUAÇÃO DE REFERÊNCIAS MÚLTIPLAS ("DOIS DESSE E TRÊS DO OUTRO"):\n`
+  systemPrompt += `  1. Se o cliente disser "quero dois desse e três do outro", "me vê dois desse e cinco daquele", e houver mais de 2 opções em tela:\n`
+  systemPrompt += `     - Pergunte com cordialidade quais produtos o cliente deseja para cada quantidade antes de adicionar, garantindo acurácia absoluta no pedido.\n\n`
   } else {
     systemPrompt += `\n\n[INFORMAÇÕES DE PLANOS, SERVIÇOS E PREÇOS]\n`
     systemPrompt += `- Os planos, valores e diretrizes oficiais desta empresa estão definidos diretamente nas suas [INSTRUCOES].\n`
