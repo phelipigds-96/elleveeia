@@ -171,6 +171,18 @@ export const COMPLAINT_AND_FRUSTRATION_PATTERNS = [
 ]
 
 /**
+ * Identifica se a mensagem do cliente expressa indecisão, pedido aberto de conselho,
+ * recomendação ou dúvida sobre qual produto escolher para uma finalidade.
+ * Nesses casos, o agente consultivo deve fazer perguntas de diagnóstico ou esclarecer dúvidas,
+ * e NÃO forçar uma ferramenta de catálogo com o texto bruto da dúvida (ex: "não sei qual comprar").
+ */
+export function isUndecidedHelpIntent(text?: string): boolean {
+  if (!text) return false
+  const msg = normalizeText(text)
+  return /\b(?:nao\s+sei\s+qual|me\s+ajud(?:a|e)|o\s+que\s+(?:voce\s+)?me\s+recomenda|qual\s+(?:voce\s+)?me\s+indica|estou\s+em\s+duvida|qual\s+e\s+melhor\s+para|qual\s+voce\s+sugere|qual\s+indica|qual\s+recomenda|pode\s+me\s+ajudar\s+a\s+escolher)\b/i.test(msg)
+}
+
+/**
  * Verifica se a mensagem possui intenção clara de produto ou consulta comercial.
  * Usado pelo engine para evitar disparar fallbacks determinísticos em mensagens
  * puramente institucionais, encerramentos ou dúvidas gerais.
@@ -185,6 +197,7 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
   if (CLOSING_PATTERNS.some(p => p.test(msg))) return false
   if (HANDOFF_PATTERNS.some(p => p.test(msg))) return false
   if (COMPLAINT_AND_FRUSTRATION_PATTERNS.some(p => p.test(msg))) return false
+  if (isUndecidedHelpIntent(userMessage)) return false
 
   const words = msg.split(/\s+/)
   const GREETINGS = new Set([
@@ -207,7 +220,8 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
   // Intenção explícita de catálogo / produto (sem "qual" / "quais" e sem "tem" isolado)
   const catalogKeywords = [
     'buscar', 'procura', 'catalogo', 'produto', 'marca',
-    'sabor', 'sabores', 'vende', 'vendem', 'trabalham'
+    'sabor', 'sabores', 'vende', 'vendem', 'trabalham',
+    'chocolate', 'cobertura', 'casquinha', 'recheio', 'compensa'
   ]
   const productInquiryVerbs = ['tem', 'teria', 'teriam', 'temos', 'vende', 'vendem', 'trabalham', 'trabalha', 'consegue']
   const nonPronounWords = words.filter(w => !INSTITUTIONAL_KEYWORDS.includes(w) && !['tu', 'voce', 'voces', 'vc', 'vcs', 'te', 'ti', 'ele', 'ela', 'tem', 'temos', 'teria', 'teriam', 'ai', 'aqui', 'la', 'de', 'da', 'do', 'um', 'uma', 'o', 'a', 'os', 'as', 'e', 'pra', 'para', 'com', 'sem', 'ainda', 'por', 'acaso'].includes(w))
@@ -225,7 +239,8 @@ export function hasClearProductIntent(userMessage: string | undefined): boolean 
 
   const productAttributes = [
     'semidesnatado', 'desnatado', 'integral', 'zero', 'lactose', 'amargo', 'meio amargo',
-    'ao leite', 'branco', 'blend', 'marfim', 'diet', 'recheado', 'gotas', 'barra', 'tablete', 'po'
+    'ao leite', 'branco', 'blend', 'marfim', 'diet', 'recheado', 'gotas', 'barra', 'tablete', 'po',
+    'nobre', 'fracionada', 'cobertura', 'casquinha', 'recheio', 'chocolate', 'compensa'
   ]
   const hasAttributeQuery = words.some(w => productAttributes.includes(w))
 
@@ -352,7 +367,9 @@ export function resolveToolScope(
 
   const catalogSearchKeywords = [
     'tem', 'buscar', 'procura', 'catalogo', 'produto', 'marca',
-    'opcao', 'opcoes', 'sabor', 'sabores', 'vende', 'vendem', 'temos', 'queria', 'quero', 'gostaria', 'trabalham'
+    'opcao', 'opcoes', 'sabor', 'sabores', 'vende', 'vendem', 'temos', 'queria', 'quero', 'gostaria', 'trabalham',
+    'diferenca', 'casquinha', 'recheio', 'compensa', 'barato', 'barata', 'rendimento', 'festa', 'chocolate',
+    'cobertura', 'nobre', 'fracionada', 'leite', 'leites'
   ]
 
   for (const w of words) {
@@ -367,6 +384,11 @@ export function resolveToolScope(
         hasCatalogSearchIntent = true
       }
     }
+  }
+
+  // Se o cliente estiver apenas pedindo ajuda/indeciso sem termo específico, não aciona busca forçada
+  if (isUndecidedHelpIntent(msg) && !words.some(w => ['chocolate', 'cobertura', 'leite', 'barra', 'gotas'].includes(w))) {
+    hasCatalogSearchIntent = false
   }
 
   // "total" indica intenção de orçamento se houver contexto comercial ou menção a orçamento
@@ -476,7 +498,7 @@ export function resolveToolScope(
         selectedTools.add(tool)
       } else if (hasRemovalIntent && hasCartOrQuote) {
         selectedTools.add(tool)
-      } else if (hasCatalogSearchIntent && (history.length > 0 || !availableTools.some(t => t.name === 'buscar_produto'))) {
+      } else if (hasCatalogSearchIntent) {
         selectedTools.add(tool)
       }
     }

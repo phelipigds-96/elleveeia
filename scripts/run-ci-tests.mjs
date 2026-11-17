@@ -46,4 +46,8 @@ runSuite('Homologação do Proxy e Preservação Cirúrgica de Cookies SSR (9 Ce
   'tests/ci/proxy-ssr-cookie-preservation.test.ts',
 ])
 
+runSuite('Etapa AC-02 — Compreensão Comercial e Memória Contextual (10 Cenários)', [
+  'tests/ci/ac02-commercial-understanding.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

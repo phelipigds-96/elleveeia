@@ -4,8 +4,9 @@ export const STOP_WORDS = new Set([
   'quanto', 'quantos', 'quanta', 'quantas', 'esta', 'ta', 'estao', 'tao',
   'tem', 'temos', 'teria', 'teriam', 'tinha', 'tinham',
   'tu', 'voce', 'voces', 'vc', 'vcs', 'te', 'ti', 'ele', 'ela',
-  'gostaria', 'queria', 'saber', 'preco', 'precos', 'valor', 'valores', 'custa', 'custam',
-  'qual', 'quais', 'e', 'que', 'se',
+  'quero', 'queria', 'preciso', 'precisa', 'gostaria', 'saber', 'sabe',
+  'preco', 'precos', 'valor', 'valores', 'custa', 'custam',
+  'qual', 'quais', 'e', 'que', 'se', 'fazer', 'comprar', 'ajudar', 'ajuda', 'me',
   'ola', 'oi', 'oii', 'oiii', 'opa', 'eae', 'bom', 'boa', 'dia', 'tarde', 'noite',
   'favor', 'por', 'acaso', 'gentileza',
   'ai', 'aqui', 'la', 'ainda', 'tambem',
@@ -23,7 +24,11 @@ export const MULTI_WORD_TOKENS = [
   { canonical: 'semi desnatado', variants: ['semi desnatado', 'semi-desnatado', 'semidesnatado'] },
   { canonical: 'zero lactose', variants: ['zero lactose', '0 lactose', 'sem lactose', 'zero lact'] },
   { canonical: 'chocolate em po', variants: ['chocolate em po', 'choc em po', 'chocolate em pó', 'choc em pó'] },
-  { canonical: 'pasta americana', variants: ['pasta americana', 'pasta americ'] }
+  { canonical: 'pasta americana', variants: ['pasta americana', 'pasta americ'] },
+  { canonical: 'cobertura fracionada', variants: ['cobertura fracionada', 'choc fracionado', 'chocolate fracionado', 'fracionada', 'fracionado'] },
+  { canonical: 'chocolate nobre', variants: ['chocolate nobre', 'choc nobre', 'nobre puro'] },
+  { canonical: 'casquinha de ovo', variants: ['casquinha de ovo', 'casquinha de pascoa', 'casquinha do ovo', 'casquinha de trufa', 'fazer casquinha', 'para casquinha', 'pra casquinha'] },
+  { canonical: 'ovo de pascoa', variants: ['ovo de pascoa', 'ovo de páscoa', 'ovos de pascoa', 'ovos de páscoa'] }
 ]
 
 export const ALIASES: Record<string, string[]> = {

@@ -19,7 +19,8 @@ import {
   hasClearProductIntent,
   isExplicitHandoffIntent,
   isComplaintOrFrustrationIntent,
-  isOrderClosureIntent
+  isOrderClosureIntent,
+  isUndecidedHelpIntent
 } from './tool-scoping'
 import { applyWorkingMemoryUpdate } from './working-memory'
 import { maybeRefreshConversationSummary } from './conversation-summary'
@@ -277,7 +278,8 @@ export async function runAgentEngine({
         hasCatalogProducts &&
         iteration === 1 && 
         (!response.tool_calls || response.tool_calls.length === 0) &&
-        hasClearProductIntent(userMessage)
+        hasClearProductIntent(userMessage) &&
+        !isUndecidedHelpIntent(userMessage)
       ) {
         const catalogTool = scopedTools.find(t => t.name === 'consultar_produto_comercial' || t.name === 'buscar_produto')
         if (catalogTool) {

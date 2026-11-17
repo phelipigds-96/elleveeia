@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ToolDefinition } from '../tools'
 import { resolveProductPrice } from '../../commercial/pricing'
 import { searchProducts } from '../../catalog/products'
+import { resolveReferenceQuery } from '../commercial-strategy'
 
 const InputSchema = z.object({
   product_id: z.string().optional().describe('ID do produto (UUID exato de [PRODUTOS APRESENTADOS RECENTEMENTE] ou do catálogo). Preencha preferencialmente junto com product_name.'),
@@ -21,6 +22,18 @@ export const calcularPrecoProdutoTool: ToolDefinition = {
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     let targetProductId = product_id && UUID_REGEX.test(product_id.trim()) ? product_id.trim() : null
     let resolvedProductName: string | undefined = product_name?.trim() || undefined
+
+    // 0. Resolução Ordinal / Anafórica via Working Memory (ex: "aquele primeiro", "o segundo", "opcao 1")
+    const refTerm = product_name || product_id || ''
+    if (!targetProductId && refTerm) {
+      const refRes = resolveReferenceQuery(refTerm, context.workingMemory)
+      if (refRes.resolvedProduct) {
+        targetProductId = refRes.resolvedProduct.id
+        resolvedProductName = refRes.resolvedProduct.name
+      } else if (refRes.resolvedQuery && refRes.resolvedQuery !== refTerm) {
+        resolvedProductName = refRes.resolvedQuery
+      }
+    }
 
     // 1. Tenta identificar o nome nos produtos descobertos recentemente ou contexto ativo
     if (targetProductId && context.workingMemory?.discoveredProducts) {
