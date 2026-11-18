@@ -570,7 +570,7 @@ export function applyCommercialStrategy(
     payload.available_segments = segments.segmentLabels
     payload.consultative_hint = `ATENÇÃO: A pergunta do cliente é GENÉRICA (sem marca ou tamanho especificado). É ESTRITAMENTE PROIBIDO listar 5 a 10 produtos com preços de uma vez! ` +
       `Responda de forma humana, calorosa e consultiva: confirme que temos excelentes opções, mencione as marcas disponíveis em negrito (${brandsList})${sizesList} ` +
-      `e OBRIGATORIAMENTE PERGUNTE ao cliente se ele tem preferência por marca e/ou tamanho da embalagem antes de listar preços.`
+      `e OBRIGATORIAMENTE PERGUNTE em UMA ÚNICA pergunta amigável se ele tem preferência por marca ou tamanho da embalagem antes de listar preços.`
   }
 
   // Verifica se o cliente buscou uma marca de mercado não disponível, mas temos opções equivalentes

@@ -75,4 +75,8 @@ runSuite('Etapa AC-02 — Compreensão Comercial e Memória Contextual (10 Cená
 ])
 ])
 
+runSuite('Etapa AC-03 — Conversação Natural e Consultiva do Agente Comercial (8 Comportamentos)', [
+  'tests/ci/ac03-conversational-nature.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')
