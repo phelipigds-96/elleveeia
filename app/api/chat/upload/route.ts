@@ -1,40 +1,83 @@
 import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const DEFAULT_PREVIEW_COMPANY_ID = "00000000-0000-0000-0000-000000000001"
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Endpoint de upload direto via multipart/form-data para o bucket chat-media.
  * Suporta imagens, áudios e documentos até 25MB.
+ * Exige autenticação estrita e empresa válida (fail-closed, sem tenant fixo).
  */
 export async function POST(req: NextRequest) {
   try {
-    let companyId: string | null = null
+    const supabase = await createClient()
+    const { data: authData, error: authErr } = await supabase.auth.getUser()
 
-    try {
-      const supabase = await createClient()
-      const { data: authData } = await supabase.auth.getUser()
-
-      if (authData?.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("company_id")
-          .eq("id", authData.user.id)
-          .maybeSingle()
-
-        if (profile?.company_id) {
-          companyId = profile.company_id
-        }
-      }
-    } catch (authErr) {
-      console.warn("[UploadAPI] Contexto de auth SSR não disponível, usando fallback:", authErr)
+    if (authErr || !authData?.user) {
+      return NextResponse.json(
+        { success: false, error: "Não autorizado: sessão de autenticação inválida ou ausente." },
+        { status: 401 }
+      )
     }
 
-    const safeCompanyId = companyId || DEFAULT_PREVIEW_COMPANY_ID
+    const userId = authData.user.id
+    const adminClient = createAdminClient()
+
+    const { data: profile, error: profileErr } = await adminClient
+      .from("profiles")
+      .select("company_id, role")
+      .eq("id", userId)
+      .maybeSingle()
+
+    if (profileErr || !profile?.company_id) {
+      return NextResponse.json(
+        { success: false, error: "Acesso negado: empresa não vinculada ao perfil do usuário." },
+        { status: 403 }
+      )
+    }
+
+    let companyId = profile.company_id
+
+    // Suporte restrito e validado ao Impersonate: EXCLUSIVO para SuperAdmins ativos
+    try {
+      const { data: operator } = await adminClient
+        .from("platform_admins")
+        .select("id, role, active")
+        .eq("id", userId)
+        .maybeSingle()
+
+      const isSuperAdmin = operator && operator.active === true && operator.role === "superadmin"
+
+      if (isSuperAdmin) {
+        const cookieStore = await cookies()
+        const impersonateId = cookieStore.get("ellevee_impersonate_active")?.value
+        if (impersonateId && UUID_REGEX.test(impersonateId)) {
+          const { data: targetComp } = await adminClient
+            .from("companies")
+            .select("id, status")
+            .eq("id", impersonateId)
+            .maybeSingle()
+
+          if (targetComp && targetComp.status !== "suspended") {
+            companyId = targetComp.id
+          }
+        }
+      }
+    } catch {
+      // cookies() pode não estar disponível em certos contextos
+    }
+
+    if (!companyId) {
+      return NextResponse.json(
+        { success: false, error: "Acesso negado: empresa não identificada." },
+        { status: 403 }
+      )
+    }
 
     const formData = await req.formData()
     const file = formData.get("file") as File | null
@@ -55,9 +98,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const adminClient = createAdminClient()
     const sanitizedName = (file.name || "arquivo").replace(/[^a-zA-Z0-9.-]/g, "_")
-    const filePath = `${safeCompanyId}/${Date.now()}-${sanitizedName}`
+    const filePath = `${companyId}/${Date.now()}-${sanitizedName}`
     const buffer = Buffer.from(await file.arrayBuffer())
 
     const { error: uploadErr } = await adminClient.storage

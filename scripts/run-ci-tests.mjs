@@ -46,4 +46,8 @@ runSuite('Homologação do Proxy e Preservação Cirúrgica de Cookies SSR (9 Ce
   'tests/ci/proxy-ssr-cookie-preservation.test.ts',
 ])
 
+runSuite('AC-SEC-01.3 — Correção Emergencial de Autorização Multi-Tenant e RBAC (26 Cenários)', [
+  'tests/ci/ac-sec-01-3-emergency-auth.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')
