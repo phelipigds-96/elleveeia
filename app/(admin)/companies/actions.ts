@@ -1549,7 +1549,8 @@ export async function stopImpersonateAction(): Promise<ActionResult<{ redirectUr
 }
 
 /**
- * Retorna os detalhes da empresa atualmente impersonada, caso haja uma sessão ativa
+ * Retorna os detalhes da empresa atualmente impersonada, caso haja uma sessão ativa autorizada.
+ * Exige estritamente autorização de SuperAdmin ativo antes de consultar qualquer informação da empresa.
  */
 export async function getImpersonateStatus(): Promise<{
   isImpersonating: boolean
@@ -1558,9 +1559,12 @@ export async function getImpersonateStatus(): Promise<{
   targetCompanySlug?: string
 }> {
   try {
+    // 1. Exige autorização estrita de SuperAdmin ativo da plataforma
+    await requirePlatformAdmin()
+
     const cookieStore = await cookies()
     const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
-    if (!targetCompanyId) {
+    if (!targetCompanyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetCompanyId)) {
       return { isImpersonating: false }
     }
 
@@ -1582,6 +1586,7 @@ export async function getImpersonateStatus(): Promise<{
       targetCompanySlug: comp.slug,
     }
   } catch {
+    // Se não for SuperAdmin ou se a sessão for inválida, falha fechado
     return { isImpersonating: false }
   }
 }

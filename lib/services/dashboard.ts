@@ -128,74 +128,69 @@ export async function getDashboardData(period: 'today' | '7days' | '30days'): Pr
     const supabase = await createClient()
     const adminClient = createAdminClient()
 
-    // 1. Obter usuário logado e sua empresa (respeitando Impersonate do SuperAdmin)
+    // 1. Obter usuário logado e sua empresa (respeitando Impersonate EXCLUSIVO do SuperAdmin)
     let companyId: string | null = null
     let companyName = 'Ellevee IA'
     let companySlug = ''
     let companyPlan = 'Starter'
 
-    // Verifica se há impersonate ativo (SuperAdmin visualizando painel de um cliente)
-    try {
-      const cookieStore = await cookies()
-      const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-      if (impersonateId) {
-        const { data: impComp } = await adminClient
-          .from('companies')
-          .select('id, name, slug, plan_tier')
-          .eq('id', impersonateId)
-          .maybeSingle()
-
-        if (impComp) {
-          companyId = impComp.id
-          companyName = impComp.name || companyName
-          companySlug = impComp.slug || ''
-          companyPlan = impComp.plan_tier || companyPlan
-        }
-      }
-    } catch {
-      // cookies() pode não estar disponível em certos contextos
+    // Exige usuário autenticado no servidor
+    const { data: authData } = await supabase.auth.getUser()
+    const user = authData?.user
+    if (!user) {
+      return fallbackData
     }
 
-    // Se não estiver em impersonate, busca pelo usuário autenticado
-    if (!companyId) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('company_id, companies(id, name, slug, plan_tier)')
-          .eq('id', user.id)
-          .maybeSingle()
+    // Consulta perfil do usuário logado
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_id, role, companies(id, name, slug, plan_tier)')
+      .eq('id', user.id)
+      .maybeSingle()
 
-        if (profile?.company_id) {
-          companyId = profile.company_id
-          const comp = Array.isArray(profile.companies) ? profile.companies[0] : (profile.companies as any)
-          if (comp) {
-            companyName = comp.name || companyName
-            companySlug = comp.slug || ''
-            companyPlan = comp.plan_tier || companyPlan
+    if (profile?.company_id) {
+      companyId = profile.company_id
+      const comp = Array.isArray(profile.companies) ? profile.companies[0] : (profile.companies as any)
+      if (comp) {
+        companyName = comp.name || companyName
+        companySlug = comp.slug || ''
+        companyPlan = comp.plan_tier || companyPlan
+      }
+    }
+
+    // Suporte ao Impersonate: estritamente restrito a SuperAdmins ativos em platform_admins
+    const { data: operator } = await adminClient
+      .from('platform_admins')
+      .select('id, role, active')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const isSuperAdmin = operator && operator.active === true && operator.role === 'superadmin'
+
+    if (isSuperAdmin) {
+      try {
+        const cookieStore = await cookies()
+        const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
+        if (impersonateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(impersonateId)) {
+          const { data: impComp } = await adminClient
+            .from('companies')
+            .select('id, name, slug, plan_tier, status')
+            .eq('id', impersonateId)
+            .maybeSingle()
+
+          if (impComp && impComp.status !== 'suspended') {
+            companyId = impComp.id
+            companyName = impComp.name || companyName
+            companySlug = impComp.slug || ''
+            companyPlan = impComp.plan_tier || companyPlan
           }
         }
+      } catch {
+        // cookies() pode não estar disponível em certos contextos
       }
     }
 
-    // Fallback para dev/admin se não encontrou empresa vinculada
-    if (!companyId) {
-      const { data: firstCompany } = await adminClient
-        .from('companies')
-        .select('id, name, slug, plan_tier')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-
-      if (firstCompany) {
-        companyId = firstCompany.id
-        companyName = firstCompany.name
-        companySlug = firstCompany.slug
-        companyPlan = firstCompany.plan_tier || 'Starter'
-      }
-    }
-
-    // Se mesmo assim não houver empresa
+    // Se mesmo assim não houver empresa (falha fechada - NUNCA buscar primeira empresa)
     if (!companyId) {
       return fallbackData
     }

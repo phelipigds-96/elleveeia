@@ -44,4 +44,4 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-anon-placeholder-key' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-service-role-placeholder' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-cron-secret-placeholder' }}
-        run: npx next build --no-lint
+        run: npx next build --webpack

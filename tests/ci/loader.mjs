@@ -51,7 +51,7 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === 'next/headers') {
     return {
       shortCircuit: true,
-      url: 'data:text/javascript,export function cookies(){return {getAll(){return []},set(){}}} export function headers(){return new Headers()}',
+      url: pathToFileURL(path.join(MOCKS_DIR, 'next-headers-mock.mjs')).href,
     }
   }
 

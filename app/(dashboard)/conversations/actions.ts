@@ -12,8 +12,8 @@ import {
   getCompanyClosePolicy,
   getCompanyCloseReasons,
   getCompanyQuickReplies,
-  CloseReason,
-  QuickReply,
+  type CloseReason,
+  type QuickReply,
 } from "@/lib/services/chat-operations"
 
 export type { CloseReason, QuickReply }
@@ -93,61 +93,71 @@ export interface UserProfileContext {
   userName: string
 }
 
-const DEFAULT_PREVIEW_COMPANY_ID = "90e69b50-1b4e-4f4a-94f2-78be1cf82833" // Ellevee Admin
-const DEFAULT_PREVIEW_USER_ID = "71ee00c9-e22b-479d-bc34-9d596448c3f9"    // admin@ellevee.com
+const CONVERSATION_UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Extrai o company_id, sender_id, role e full_name da sessão segura do servidor via SSR auth.
+ * Fail-closed: rejeita qualquer requisição sem sessão válida ou sem perfil cadastrado.
+ * Impede sobreposição de companyId por cookies forjados por usuários comuns.
  */
 async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
-  let userId: string | null = null
-  let companyId: string | null = null
-  let role = "admin"
-  let userName = "Atendente"
+  const supabase = await createClient()
+  const { data: authData, error: authError } = await supabase.auth.getUser()
 
-  try {
-    const supabase = await createClient()
-    const { data: authData } = await supabase.auth.getUser()
-
-    if (authData?.user) {
-      userId = authData.user.id
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id, role, full_name")
-        .eq("id", userId)
-        .maybeSingle()
-
-      if (profile) {
-        if (profile.company_id) companyId = profile.company_id
-        if (profile.role) role = profile.role
-        if (profile.full_name) userName = profile.full_name
-      }
-    }
-
-    // Suporte ao Impersonate do SuperAdmin
-    try {
-      const cookieStore = await cookies()
-      const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-      if (impersonateId) {
-        companyId = impersonateId
-      }
-    } catch {
-      // cookies() pode não estar disponível em certos contextos SSR
-    }
-  } catch {
-    // Ignora erros de contexto em ambiente de pré-visualização estática
+  if (authError || !authData?.user) {
+    throw new Error("UNAUTHENTICATED: Sessão de usuário não encontrada.")
   }
 
-  if (!userId || !companyId) {
-    if (process.env.NODE_ENV === "test") {
-      return {
-        userId: userId || DEFAULT_PREVIEW_USER_ID,
-        companyId: companyId || DEFAULT_PREVIEW_COMPANY_ID,
-        role,
-        userName,
+  const userId = authData.user.id
+  const adminClient = createAdminClient()
+
+  const { data: profile, error: profileErr } = await adminClient
+    .from("profiles")
+    .select("company_id, role, full_name")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (profileErr || !profile) {
+    throw new Error("UNAUTHENTICATED: Perfil de usuário não encontrado.")
+  }
+
+  let companyId: string | null = profile.company_id || null
+  let role = profile.role || "attendant"
+  let userName = profile.full_name || "Atendente"
+
+  // Suporte estrito e seguro ao Impersonate: EXCLUSIVO para SuperAdmins ativos
+  try {
+    const { data: operator } = await adminClient
+      .from("platform_admins")
+      .select("id, role, active")
+      .eq("id", userId)
+      .maybeSingle()
+
+    const isSuperAdmin = operator && operator.active === true && operator.role === "superadmin"
+
+    if (isSuperAdmin) {
+      const cookieStore = await cookies()
+      const impersonateId = cookieStore.get("ellevee_impersonate_active")?.value
+      if (impersonateId && CONVERSATION_UUID_REGEX.test(impersonateId)) {
+        const { data: targetComp } = await adminClient
+          .from("companies")
+          .select("id, status")
+          .eq("id", impersonateId)
+          .maybeSingle()
+
+        if (targetComp && targetComp.status !== "suspended") {
+          companyId = targetComp.id
+          role = "admin"
+        }
       }
     }
-    throw new Error("UNAUTHENTICATED: Sessão de usuário ou empresa não encontrada.")
+  } catch {
+    // cookies() pode não estar disponível em certos contextos SSR
+  }
+
+  if (!companyId) {
+    throw new Error("UNAUTHENTICATED: Empresa não vinculada ao perfil.")
   }
 
   return {
@@ -309,37 +319,62 @@ export async function getConversationsList(): Promise<ConversationData[]> {
 }
 
 /**
- * Obtém o histórico real de mensagens de uma conversa selecionada
+ * Obtém o histórico real de mensagens de uma conversa selecionada.
+ * Exige autenticação, perfil e tenant válidos, autorização sobre a conversa e filtro company_id.
+ * Respeita governança RBAC e atribuição de atendentes.
  */
 export async function getConversationMessages(
   conversationId: string
 ): Promise<MessageData[]> {
   try {
-    if (!conversationId) return []
+    if (!conversationId || typeof conversationId !== "string" || !CONVERSATION_UUID_REGEX.test(conversationId.trim())) {
+      return []
+    }
 
+    const cleanConvId = conversationId.trim()
+    const { userId, companyId, role } = await getAuthenticatedAgentContext()
     const client = createAdminClient()
 
-    const { data: messages, error } = await client
+    // 1. Validar que a conversa existe e pertence ao tenant autenticado
+    const { data: conv, error: convErr } = await client
+      .from("conversations")
+      .select("id, company_id, assigned_to")
+      .eq("id", cleanConvId)
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    if (convErr || !conv) {
+      console.warn(`[Conversations] Acesso negado: conversa ${cleanConvId} não encontrada ou não pertence ao tenant ${companyId}`)
+      return []
+    }
+
+    // 2. Governança RBAC: Se for atendente comum, só acessa conversas não atribuídas ou atribuídas a si
+    const isElevatedRole = role === "admin" || role === "master" || role === "owner"
+    if (!isElevatedRole && conv.assigned_to && conv.assigned_to !== userId) {
+      console.warn(`[Conversations] Acesso negado: conversa ${cleanConvId} atribuída a outro atendente (${conv.assigned_to}).`)
+      return []
+    }
+
+    // 3. Buscar mensagens com filtro estrito de company_id
+    const { data: messages, error: msgErr } = await client
       .from("messages")
       .select("id, company_id, conversation_id, sender_type, sender_id, content, message_type, metadata, created_at, external_id")
-      .eq("conversation_id", conversationId)
+      .eq("conversation_id", cleanConvId)
+      .eq("company_id", companyId)
       .order("created_at", { ascending: true })
       .limit(200)
 
-    if (error || !messages) {
-      console.error("[Conversations] Erro ao buscar mensagens:", error)
+    if (msgErr || !messages) {
+      console.error("[Conversations] Erro ao buscar mensagens:", msgErr)
       return []
     }
 
     return messages as MessageData[]
-  } catch (error) {
-    console.error("[Conversations] Exceção em getConversationMessages:", error)
+  } catch (error: any) {
+    console.error("[Conversations] Exceção em getConversationMessages:", error?.message || error)
     return []
   }
 }
-
-const CONVERSATION_UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Zera o contador de mensagens não lidas (unread_count) de uma conversa aberta pelo atendente,
