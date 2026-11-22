@@ -90,4 +90,8 @@ runSuite('Etapa AC-04.3 — Enterprise Quote Engine & Intelligent Cart (20 Cená
   'tests/ci/ac04-3-enterprise-quotes.test.ts',
 ])
 
+runSuite('Etapa AC-04.4 — Commercial Agent Runtime Integration & Consultative Sales (16 Cenários)', [
+  'tests/ci/ac04-4-commercial-runtime.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

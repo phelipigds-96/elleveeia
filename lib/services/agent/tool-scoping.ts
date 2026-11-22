@@ -477,6 +477,15 @@ export function resolveToolScope(
       selectedTools.add(tool)
     }
     
+    // Ferramentas de gerenciamento de carrinho (gerenciar_carrinho)
+    if (category === 'cart' || name === 'gerenciar_carrinho') {
+      if (hasRemovalIntent || hasModificationIntent || (hasCartOrQuote && (hasQuoteIntent || isShortConfirmation))) {
+        selectedTools.add(tool)
+      } else if (hasCartOrQuote && (hasProductPriceIntent || hasQuantityPriceIntent)) {
+        selectedTools.add(tool)
+      }
+    }
+
     // Ferramentas de orçamento (gerar_orcamento e consultar_orcamento)
     if (category === 'quotes') {
       if (hasQuoteIntent) {

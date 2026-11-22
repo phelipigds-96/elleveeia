@@ -773,6 +773,59 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
             isPriceConfirmed: true
           })
         }
+
+        // Regra Multi-Produto: Se a ferramenta processou múltiplos produtos estruturados em lote,
+        // adiciona todos os itens confirmados ao carrinho multi-item.
+        if (res.data.strategy === 'multi_product_pricing' && Array.isArray(res.data.items)) {
+          for (const it of res.data.items) {
+            if (it.productId && it.name) {
+              next = addItemToCart(next, {
+                productId: it.productId,
+                sku: it.sku,
+                name: it.name,
+                quantity: it.quantity || 1,
+                unit: it.unit,
+                unitPrice: it.unitPrice,
+                subtotal: it.subtotal,
+                unitPriceCents: it.unitPriceCents,
+                subtotalCents: it.subtotalCents,
+                priceType: it.priceType,
+                appliedRule: it.appliedRule,
+                isPriceConfirmed: it.isPriceConfirmed !== false,
+                status: it.isPriceConfirmed !== false ? 'confirmed' : 'pending'
+              })
+            }
+          }
+          if (res.data.items.length > 0) {
+            const first = res.data.items[0]
+            next.activeProduct = { id: first.productId, name: first.name }
+            if (first.unitPrice) {
+              next.activePrice = { unitPrice: first.unitPrice, priceType: first.priceType }
+            }
+            next.activeQuantity = first.quantity
+          }
+        }
+      }
+    }
+    
+    if (toolName === 'gerenciar_carrinho') {
+      const action = res.data.action
+      if (action === 'clear_cart') {
+        next = clearCart(next)
+      } else if (action === 'remove_item' && res.data.removed_product_id) {
+        next = removeCartItem(next, res.data.removed_product_id)
+      } else if (action === 'update_quantity' && res.data.updated_item) {
+        const item = res.data.updated_item
+        next = updateCartItemQuantity(next, item.productId, item.quantity)
+        if (typeof item.unitPrice === 'number') {
+          next = updateCartItemPrice(next, item.productId, {
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
+            priceType: item.priceType
+          })
+        }
+      } else if (action === 'replace_item' && res.data.replaced_product_id && res.data.new_item) {
+        next = replaceCartItem(next, res.data.replaced_product_id, res.data.new_item)
       }
     }
     

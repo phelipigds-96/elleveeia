@@ -29,7 +29,7 @@ export interface InternalToolResult {
 }
 
 export interface ToolMetadata {
-  category: 'catalog' | 'pricing' | 'commercial' | 'quotes' | 'datetime' | 'general'
+  category: 'catalog' | 'pricing' | 'commercial' | 'quotes' | 'cart' | 'datetime' | 'general'
   capabilities?: string[]
 }
 

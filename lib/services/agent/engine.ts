@@ -12,6 +12,7 @@ import { calcularPrecoProdutoTool } from './tools/calcular-preco'
 import { gerarOrcamentoTool } from './tools/gerar-orcamento'
 import { consultarOrcamentoTool } from './tools/consultar-orcamento'
 import { consultarProdutoComercialTool } from './tools/consultar-produto-comercial'
+import { gerenciarCarrinhoTool } from './tools/gerenciar-carrinho'
 import { salvarNomeClienteTool } from './tools/salvar-nome-cliente'
 import { transferirParaHumanoTool } from './tools/transferir-para-humano'
 import { 
@@ -22,7 +23,7 @@ import {
   isOrderClosureIntent,
   isUndecidedHelpIntent
 } from './tool-scoping'
-import { applyWorkingMemoryUpdate } from './working-memory'
+import { applyWorkingMemoryUpdate, recordProcessedEvent } from './working-memory'
 import { maybeRefreshConversationSummary } from './conversation-summary'
 import { DEFAULT_LLM_TIMEOUT_MS, LLMTimeoutError } from '../llm/timeout'
 
@@ -217,6 +218,7 @@ export async function runAgentEngine({
     registry.register(gerarOrcamentoTool)
     registry.register(consultarOrcamentoTool)
     registry.register(consultarProdutoComercialTool)
+    registry.register(gerenciarCarrinhoTool)
     registry.register(salvarNomeClienteTool)
     registry.register(transferirParaHumanoTool)
     
@@ -227,7 +229,7 @@ export async function runAgentEngine({
     scopedTools = resolveToolScope(userMessage, historyForScoping, registry.list(), previousWorkingMemory, { hasConfirmedCustomerName })
     const filteredScopedTools = hasCatalogProducts
       ? scopedTools
-      : scopedTools.filter(t => t.name !== 'consultar_produto_comercial' && t.name !== 'buscar_produto' && t.name !== 'consultar_preco' && t.name !== 'calcular_preco_produto')
+      : scopedTools.filter(t => t.name !== 'consultar_produto_comercial' && t.name !== 'buscar_produto' && t.name !== 'consultar_preco' && t.name !== 'calcular_preco_produto' && t.name !== 'gerenciar_carrinho')
     const availableTools = registry.getProviderPayload(filteredScopedTools)
 
     let messagesForLLM: LLMRequestMessage[] = payloadMessages.map(msg => ({
@@ -239,6 +241,7 @@ export async function runAgentEngine({
     let llm_rounds: any[] = []
     let finalContent: string | null = null
     let debug_tool_loop: any[] = []
+    const toolTimings: Array<{ tool: string; duration_ms: number; success: boolean }> = []
 
     // Memória de trabalho viva para propagação dinâmica entre iterações do mesmo turno
     let currentWorkingMemory: any = previousWorkingMemory ? { ...previousWorkingMemory } : {}
@@ -374,6 +377,7 @@ export async function runAgentEngine({
         })
 
         for (const call of response.tool_calls) {
+          const toolStart = Date.now()
           const result = await executor.execute(call, { 
             companyId, 
             agentId, 
@@ -382,6 +386,8 @@ export async function runAgentEngine({
             workingMemory: currentWorkingMemory, // Propagação viva da memória de trabalho atualizada
             adminClient: supabase
           })
+          const toolDuration = Date.now() - toolStart
+          toolTimings.push({ tool: call.toolName, duration_ms: toolDuration, success: result.success })
           
           executedTools.push({ name: call.toolName, success: result.success })
           allToolResults.push(result) // Registrado para o consolidador da Working Memory
@@ -418,7 +424,10 @@ export async function runAgentEngine({
 
     // 2. Extrair a nova Working Memory baseado nos resultados REAIS das ferramentas executadas
     // Não inventamos dados, apenas parseamos resultados determinísticos de forma segura
-    const newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
+    let newWorkingMemory = applyWorkingMemoryUpdate(previousWorkingMemory, allToolResults)
+    if (triggerEventId) {
+      newWorkingMemory = recordProcessedEvent(newWorkingMemory, triggerEventId)
+    }
 
     // Defesa em Profundidade: Handoff Pós-Loop Garantido
     // Se a mensagem exigia handoff (reclamação, atendente humano ou fechamento com carrinho)
@@ -580,6 +589,13 @@ export async function runAgentEngine({
           has_active_cart: Boolean(newWorkingMemory.activeCart && newWorkingMemory.activeCart.length > 0),
           has_active_quote: !!newWorkingMemory.activeQuote
         }
+      },
+      commercial_telemetry: {
+        tool_execution_timings: toolTimings,
+        quotes_generated: allToolResults.filter(r => r.toolName === 'gerar_orcamento' && r.success).length,
+        pending_items_count: (newWorkingMemory.activeCart || []).filter((i: any) => !i.isPriceConfirmed).length,
+        handoff_triggered: handoffTriggered,
+        tool_failures: allToolResults.filter(r => !r.success).map(r => ({ tool: r.toolName, error: r.error }))
       }
     }
     if (executedTools.length > 0) {
