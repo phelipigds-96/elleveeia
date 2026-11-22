@@ -46,6 +46,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
   let mockDb: any = null
   let simulateRpcFailure: boolean = false
   let simulateRpcMissing: boolean = false
+  let simulateUnauthorizedRole: boolean = false
 
   function createSyntheticDatabase() {
     return {
@@ -188,6 +189,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
     mockDb = createSyntheticDatabase()
     simulateRpcFailure = false
     simulateRpcMissing = false
+    simulateUnauthorizedRole = false
 
     const mockClient = {
       from: (table: string) => {
@@ -437,6 +439,10 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
         return builder
       },
       rpc: async (fn: string, args: any) => {
+        if (simulateUnauthorizedRole) {
+          return { data: null, error: { code: '42501', message: 'permission denied for function save_enterprise_quote_atomic' } }
+        }
+
         if (simulateRpcMissing) {
           return { data: null, error: { code: '42883', message: `function ${fn} does not exist` } }
         }
@@ -797,5 +803,47 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
     assert.ok(eventRow)
     assert.equal(eventRow.status, 'processed')
     assert.equal(eventRow.autonomous_status, 'pending')
+  })
+
+  // ============================================================================
+  // 6. PERMISSÕES DE RPC E ISOLAMENTO MULTI-TENANT ESTRITO
+  // ============================================================================
+
+  test('AC-04.5-P0.2 — Cenário 13: Execução direta da RPC sem role service_role é bloqueada com erro 42501', async () => {
+    simulateUnauthorizedRole = true
+
+    await assert.rejects(
+      async () => {
+        await createOrUpdateEnterpriseQuote({
+          companyId: TENANT_A,
+          customerId: CUSTOMER_A,
+          conversationId: CONV_A,
+          items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+        })
+      },
+      /permission denied for function save_enterprise_quote_atomic/i,
+      'Chamadas desautorizadas devem ser bloqueadas no nível de privilégio do PostgreSQL (42501)'
+    )
+    assert.equal(mockDb.quotes.length, 0)
+  })
+
+  test('AC-04.5-P0.2 — Cenário 14: Isolamento Multi-Tenant estrito impede contorno mesmo com allowCrossConversation', async () => {
+    // Cria orçamento legítimo no Tenant B
+    const quoteB = await createOrUpdateEnterpriseQuote({
+      companyId: TENANT_B,
+      customerId: 'cust-b-1',
+      conversationId: CONV_C,
+      items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+    })
+
+    // Tenant A tenta consultar o orçamento de Tenant B usando allowCrossConversation: true
+    const crossTenantGet = await getQuote({
+      companyId: TENANT_A, // Informa Tenant A
+      quoteId: quoteB.id,
+      allowCrossConversation: true // Tenta usar cross-conversation
+    })
+
+    // Deve retornar null pois o filtro de company_id é estrito e inegociável
+    assert.equal(crossTenantGet, null, 'allowCrossConversation NUNCA pode atravessar fronteiras entre empresas diferentes')
   })
 })

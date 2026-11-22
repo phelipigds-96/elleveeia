@@ -1,126 +1,314 @@
 -- ==============================================================================
--- ELLEVEE IA — AC-04.5-P0.1 | ROTEIRO DE VERIFICAÇÃO EM POSTGRESQL REAL (STAGING)
+-- ELLEVEE IA — AC-04.5-P0.2 | ROTEIRO DE PRÉ-FLIGHT E TESTES EM POSTGRESQL REAL
 -- ==============================================================================
--- Este script valida a atomicidade financeira, o rollback completo em falha induzida
--- e a serialização de concorrência com duas conexões simultâneas no PostgreSQL.
+-- Este script realiza:
+-- 1. Consultas de compatibilidade (somente leitura) pré-aplicação da migration.
+-- 2. Testes de permissões e controle de privilégios (anon, authenticated, service_role).
+-- 3. Testes transacionais ACID (criação, atualização, rollback e concorrência).
+-- 4. Testes de concorrência com duas conexões independentes (Advisory Lock).
+-- 5. Teardown controlado das fixtures sintéticas.
 --
--- ATENÇÃO: Executar exclusivamente em ambiente de STAGING autorizado (dkjrpdhymtkgbknocijy).
--- NUNCA executar em Produção (ipxhkwirzrigttpwzwbl).
+-- AMBIENTE AUTORIZADO:
+-- Supabase Staging: dkjrpdhymtkgbknocijy
+--
+-- AMBIENTE PROIBIDO (NUNCA EXECUTAR):
+-- Supabase Produção: ipxhkwirzrigttpwzwbl
 -- ==============================================================================
 
--- ------------------------------------------------------------------------------
--- PREPARAÇÃO: IDs Sintéticos Isolados para Teste
--- ------------------------------------------------------------------------------
--- Company ID:   '11111111-1111-1111-1111-111111111111'
--- Customer ID:  'aaaa1111-1111-1111-1111-111111111111'
--- Conversation: 'cccc1111-1111-1111-1111-111111111111'
--- Product 1:    '00000000-0000-0000-0000-000000000001'
 
 -- ==============================================================================
--- TESTE 1: Atomicidade e Rollback com Falha Induzida (Conexão 1)
+-- SEÇÃO 1: CONSULTAS DE COMPATIBILIDADE PRÉ-MIGRATION (SOMENTE LEITURA)
 -- ==============================================================================
--- Objetivo: Demonstrar que qualquer falha durante a execução da RPC resulta
--- em ROLLBACK TOTAL, sem deixar cabeçalho sem itens ou itens sem cabeçalho.
+-- Execute estas consultas ANTES de rodar a migration para garantir que a base
+-- de dados não possui conflitos com o índice único parcial.
 
-BEGIN;
+-- 1.1 Identifica se já existem múltiplos orçamentos ativos para a mesma conversa
+-- (Se retornar registros, o operador deve arquivar os mais antigos antes da migration)
+SELECT 
+    company_id,
+    (metadata->>'conversation_id') AS conversation_id,
+    COUNT(*) AS total_ativos,
+    ARRAY_AGG(id) AS quote_ids,
+    ARRAY_AGG(status) AS statuses,
+    ARRAY_AGG(created_at ORDER BY created_at DESC) AS criados_em
+FROM public.quotes
+WHERE status IN ('draft', 'pending_validation', 'ready')
+  AND (metadata->>'conversation_id') IS NOT NULL
+GROUP BY company_id, (metadata->>'conversation_id')
+HAVING COUNT(*) > 1;
 
--- 1.1 Tenta gravar orçamento com um item válido e um item propositalmente inválido (UUID malformado)
+-- 1.2 Identifica orçamentos ativos sem conversation_id
+-- (Estes registros NÃO conflitam com o índice, pois ele filtra apenas NOT NULL)
+SELECT 
+    id,
+    company_id,
+    customer_id,
+    status,
+    total,
+    metadata,
+    created_at
+FROM public.quotes
+WHERE status IN ('draft', 'pending_validation', 'ready')
+  AND (metadata->>'conversation_id' IS NULL OR (metadata->>'conversation_id') = '');
+
+-- 1.3 Visão de distribuição geral de status de orçamentos por empresa
+SELECT 
+    company_id,
+    status,
+    COUNT(*) AS total_count,
+    COUNT(*) FILTER (WHERE (metadata->>'conversation_id') IS NOT NULL) AS com_conversation_id,
+    COUNT(*) FILTER (WHERE (metadata->>'conversation_id') IS NULL) AS sem_conversation_id
+FROM public.quotes
+GROUP BY company_id, status
+ORDER BY company_id, status;
+
+
+-- ==============================================================================
+-- SEÇÃO 2: VALIDAÇÃO DE PERMISSÕES E PRINCÍPIO DO MENOR PRIVILÉGIO
+-- ==============================================================================
+-- A RPC save_enterprise_quote_atomic deve ser EXCLUSIVA da role service_role.
+-- Chamadas diretas como anon ou authenticated devem falhar com permissão negada (42501).
+
+-- 2.1 Teste com role 'anon' (DEVE FALHAR com erro 42501)
+SET ROLE anon;
 DO $$
 BEGIN
     PERFORM public.save_enterprise_quote_atomic(
+        p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+        p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 10.0, "subtotal": 10.0}]'::jsonb
+    );
+    RAISE EXCEPTION 'VULNERABILIDADE: anon conseguiu executar save_enterprise_quote_atomic!';
+EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'SUCESSO: Execução como anon rejeitada com insufficient_privilege (42501).';
+END $$;
+RESET ROLE;
+
+-- 2.2 Teste com role 'authenticated' (DEVE FALHAR com erro 42501)
+SET ROLE authenticated;
+DO $$
+BEGIN
+    PERFORM public.save_enterprise_quote_atomic(
+        p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+        p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 10.0, "subtotal": 10.0}]'::jsonb
+    );
+    RAISE EXCEPTION 'VULNERABILIDADE: authenticated conseguiu executar save_enterprise_quote_atomic!';
+EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'SUCESSO: Execução como authenticated rejeitada com insufficient_privilege (42501).';
+END $$;
+RESET ROLE;
+
+
+-- ==============================================================================
+-- SEÇÃO 3: TESTES TRANSACIONAIS E CONCORRÊNCIA (EXECUTAR COMO service_role)
+-- ==============================================================================
+
+-- 3.1 Criação Legítima de Orçamento Inicial
+SET ROLE service_role;
+
+DO $$
+DECLARE
+    v_res JSONB;
+    v_quote_id UUID;
+BEGIN
+    v_res := public.save_enterprise_quote_atomic(
         p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
         p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
         p_conversation_id := 'cccc1111-1111-1111-1111-111111111111',
         p_status := 'draft',
         p_total := 70.00,
         p_metadata := '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'::jsonb,
+        p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 2, "unit_price": 35.00, "subtotal": 70.00}]'::jsonb
+    );
+
+    v_quote_id := (v_res->>'id')::uuid;
+    IF v_quote_id IS NULL OR (v_res->>'version')::int <> 1 THEN
+        RAISE EXCEPTION 'Falha ao criar orçamento inicial via RPC: %', v_res;
+    END IF;
+    RAISE NOTICE '3.1 SUCESSO: Orçamento criado com ID % na versão %', v_quote_id, v_res->>'version';
+END $$;
+
+-- 3.2 Atualização com Incremento de Versão
+DO $$
+DECLARE
+    v_existing_id UUID;
+    v_res JSONB;
+BEGIN
+    SELECT id INTO v_existing_id FROM public.quotes 
+    WHERE company_id = '11111111-1111-1111-1111-111111111111' 
+      AND metadata @> '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'
+    LIMIT 1;
+
+    v_res := public.save_enterprise_quote_atomic(
+        p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+        p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+        p_conversation_id := 'cccc1111-1111-1111-1111-111111111111',
+        p_existing_quote_id := v_existing_id,
+        p_expected_version := 1,
+        p_status := 'ready',
+        p_total := 105.00,
+        p_metadata := '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'::jsonb,
+        p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 3, "unit_price": 35.00, "subtotal": 105.00}]'::jsonb
+    );
+
+    IF (v_res->>'version')::int <> 2 THEN
+        RAISE EXCEPTION 'Falha ao versionar orçamento: %', v_res;
+    END IF;
+    RAISE NOTICE '3.2 SUCESSO: Orçamento atualizado para versão % com total %', v_res->>'version', v_res->>'total';
+END $$;
+
+-- 3.3 Falha Induzida e Rollback Total ACID (Zero Lixo Residual)
+BEGIN;
+DO $$
+BEGIN
+    PERFORM public.save_enterprise_quote_atomic(
+        p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+        p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+        p_conversation_id := 'cccc-falha-induzida',
+        p_status := 'draft',
+        p_total := 50.00,
+        p_metadata := '{"conversation_id": "cccc-falha-induzida"}'::jsonb,
         p_items := '[
-            {"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 2, "unit_price": 35.00, "subtotal": 70.00},
-            {"product_id": "uuid-invalido-forca-erro", "quantity": 1, "unit_price": 10.00, "subtotal": 10.00}
+            {"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 35.0, "subtotal": 35.0},
+            {"product_id": "uuid-malformado-para-forcar-abort", "quantity": 1, "unit_price": 15.0, "subtotal": 15.0}
         ]'::jsonb
     );
 EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Falha induzida capturada com sucesso: %', SQLERRM;
+    RAISE NOTICE '3.3 SUCESSO: Erro induzido capturado: %', SQLERRM;
 END $$;
 
--- 1.2 Verifica que NENHUM registro residual foi gravado nesta transação
-SELECT COUNT(*) AS quotes_pendentes FROM public.quotes 
-WHERE company_id = '11111111-1111-1111-1111-111111111111';
-
-SELECT COUNT(*) AS items_pendentes FROM public.quote_items 
-WHERE company_id = '11111111-1111-1111-1111-111111111111';
-
+-- Comprova que nada foi gravado
+DO $$
+DECLARE
+    v_c_quotes INT;
+    v_c_items INT;
+BEGIN
+    SELECT COUNT(*) INTO v_c_quotes FROM public.quotes WHERE metadata @> '{"conversation_id": "cccc-falha-induzida"}';
+    SELECT COUNT(*) INTO v_c_items FROM public.quote_items WHERE quote_id IN (
+        SELECT id FROM public.quotes WHERE metadata @> '{"conversation_id": "cccc-falha-induzida"}'
+    );
+    IF v_c_quotes > 0 OR v_c_items > 0 THEN
+        RAISE EXCEPTION 'VIOLAÇÃO DE ATOMICIDADE: Registros residuais encontrados após falha!';
+    END IF;
+    RAISE NOTICE '3.3 SUCESSO: Ausência de lixo residual comprovada (quotes=%, items=%)', v_c_quotes, v_c_items;
+END $$;
 ROLLBACK;
 
+-- 3.4 Concorrência Otimista: Rejeição de Versão Defasada
+DO $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    SELECT id INTO v_existing_id FROM public.quotes 
+    WHERE company_id = '11111111-1111-1111-1111-111111111111' 
+      AND metadata @> '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'
+    LIMIT 1;
+
+    -- Tenta atualizar esperando versão 1 quando o banco já está na versão 2
+    BEGIN
+        PERFORM public.save_enterprise_quote_atomic(
+            p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+            p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+            p_conversation_id := 'cccc1111-1111-1111-1111-111111111111',
+            p_existing_quote_id := v_existing_id,
+            p_expected_version := 1, -- Versão obsoleta proposital!
+            p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 35.00, "subtotal": 35.00}]'::jsonb
+        );
+        RAISE EXCEPTION 'Falha: Concorrência otimista permitiu sobrescrita de versão defasada!';
+    EXCEPTION WHEN OTHERS THEN
+        IF SQLERRM LIKE '%ORCAMENTO_CONCURRENCY_CONFLICT%' THEN
+            RAISE NOTICE '3.4 SUCESSO: Conflito de versão bloqueado como esperado: %', SQLERRM;
+        ELSE
+            RAISE;
+        END IF;
+    END;
+END $$;
+
+-- 3.5 Isolamento entre Conversas no Mesmo Tenant: Bloqueio de Sequestro
+DO $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    SELECT id INTO v_existing_id FROM public.quotes 
+    WHERE company_id = '11111111-1111-1111-1111-111111111111' 
+      AND metadata @> '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'
+    LIMIT 1;
+
+    -- Conversa B tenta atualizar o orçamento que pertence à conversa A
+    BEGIN
+        PERFORM public.save_enterprise_quote_atomic(
+            p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+            p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+            p_conversation_id := 'cccc2222-2222-2222-2222-222222222222', -- Conversa B divergente!
+            p_existing_quote_id := v_existing_id,
+            p_expected_version := 2,
+            p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 35.00, "subtotal": 35.00}]'::jsonb
+        );
+        RAISE EXCEPTION 'Falha: Isolamento entre conversas permitiu alteração indevida!';
+    EXCEPTION WHEN OTHERS THEN
+        IF SQLERRM LIKE '%ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN%' THEN
+            RAISE NOTICE '3.5 SUCESSO: Acesso cruzado entre conversas bloqueado: %', SQLERRM;
+        ELSE
+            RAISE;
+        END IF;
+    END;
+END $$;
+
+RESET ROLE;
+
 
 -- ==============================================================================
--- TESTE 2: Concorrência Simultânea com Duas Conexões (Advisory Lock + Unicidade)
+-- SEÇÃO 4: CONCORRÊNCIA SIMULTÂNEA EM DUAS CONEXÕES INDEPENDENTES
 -- ==============================================================================
--- Procedimento para executar em DOIS terminais psql simultâneos:
+-- Instruções para o operador: Abra dois terminais psql ou duas abas do SQL Editor.
 
--- ------------------------------------------------------------------------------
--- TERMINAL 1 (Sessão A)
--- ------------------------------------------------------------------------------
-BEGIN;
-SELECT public.save_enterprise_quote_atomic(
-    p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
-    p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
-    p_conversation_id := 'cccc1111-1111-1111-1111-111111111111',
-    p_status := 'draft',
-    p_total := 35.00,
-    p_metadata := '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'::jsonb,
-    p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 35.00, "subtotal": 35.00}]'::jsonb
-);
--- NÃO FAÇA COMMIT AINDA. O lock pg_advisory_xact_lock está retido pela Sessão A.
+-- CONEXÃO 1:
+-- SET ROLE service_role;
+-- BEGIN;
+-- SELECT public.save_enterprise_quote_atomic(
+--     p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+--     p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+--     p_conversation_id := 'cccc-concorrencia-teste',
+--     p_status := 'draft',
+--     p_total := 35.00,
+--     p_metadata := '{"conversation_id": "cccc-concorrencia-teste"}'::jsonb,
+--     p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1, "unit_price": 35.00, "subtotal": 35.00}]'::jsonb
+-- );
+-- (Mantenha aberta sem fazer commit!)
 
--- ------------------------------------------------------------------------------
--- TERMINAL 2 (Sessão B - Executar enquanto a Sessão A está aberta)
--- ------------------------------------------------------------------------------
--- Tenta criar um NOVO rascunho para a mesma conversa simultaneamente:
-BEGIN;
-SELECT public.save_enterprise_quote_atomic(
-    p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
-    p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
-    p_conversation_id := 'cccc1111-1111-1111-1111-111111111111',
-    p_status := 'draft',
-    p_total := 70.00,
-    p_metadata := '{"conversation_id": "cccc1111-1111-1111-1111-111111111111"}'::jsonb,
-    p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 2, "unit_price": 35.00, "subtotal": 70.00}]'::jsonb
-);
--- OBSERVAÇÃO: O Terminal 2 fica BLOQUEADO aguardando o lock da Sessão A.
+-- CONEXÃO 2 (Executar imediatamente enquanto Conexão 1 está aberta):
+-- SET ROLE service_role;
+-- BEGIN;
+-- SELECT public.save_enterprise_quote_atomic(
+--     p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
+--     p_customer_id := 'aaaa1111-1111-1111-1111-111111111111'::uuid,
+--     p_conversation_id := 'cccc-concorrencia-teste',
+--     p_status := 'draft',
+--     p_total := 70.00,
+--     p_metadata := '{"conversation_id": "cccc-concorrencia-teste"}'::jsonb,
+--     p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 2, "unit_price": 35.00, "subtotal": 70.00}]'::jsonb
+-- );
+-- (Observar que a Conexão 2 fica retida esperando o advisory lock da Conexão 1!)
 
--- ------------------------------------------------------------------------------
--- TERMINAL 1 (Sessão A)
--- ------------------------------------------------------------------------------
-COMMIT;
--- Ao commitar, a Sessão A libera o lock.
+-- CONEXÃO 1:
+-- COMMIT;
 
--- ------------------------------------------------------------------------------
--- TERMINAL 2 (Sessão B)
--- ------------------------------------------------------------------------------
--- Imediatamente após o COMMIT da Sessão A, a Sessão B adquire o lock,
--- detecta que já existe um orçamento ativo para a conversa 'cccc1111-1111-1111-1111-111111111111'
--- e lança a exceção:
--- ERROR: ORCAMENTO_ACTIVE_EXISTS: Já existe um orçamento ativo (...) para a conversa cccc1111-1111-1111-1111-111111111111.
-ROLLBACK;
+-- CONEXÃO 2:
+-- Ao comitar a Conexão 1, a Conexão 2 é liberada imediatamente e retorna:
+-- ERROR: ORCAMENTO_ACTIVE_EXISTS: Já existe um orçamento ativo (...) para a conversa cccc-concorrencia-teste.
+-- ROLLBACK;
 
 
 -- ==============================================================================
--- TESTE 3: Verificação de Independência de Conversas Paralelas (Sem Contenção)
+-- SEÇÃO 5: TEARDOWN CONTROLADO DAS FIXTURES SINTÉTICAS
 -- ==============================================================================
--- Conversa A (chave 1) e Conversa B (chave 2) devem executar simultaneamente sem espera:
-BEGIN;
-SELECT public.save_enterprise_quote_atomic(
-    p_company_id := '11111111-1111-1111-1111-111111111111'::uuid,
-    p_customer_id := 'bbbb2222-2222-2222-2222-222222222222'::uuid,
-    p_conversation_id := 'cccc2222-2222-2222-2222-222222222222',
-    p_status := 'draft',
-    p_total := 105.00,
-    p_metadata := '{"conversation_id": "cccc2222-2222-2222-2222-222222222222"}'::jsonb,
-    p_items := '[{"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 3, "unit_price": 35.00, "subtotal": 105.00}]'::jsonb
-);
-COMMIT;
+-- Limpa estritamente os dados sintéticos criados durante este roteiro de testes:
 
--- Limpeza sintética após o teste:
--- DELETE FROM public.quote_items WHERE company_id = '11111111-1111-1111-1111-111111111111';
--- DELETE FROM public.quotes WHERE company_id = '11111111-1111-1111-1111-111111111111';
+DELETE FROM public.quote_items 
+WHERE company_id = '11111111-1111-1111-1111-111111111111';
+
+DELETE FROM public.quotes 
+WHERE company_id = '11111111-1111-1111-1111-111111111111';
+
+-- Confirmação de limpeza:
+SELECT COUNT(*) AS residual_quotes FROM public.quotes WHERE company_id = '11111111-1111-1111-1111-111111111111';
+SELECT COUNT(*) AS residual_items FROM public.quote_items WHERE company_id = '11111111-1111-1111-1111-111111111111';

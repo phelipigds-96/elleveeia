@@ -200,6 +200,9 @@ BEGIN
 END;
 $$;
 
--- 3. Permissões de Segurança Estritas
-REVOKE ALL ON FUNCTION public.save_enterprise_quote_atomic FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.save_enterprise_quote_atomic TO service_role, authenticated;
+-- 3. Permissões de Segurança Estritas (Princípio do Menor Privilégio)
+-- A RPC manipula dados financeiros críticos de orçamentos e só deve ser invocada
+-- a partir do backend confiável da aplicação (Node.js/Next.js) autenticado via service_role.
+-- Chamadas diretas do cliente (browser) via chave pública anon ou JWT de authenticated são estritamente revogadas.
+REVOKE ALL ON FUNCTION public.save_enterprise_quote_atomic(UUID, UUID, TEXT, UUID, INTEGER, TEXT, NUMERIC, JSONB, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_enterprise_quote_atomic(UUID, UUID, TEXT, UUID, INTEGER, TEXT, NUMERIC, JSONB, JSONB) TO service_role;
