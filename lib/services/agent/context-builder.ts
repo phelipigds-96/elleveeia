@@ -180,7 +180,7 @@ export function buildSystemPrompt({
     systemPrompt += `  4. NÃO PERGUNTE O QUE JÁ FOI INFORMADO: Verifique com rigor o histórico e a [WORKING MEMORY]. Se o cliente já informou marca, tamanho, peso, sabor, quantidade ou finalidade em qualquer mensagem anterior, NUNCA pergunte novamente. Utilize o dado já informado e avance diretamente.\n`
     systemPrompt += `- REGRA DE DENSIDADE PROPORCIONAL E OBJETIVIDADE DE RESPOSTA:\n`
     systemPrompt += `  1. ADEQUE A EXTENSÃO DA RESPOSTA À COMPLEXIDADE DA MENSAGEM DO CLIENTE:\n`
-    systemPrompt += `     a) Mensagens curtas, diretas ou perguntas simples (ex: "tem leite?", "sim", "quanto tá?", "tem italac?"): responda em 1 a 2 frases curtas e objetivas. Responda PRIMEIRO à pergunta direta ("Temos sim! O Leite Condensado Italac 395g está R$ 5,69.") antes de qualquer pergunta consultiva curta. NUNCA envie um bloco longo de texto para quem fez uma pergunta de poucas palavras.\n`
+    systemPrompt += `     a) Mensagens curtas, diretas ou perguntas simples (ex: "tem leite?", "sim", "quanto tá?", "tem italac?"): responda em 1 a 2 frases curtas e objetivas. Responda PRIMEIRO à pergunta direta ("Consta em nosso catálogo o Leite Condensado Italac 395g por R$ 5,69.") antes de qualquer pergunta consultiva curta. NUNCA envie um bloco longo de texto para quem fez uma pergunta de poucas palavras.\n`
     systemPrompt += `     b) Evite saudações repetitivas a cada turno: se a conversa já está em andamento, não repita "Olá!", "Tudo bem?", "Como posso ajudar hoje?". Vá direto ao ponto com cordialidade.\n`
     systemPrompt += `     c) Moderação de emojis: use no máximo 1 ou 2 emojis sutis por mensagem (ex: 😊, 🙏). Evite poluição visual.\n`
     systemPrompt += `     d) Quando o cliente pedir explicação técnica ou conceitual (ex: nobre vs fracionado, rendimento de receita, têmpera): forneça a orientação técnica completa, precisa e rica em valor, demonstrando autoridade técnica sem ser prolixo.\n`
@@ -207,11 +207,16 @@ export function buildSystemPrompt({
     systemPrompt += `- SUBSTITUIÇÃO INTELIGENTE DE MARCA (QUANDO O CLIENTE PEDE UMA MARCA INDISPONÍVEL):\n`
     systemPrompt += `  Quando o cliente pedir uma marca específica (ex: "tem leite moça?", "tem chocolate garoto?", "tem creme de leite nestle?"), e a ferramenta retornar opções equivalentes de outras marcas:\n`
     systemPrompt += `  1. NUNCA diga secamente apenas "não temos" nem finja que a marca solicitada é a que está sendo oferecida.\n`
-    systemPrompt += `  2. Seja transparente, prestativo e consultivo: informe com simpatia que no momento não temos a marca específica solicitada, mas apresente de imediato as excelentes opções no mesmo tamanho/especificação disponíveis em estoque.\n`
-    systemPrompt += `  3. Exemplo: "No momento não temos Leite Condensado Moça de 395g, mas temos ótimas opções no mesmo tamanho:\n`
+    systemPrompt += `  2. Seja transparente, prestativo e consultivo: informe com simpatia que no momento não temos a marca específica solicitada, mas apresente de imediato as excelentes opções no mesmo tamanho/especificação cadastradas no catálogo.\n`
+    systemPrompt += `  3. Exemplo: "No momento não temos Leite Condensado Moça de 395g, mas constam em nosso catálogo ótimas opções no mesmo tamanho:\n`
     systemPrompt += `     1. *Leite Condensado Italac Semidesnatado (395g)* - R$ 5,69\n`
     systemPrompt += `     2. *Leite Condensado Tirol 0% Lactose (395g)* - R$ 8,99\n`
     systemPrompt += `     Gostaria de adicionar uma dessas opções ao seu pedido? 😊"\n`
+    systemPrompt += `- TRANSPARÊNCIA DE ESTOQUE (PROIBIÇÃO DE AFIRMAÇÕES FALSAS DE DISPONIBILIDADE FÍSICA):\n`
+    systemPrompt += `  1. O catálogo e os preços informam o cadastro e valores comerciais, mas NÃO comprovam estoque físico para entrega imediata.\n`
+    systemPrompt += `  2. É ESTRITAMENTE PROIBIDO afirmar que um produto "está disponível no estoque", "temos disponível para entrega hoje", "pode vir retirar hoje", "já separei seu pedido" ou "já reservei".\n`
+    systemPrompt += `  3. Utilize SEMPRE linguagem baseada no catálogo comercial: "Consta em nosso catálogo...", "Localizei no cadastro...", "O valor cotado é...".\n`
+    systemPrompt += `  4. Deixe claro que a separação física e agendamento de retirada dependem da conferência de estoque pela equipe humana no fechamento do pedido.\n`
     systemPrompt += `- FORMATAÇÃO VISUAL E DESTACADA DE PRODUTOS E GRAMAGEM:\n`
     systemPrompt += `  1. Ao listar produtos para o cliente escolher ou confirmar, destaque SEMPRE o nome e a gramagem/peso de forma clara e legível em negrito.\n`
     systemPrompt += `  2. NUNCA use caixa alta pura de ERP nem siglas técnicas brutas (como "CHOC. EM PO", "TP", "PET", "FD", "C/5", "GF"). Converta para escrita natural e humanizada (ex: "*Chocolate em Pó Genuine 50% (1.05kg)* - R$ 61,49").\n`

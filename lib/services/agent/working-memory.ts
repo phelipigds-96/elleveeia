@@ -4,6 +4,11 @@ export interface CartItem {
   name: string
   quantity: number
   unit?: string
+  requestedQuantity?: number
+  requestedUnit?: string
+  packageFactor?: number | null
+  internalQuantity?: number
+  internalUnit?: string
   unitPriceCents?: number
   unitPrice?: number
   subtotalCents?: number
@@ -57,6 +62,11 @@ export interface AddCartItemParams {
   name: string
   quantity: number
   unit?: string
+  requestedQuantity?: number
+  requestedUnit?: string
+  packageFactor?: number | null
+  internalQuantity?: number
+  internalUnit?: string
   unitPriceCents?: number
   unitPrice?: number
   subtotalCents?: number
@@ -129,6 +139,11 @@ export function addItemToCart(
       name: pName,
       quantity: item.quantity,
       unit: item.unit ?? existing.unit ?? 'UN',
+      requestedQuantity: item.requestedQuantity ?? existing.requestedQuantity,
+      requestedUnit: item.requestedUnit ?? existing.requestedUnit,
+      packageFactor: item.packageFactor !== undefined ? item.packageFactor : existing.packageFactor,
+      internalQuantity: item.internalQuantity ?? existing.internalQuantity,
+      internalUnit: item.internalUnit ?? existing.internalUnit,
       priceType: item.priceType ?? existing.priceType,
       appliedRule: item.appliedRule ?? existing.appliedRule,
       priceSourceId: item.priceSourceId ?? existing.priceSourceId,
@@ -161,6 +176,11 @@ export function addItemToCart(
       name: pName,
       quantity: item.quantity,
       unit: item.unit || 'UN',
+      requestedQuantity: item.requestedQuantity ?? item.quantity,
+      requestedUnit: item.requestedUnit ?? item.unit ?? 'UN',
+      packageFactor: item.packageFactor ?? null,
+      internalQuantity: item.internalQuantity ?? item.quantity,
+      internalUnit: item.internalUnit ?? item.unit ?? 'UN',
       priceType: item.priceType,
       appliedRule: item.appliedRule,
       priceSourceId: item.priceSourceId,

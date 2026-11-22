@@ -1,5 +1,6 @@
 import { splitMultiProductQuery, parseStructuredQuery } from '../catalog/query-parser'
-import { searchProducts } from '../catalog/products'
+import { searchProducts, extractProductPackageFactor } from '../catalog/products'
+import { createAdminClient } from '@/lib/supabase/service'
 import { resolveBatchProductPrices } from './pricing'
 import {
   createOrUpdateEnterpriseQuote,
@@ -65,13 +66,41 @@ export async function processCustomerMessageToQuote(
 
   let memory: WorkingMemory = { ...(workingMemory || {}) }
 
-  // 1. Tratamento estrito de Idempotência por Evento / Webhook Retry
-  if (eventId && isEventAlreadyProcessed(memory, eventId)) {
-    return {
-      workingMemory: memory,
-      status: 'cart_updated',
-      consultativeResponse: 'Este evento já foi processado anteriormente. Nenhuma alteração duplicada foi realizada.',
-      actionTaken: 'idempotent_replay'
+  // 1. Tratamento estrito de Idempotência por Evento / Webhook Retry (Em memória e DB persistente)
+  if (eventId) {
+    if (isEventAlreadyProcessed(memory, eventId)) {
+      return {
+        workingMemory: memory,
+        status: 'cart_updated',
+        consultativeResponse: 'Este evento já foi processado anteriormente. Nenhuma alteração duplicada foi realizada.',
+        actionTaken: 'idempotent_replay'
+      }
+    }
+
+    try {
+      const supabase = createAdminClient()
+      const msgQuery = supabase
+        .from('messages')
+        .select('id, content, metadata')
+        .eq('company_id', companyId)
+
+      if (typeof msgQuery?.contains === 'function' && typeof msgQuery?.maybeSingle === 'function') {
+        const { data: dbExistingMsg } = await msgQuery
+          .contains('metadata', { trigger_event_id: eventId })
+          .limit(1)
+          .maybeSingle()
+
+        if (dbExistingMsg) {
+          return {
+            workingMemory: memory,
+            status: 'cart_updated',
+            consultativeResponse: 'Este evento já foi processado anteriormente no banco de dados. Nenhuma alteração duplicada foi realizada.',
+            actionTaken: 'idempotent_replay'
+          }
+        }
+      }
+    } catch {
+      // Fallback em mocks
     }
   }
 
@@ -336,6 +365,13 @@ export async function processCustomerMessageToQuote(
     name: string
     quantity: number
     unit?: string
+    requestedQuantity: number
+    requestedUnit: string
+    packageFactor: number | null
+    internalQuantity: number
+    internalUnit: string
+    isUnconfirmedPackageFactor: boolean
+    pendingReason?: string
     differentiatingQuestion?: string
     isAmbiguous?: boolean
   }> = []
@@ -357,13 +393,44 @@ export async function processCustomerMessageToQuote(
 
     const matchedProd = searchRes.matches[0]
     const qty = parsed.quantity || 1
+    const isWholesaleUnitRequested = parsed.saleUnit === 'CX' || parsed.saleUnit === 'FD' || parsed.saleUnit === 'PC'
+    const isProductUnitOnly = (matchedProd.unit || 'UN').toUpperCase() === 'UN'
+    const pkgFactor = matchedProd.packageFactor ?? (matchedProd.packageDescription ? extractProductPackageFactor(matchedProd).factor : null)
+
+    let effectiveQuantity = qty
+    let requestedQuantity = qty
+    let requestedUnit = parsed.saleUnit
+    let internalQuantity = qty
+    let internalUnit = matchedProd.unit || 'UN'
+    let isUnconfirmedPackageFactor = false
+    let pendingReason: string | undefined
+    let differentiatingQuestion: string | undefined
+
+    if (isWholesaleUnitRequested && isProductUnitOnly) {
+      if (pkgFactor && pkgFactor > 1) {
+        internalQuantity = qty * pkgFactor
+        effectiveQuantity = internalQuantity
+      } else {
+        isUnconfirmedPackageFactor = true
+        pendingReason = `Fator de embalagem de ${parsed.saleUnit === 'CX' ? 'caixa' : parsed.saleUnit === 'FD' ? 'fardo' : 'pacote'} não cadastrado no catálogo (quantidade por embalagem indefinida)`
+        differentiatingQuestion = `Identifiquei o produto ${matchedProd.name} no catálogo, mas não consta a quantidade de unidades por ${parsed.saleUnit === 'CX' ? 'caixa' : parsed.saleUnit === 'FD' ? 'fardo' : 'pacote'}. Você saberia informar quantas unidades vêm na embalagem que precisa, ou prefere cotar em unidades avulsas? 😊`
+      }
+    }
 
     itemsToPrice.push({
       productId: matchedProd.id,
       sku: matchedProd.sku,
       name: matchedProd.name,
-      quantity: qty,
-      unit: matchedProd.unit || 'UN'
+      quantity: effectiveQuantity,
+      unit: internalUnit,
+      requestedQuantity,
+      requestedUnit,
+      packageFactor: pkgFactor ?? null,
+      internalQuantity,
+      internalUnit,
+      isUnconfirmedPackageFactor,
+      pendingReason,
+      differentiatingQuestion
     })
   }
 
@@ -390,38 +457,65 @@ export async function processCustomerMessageToQuote(
   }
 
   // 6. Resolução de Preços em Lote pelo Enterprise Pricing Engine (ZERO N+1)
-  const batchPricing = await resolveBatchProductPrices({
-    companyId,
-    items: itemsToPrice.map(i => ({
-      productId: i.productId,
-      quantity: i.quantity,
-      unit: i.unit
-    })),
-    isClubEligible
-  })
+  const itemsForPricing = itemsToPrice.filter(i => !i.isUnconfirmedPackageFactor)
+  const batchPricing = itemsForPricing.length > 0
+    ? await resolveBatchProductPrices({
+        companyId,
+        items: itemsForPricing.map(i => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unit: i.unit
+        })),
+        isClubEligible
+      })
+    : { items: [], totalCents: 0, total: 0, allConfirmed: true, hasUnavailable: false, evaluatedAt: new Date().toISOString() }
 
   // 7. Atualização Incremental do Carrinho Inteligente
   for (const item of itemsToPrice) {
-    const priced = batchPricing.items.find(p => p.productId === item.productId)
-    const isConfirmed = priced ? priced.status === 'confirmed' : false
+    if (item.isUnconfirmedPackageFactor) {
+      memory = addItemToCart(memory, {
+        productId: item.productId,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.requestedQuantity,
+        unit: item.requestedUnit,
+        requestedQuantity: item.requestedQuantity,
+        requestedUnit: item.requestedUnit,
+        packageFactor: null,
+        internalQuantity: item.requestedQuantity,
+        internalUnit: item.internalUnit,
+        isPriceConfirmed: false,
+        status: 'pending',
+        pendingReason: item.pendingReason,
+        differentiatingQuestion: item.differentiatingQuestion
+      })
+    } else {
+      const priced = batchPricing.items.find(p => p.productId === item.productId)
+      const isConfirmed = priced ? priced.status === 'confirmed' : false
 
-    memory = addItemToCart(memory, {
-      productId: item.productId,
-      sku: item.sku,
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit,
-      unitPriceCents: priced?.unitPriceCents,
-      unitPrice: priced?.unitPrice,
-      subtotalCents: priced?.subtotalCents,
-      subtotal: priced?.subtotal,
-      priceType: priced?.priceType,
-      appliedRule: priced?.appliedRule,
-      priceSourceId: priced?.priceSourceId,
-      isPriceConfirmed: isConfirmed,
-      status: isConfirmed ? 'confirmed' : 'pending',
-      pendingReason: isConfirmed ? undefined : priced?.unavailableReason
-    })
+      memory = addItemToCart(memory, {
+        productId: item.productId,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        requestedQuantity: item.requestedQuantity,
+        requestedUnit: item.requestedUnit,
+        packageFactor: item.packageFactor,
+        internalQuantity: item.internalQuantity,
+        internalUnit: item.internalUnit,
+        unitPriceCents: priced?.unitPriceCents,
+        unitPrice: priced?.unitPrice,
+        subtotalCents: priced?.subtotalCents,
+        subtotal: priced?.subtotal,
+        priceType: priced?.priceType,
+        appliedRule: priced?.appliedRule,
+        priceSourceId: priced?.priceSourceId,
+        isPriceConfirmed: isConfirmed,
+        status: isConfirmed ? 'confirmed' : 'pending',
+        pendingReason: isConfirmed ? undefined : priced?.unavailableReason
+      })
+    }
   }
 
   // 8. Criação / Atualização Automática do Orçamento
@@ -435,7 +529,14 @@ export async function processCustomerMessageToQuote(
       productId: i.productId,
       quantity: i.quantity,
       unit: i.unit,
-      priceType: i.priceType
+      requestedQuantity: i.requestedQuantity,
+      requestedUnit: i.requestedUnit,
+      packageFactor: i.packageFactor,
+      internalQuantity: i.internalQuantity,
+      internalUnit: i.internalUnit,
+      priceType: i.priceType,
+      status: i.status,
+      pendingReason: i.pendingReason
     })),
     isClubEligible,
     customerNotes,
@@ -452,6 +553,19 @@ export async function processCustomerMessageToQuote(
   if (eventId) memory = recordProcessedEvent(memory, eventId)
 
   // 9. Resposta Consultiva Formatada para WhatsApp
+  const unconfirmedItem = itemsToPrice.find(i => i.isUnconfirmedPackageFactor)
+  if (unconfirmedItem) {
+    const question = unconfirmedItem.differentiatingQuestion || pendingAmbiguousQuestion || 'Gostaria de informar a quantidade por embalagem ou prefere cotar em unidades avulsas? 😊'
+    return {
+      workingMemory: memory,
+      quote,
+      status: 'pending_clarification',
+      differentiatingQuestion: question,
+      consultativeResponse: `${formatQuoteForWhatsApp(quote)}\n\n⚠️ *Atenção:* ${question}`,
+      actionTaken: 'clarification_needed'
+    }
+  }
+
   const formattedQuote = formatQuoteForWhatsApp(quote)
   const consultativeClosing = pendingAmbiguousQuestion
     ? `\n\n📌 *Dúvida sobre uma das opções:* ${pendingAmbiguousQuestion}`

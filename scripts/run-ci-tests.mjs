@@ -94,4 +94,8 @@ runSuite('Etapa AC-04.4 — Commercial Agent Runtime Integration & Consultative 
   'tests/ci/ac04-4-commercial-runtime.test.ts',
 ])
 
+runSuite('Etapa AC-04.4.1 — Correções de Integridade Comercial & Preparação Staging (12 Cenários)', [
+  'tests/ci/ac04-4-1-commercial-integrity.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

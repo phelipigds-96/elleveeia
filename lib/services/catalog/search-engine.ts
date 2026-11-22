@@ -17,6 +17,9 @@ export interface StructuredProductCandidate {
   barcode?: string | null
   active?: boolean
   company_id?: string
+  package_description?: string | null
+  package_factor?: number | null
+  metadata?: Record<string, any>
 }
 
 export interface VerifiedAttributes {
@@ -45,6 +48,8 @@ export interface StructuredProductMatch {
   justification: string
   verifiedAttributes: VerifiedAttributes
   pendingAttributes?: string[]
+  packageDescription?: string | null
+  packageFactor?: number | null
   match_score?: number // compatibilidade retroativa
 }
 
@@ -294,16 +299,23 @@ export function evaluateCandidateScore(
     }
   }
 
-  // 8. Avaliação de Embalagem (Unidade Avulsa vs Caixa Fechada / Atacado)
-  const isWholesalePack = /\b\d+\s*x\s*\d+|\b(?:cx|caixa|caixas|fardo|fardos|display|displays|fd)\b/i.test(cleanName)
-  const requestedWholesale = parsed.saleUnit === 'CX'
+  // 8. Avaliação de Embalagem (Unidade Avulsa vs Caixa Fechada / Atacado / Fardo)
+  const isWholesalePack = /\b\d+\s*x\s*\d+|\b(?:cx|caixa|caixas|fardo|fardos|display|displays|fd)\b/i.test(cleanName) || candidate.unit === 'CX' || candidate.unit === 'FD'
+  const requestedWholesale = parsed.saleUnit === 'CX' || parsed.saleUnit === 'FD'
+  const hasConfirmedFactor = Boolean(candidate.package_factor && candidate.package_factor > 1)
 
   if (isWholesalePack && !requestedWholesale) {
     penalty += 45 // Penaliza caixa fechada para cliente de varejo
     reasons.push(`Embalagem de atacado/caixa para solicitação de unidade avulsa (-45)`)
   } else if (!isWholesalePack && requestedWholesale) {
-    penalty += 30 // Penaliza unidade avulsa para cliente que pediu caixa fechada
-    reasons.push(`Unidade avulsa para solicitação de caixa/atacado (-30)`)
+    if (hasConfirmedFactor) {
+      score += 25
+      verifiedAttributes.packaging = 'wholesale'
+      reasons.push(`Fator de embalagem confirmado no catálogo (${candidate.package_factor} un/cx) (+25)`)
+    } else {
+      penalty += 15 // Unidade avulsa sem fator cadastrado: penalidade moderada (-15)
+      reasons.push(`Unidade avulsa para solicitação de caixa/atacado (fator não cadastrado) (-15)`)
+    }
   } else if (isWholesalePack && requestedWholesale) {
     score += 30
     verifiedAttributes.packaging = 'wholesale'
@@ -564,6 +576,8 @@ export function rankProductsIntelligently(
       justification: p.justification,
       verifiedAttributes: p.verifiedAttributes,
       pendingAttributes: p.verifiedAttributes.pendingConfirmation,
+      packageDescription: p.candidate.package_description || null,
+      packageFactor: p.candidate.package_factor || null,
       match_score: p.score
     }
   })

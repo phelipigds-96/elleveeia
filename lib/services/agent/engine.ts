@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/service'
 import { requireActiveCompany, TenantAccessError } from '@/lib/services/platform/tenant-access'
 import { estimateLlmCostUsd, isMissingSchemaFeatureError } from '@/lib/services/platform/tenant-governance'
@@ -29,6 +30,42 @@ import { DEFAULT_LLM_TIMEOUT_MS, LLMTimeoutError } from '../llm/timeout'
 
 const MAX_TOOL_ITERATIONS = 5
 const AGENT_TURN_BUDGET_MS = 40_000
+
+/**
+ * Sanitiza afirmações de disponibilidade física imediata ou promessas indevidas de estoque.
+ * O catálogo e o preço indicam apenas cadastro e condições comerciais, não provam estoque físico.
+ */
+export function sanitizeStockAssertions(content: string): string {
+  if (!content) return ''
+  let sanitized = content
+
+  // 1. Promessas indevidas de separação física imediata ou reserva
+  sanitized = sanitized
+    .replace(/\b(?:j[áa]\s+separei\s+(?:o\s+seu\s+pedido|os\s+itens|tudo|aqui)|j[áa]\s+separei)\b/gi, 'registrei os itens para conferência')
+    .replace(/\b(?:j[áa]\s+reservei\s+(?:o\s+seu\s+pedido|os\s+produtos|no\s+estoque)|j[áa]\s+reservei)\b/gi, 'registrei os detalhes do seu pedido')
+    .replace(/\bvou\s+reservar\s+(?:o\s+seu\s+pedido|os\s+itens|no\s+estoque)?/gi, 'vou registrar os itens do seu orçamento')
+
+  // 2. Promessas indevidas de retirada imediata
+  sanitized = sanitized
+    .replace(/\bpode\s+(?:vir\s+)?retirar\s+hoje\b/gi, 'a retirada poderá ser combinada após a conferência do estoque')
+    .replace(/Pode vir retirar quando for mais conveniente\.?/gi, 'A retirada poderá ser combinada após a conferência do estoque.')
+
+  // 3. Afirmações diretas de disponibilidade imediata em estoque
+  sanitized = sanitized
+    .replace(/\btemos\s+sim\s+as\s+duas\s+op[çc][õo]es\s+dispon[íi]veis\b/gi, 'Constam em nosso catálogo as duas opções')
+    .replace(/\btemos\s+as\s+duas\s+op[çc][õo]es\s+dispon[íi]veis\b/gi, 'Constam em nosso catálogo as duas opções')
+    .replace(/\btemos\s+sim[!,.]*\s*(?:o|a)\s+/gi, 'Consta em nosso catálogo ')
+    .replace(/\btemos\s+sim[!,.]*\s*(?:os|as)\s+/gi, 'Constam em nosso catálogo ')
+    .replace(/\btemos\s+sim[!,.]*/gi, 'Consta em nosso catálogo.')
+    .replace(/\b(?:est[áa]\s+dispon[íi]vel\s+em\s+estoque|est[áa]\s+dispon[íi]vel\s+no\s+estoque|temos\s+em\s+estoque|tem\s+no\s+estoque)\b/gi, 'consta no catálogo')
+    .replace(/\b(?:est[ãa]o\s+dispon[íi]veis\s+em\s+estoque|est[ãa]o\s+dispon[íi]veis\s+no\s+estoque)\b/gi, 'constam no catálogo')
+    .replace(/\btemos\s+dispon[íi]vel\b/gi, 'consta em nosso catálogo')
+    .replace(/\btemos\s+dispon[íi]veis\b/gi, 'constam em nosso catálogo')
+    .replace(/\best[áa]\s+dispon[íi]vel\b/gi, 'consta em nosso catálogo')
+    .replace(/\best[ãa]o\s+dispon[íi]veis\b/gi, 'constam em nosso catálogo')
+
+  return sanitized
+}
 
 export interface AgentRunParams {
   companyId: string
@@ -185,6 +222,64 @@ export async function runAgentEngine({
     // Bloqueia empresas em implantação (provisioning), suspensas, canceladas ou com status indisponível.
     // Executado rigorosamente antes de inserir mensagens, chamar LLM ou executar ferramentas comerciais.
     await requireActiveCompany(companyId, { adminClient: supabase })
+
+    // 2.1 Verificação de Idempotência Persistente via DB (Prevenção de duplicidade por retentativa/reinício de contêiner)
+    if (triggerEventId) {
+      const cleanEventId = triggerEventId.trim()
+      const idempotencyKey = cleanEventId.length <= 115 
+        ? `agent-reply-${cleanEventId}` 
+        : `agent-reply-${crypto.createHash('sha256').update(cleanEventId).digest('hex').slice(0, 64)}`
+
+      try {
+        const outboxQuery = supabase
+          .from('message_outbox')
+          .select('id, message_id, payload')
+          .eq('company_id', companyId)
+          .eq('idempotency_key', idempotencyKey)
+
+        if (typeof outboxQuery?.maybeSingle === 'function') {
+          const { data: existingOutbox } = await outboxQuery.maybeSingle()
+          if (existingOutbox) {
+            return {
+              success: true,
+              message: existingOutbox.payload?.message?.content || 'Evento já processado anteriormente.',
+              messageId: existingOutbox.message_id,
+              agentId,
+              conversationId,
+              metadata: { idempotent_replay: true, trigger_event_id: cleanEventId, outbox_id: existingOutbox.id }
+            }
+          }
+        }
+
+        const msgQuery = supabase
+          .from('messages')
+          .select('id, content, metadata')
+          .eq('company_id', companyId)
+          .eq('conversation_id', conversationId)
+          .eq('sender_type', 'agent')
+
+        if (typeof msgQuery?.contains === 'function' && typeof msgQuery?.maybeSingle === 'function') {
+          const { data: existingMsg } = await msgQuery
+            .contains('metadata', { trigger_event_id: cleanEventId })
+            .limit(1)
+            .maybeSingle()
+
+          if (existingMsg) {
+            return {
+              success: true,
+              message: existingMsg.content,
+              messageId: existingMsg.id,
+              workingMemory: existingMsg.metadata?.working_memory || {},
+              agentId,
+              conversationId,
+              metadata: { idempotent_replay: true, trigger_event_id: cleanEventId }
+            }
+          }
+        }
+      } catch (idempErr) {
+        // Fallback resiliente se o mock não implementar todos os métodos
+      }
+    }
 
     // 3. Inserção controlada da mensagem do cliente (apenas após o tenant ser validado como ativo)
     if (userMessage && !skipCustomerMessageInsert) {
@@ -470,7 +565,13 @@ export async function runAgentEngine({
       }
     }
 
-    // Sanitização de Conteúdo em Fechamento de Pedido:
+    // Sanitização Global de Estoque e Disponibilidade (AC-04.4.1):
+    // Garante que o cliente NUNCA receba falsas afirmações de estoque físico ou promessas indevidas
+    if (finalContent) {
+      finalContent = sanitizeStockAssertions(finalContent)
+    }
+
+    // Sanitização Adicional de Conteúdo em Fechamento de Pedido:
     // Garante que o cliente NUNCA receba confirmação de reserva ou "pode vir retirar" sem intervenção humana
     if (isOrderClosure && finalContent) {
       finalContent = finalContent

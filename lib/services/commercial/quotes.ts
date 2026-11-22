@@ -8,6 +8,13 @@ export interface QuoteItemRequest {
   quantity: number
   unit?: string
   priceType?: string
+  requestedQuantity?: number
+  requestedUnit?: string
+  packageFactor?: number | null
+  internalQuantity?: number
+  internalUnit?: string
+  status?: 'confirmed' | 'pending' | 'unavailable' | 'ambiguous'
+  pendingReason?: string
 }
 
 export interface QuoteItemData {
@@ -17,6 +24,11 @@ export interface QuoteItemData {
   productName?: string // compatibilidade retroativa
   quantity: number
   unit: string
+  requestedQuantity?: number
+  requestedUnit?: string
+  packageFactor?: number | null
+  internalQuantity?: number
+  internalUnit?: string
   unitPriceCents: number
   unitPrice: number
   subtotalCents: number
@@ -68,6 +80,7 @@ export interface CreateEnterpriseQuoteRequest {
   customerId?: string
   conversationId?: string
   existingQuoteId?: string
+  expectedVersion?: number
   items: QuoteItemRequest[]
   customerNotes?: string
   validityDays?: number
@@ -81,6 +94,7 @@ export interface CreateQuoteRequest {
   customerId?: string
   conversationId?: string
   existingQuoteId?: string
+  expectedVersion?: number
   items: QuoteItemRequest[]
   customerNotes?: string
   isClubEligible?: boolean
@@ -92,17 +106,28 @@ export interface GetQuoteRequest {
 }
 
 /**
- * Calcula a data de validade de um orçamento comercial no fuso de Brasília (-03:00)
+ * Calcula a data de validade de um orçamento comercial no fuso de Brasília (-03:00).
+ * Respeita expressamente o dia civil em America/Sao_Paulo (UTC-3), eliminando divergências
+ * causadas por fusos de servidores ou execuções noturnas (ex: após as 21h BRT / 00h UTC).
  */
-export function calculateQuoteValidityDate(validityDays: number = 3): string {
-  const target = new Date()
-  target.setDate(target.getDate() + validityDays)
-  
-  const yyyy = target.getFullYear()
-  const mm = String(target.getMonth() + 1).padStart(2, '0')
-  const dd = String(target.getDate()).padStart(2, '0')
-  
-  // Fim do dia no fuso de Brasília
+export function calculateQuoteValidityDate(validityDays: number = 3, baseDate: Date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+  const dateStr = formatter.format(baseDate) // "YYYY-MM-DD"
+  const [year, month, day] = dateStr.split('-').map(Number)
+
+  const targetUtc = new Date(Date.UTC(year, month - 1, day))
+  targetUtc.setUTCDate(targetUtc.getUTCDate() + validityDays)
+
+  const yyyy = targetUtc.getUTCFullYear()
+  const mm = String(targetUtc.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(targetUtc.getUTCDate()).padStart(2, '0')
+
+  // Fim do dia civil no fuso de Brasília (23:59:59.999-03:00)
   return `${yyyy}-${mm}-${dd}T23:59:59.999-03:00`
 }
 
@@ -131,6 +156,7 @@ export async function createOrUpdateEnterpriseQuote(
     customerId,
     conversationId,
     existingQuoteId,
+    expectedVersion,
     items,
     customerNotes,
     validityDays = 3,
@@ -197,7 +223,8 @@ export async function createOrUpdateEnterpriseQuote(
     const priced = batchPricing.items.find(p => p.productId === item.productId.trim())
     const prodMeta = productMetaMap.get(item.productId.trim())
 
-    const isConfirmed = priced ? priced.status === 'confirmed' : false
+    const isItemExplicitlyPending = item.status === 'pending'
+    const isConfirmed = priced ? (priced.status === 'confirmed' && !isItemExplicitlyPending) : false
     const unitPriceCents = priced && isConfirmed ? priced.unitPriceCents : 0
     const subtotalCents = priced && isConfirmed ? priced.subtotalCents : 0
     const unitPrice = unitPriceCents / 100
@@ -206,7 +233,7 @@ export async function createOrUpdateEnterpriseQuote(
     if (isConfirmed) {
       totalConfirmedCents += subtotalCents
     } else {
-      const reason = priced?.unavailableReason || 'Produto sem preço configurado para a quantidade solicitada.'
+      const reason = item.pendingReason || priced?.unavailableReason || 'Produto sem preço configurado para a quantidade solicitada ou fator de embalagem pendente.'
       pendingReasons.push(reason)
       // Mantém subtotal estimado como 0 para itens pendentes no total financeiro oficial
       totalPendingCents += 0
@@ -219,6 +246,11 @@ export async function createOrUpdateEnterpriseQuote(
       productName: prodMeta?.name || 'Produto',
       quantity: item.quantity,
       unit: item.unit || prodMeta?.unit || priced?.unit || 'UN',
+      requestedQuantity: item.requestedQuantity ?? item.quantity,
+      requestedUnit: item.requestedUnit ?? item.unit ?? prodMeta?.unit ?? 'UN',
+      packageFactor: item.packageFactor ?? null,
+      internalQuantity: item.internalQuantity ?? item.quantity,
+      internalUnit: item.internalUnit ?? item.unit ?? prodMeta?.unit ?? 'UN',
       unitPriceCents,
       unitPrice,
       subtotalCents,
@@ -228,17 +260,17 @@ export async function createOrUpdateEnterpriseQuote(
       priceSourceId: priced?.priceSourceId || '',
       isConfirmed,
       status: isConfirmed ? 'confirmed' : 'pending',
-      pendingReason: isConfirmed ? undefined : priced?.unavailableReason
+      pendingReason: isConfirmed ? undefined : (item.pendingReason || priced?.unavailableReason)
     })
   }
 
-  const hasPendingItems = pendingReasons.length > 0 || !batchPricing.allConfirmed
+  const hasPendingItems = pendingReasons.length > 0 || !batchPricing.allConfirmed || quoteItems.some(i => i.status === 'pending' || !i.isConfirmed)
   const totalConfirmed = totalConfirmedCents / 100
   const totalPending = totalPendingCents / 100
   const grandTotalCents = totalConfirmedCents + totalPendingCents
   const grandTotal = grandTotalCents / 100
 
-  // Status determinístico do orçamento
+  // Status determinístico do orçamento: qualquer item pendente força pending_validation
   let status: QuoteStatus = 'ready'
   if (forceStatus) {
     status = forceStatus
@@ -249,7 +281,7 @@ export async function createOrUpdateEnterpriseQuote(
   const nowIso = new Date().toISOString()
   const validUntilIso = calculateQuoteValidityDate(validityDays)
 
-  // 4. Prevenção de duplicação e reutilização/versionamento
+  // 4. Prevenção de duplicação e reutilização/versionamento com controle de concorrência otimista
   let targetQuoteId: string | null = null
   let currentVersion = 1
   let changeHistory: QuoteVersionChange[] = []
@@ -264,6 +296,9 @@ export async function createOrUpdateEnterpriseQuote(
       .maybeSingle()
 
     if (existingQuote) {
+      if (expectedVersion !== undefined && (existingQuote.metadata?.version || 1) !== expectedVersion) {
+        throw new Error(`Conflito de concorrência no orçamento: versão esperada ${expectedVersion}, mas o registro no banco está na versão ${existingQuote.metadata?.version || 1}.`)
+      }
       targetQuoteId = existingQuote.id
       currentVersion = (existingQuote.metadata?.version || 1) + 1
       changeHistory = Array.isArray(existingQuote.metadata?.change_history)
@@ -282,6 +317,9 @@ export async function createOrUpdateEnterpriseQuote(
       .maybeSingle()
 
     if (existingByConv) {
+      if (expectedVersion !== undefined && (existingByConv.metadata?.version || 1) !== expectedVersion) {
+        throw new Error(`Conflito de concorrência no orçamento: versão esperada ${expectedVersion}, mas o registro no banco está na versão ${existingByConv.metadata?.version || 1}.`)
+      }
       targetQuoteId = existingByConv.id
       currentVersion = (existingByConv.metadata?.version || 1) + 1
       changeHistory = Array.isArray(existingByConv.metadata?.change_history)
@@ -338,6 +376,11 @@ export async function createOrUpdateEnterpriseQuote(
       metadata: {
         sku: item.sku,
         unit: item.unit,
+        requested_quantity: item.requestedQuantity,
+        requested_unit: item.requestedUnit,
+        package_factor: item.packageFactor,
+        internal_quantity: item.internalQuantity,
+        internal_unit: item.internalUnit,
         unit_price_cents: item.unitPriceCents,
         subtotal_cents: item.subtotalCents,
         price_type: item.priceType,
@@ -428,6 +471,11 @@ export async function createOrUpdateEnterpriseQuote(
     metadata: {
       sku: item.sku,
       unit: item.unit,
+      requested_quantity: item.requestedQuantity,
+      requested_unit: item.requestedUnit,
+      package_factor: item.packageFactor,
+      internal_quantity: item.internalQuantity,
+      internal_unit: item.internalUnit,
       unit_price_cents: item.unitPriceCents,
       subtotal_cents: item.subtotalCents,
       price_type: item.priceType,
@@ -539,6 +587,11 @@ export async function getQuote(params: GetQuoteRequest): Promise<EnterpriseQuote
       productName: it.products?.name || 'Produto',
       quantity: Number(it.quantity),
       unit: it.products?.unit || it.metadata?.unit || 'UN',
+      requestedQuantity: it.metadata?.requested_quantity ?? Number(it.quantity),
+      requestedUnit: it.metadata?.requested_unit ?? it.products?.unit ?? it.metadata?.unit ?? 'UN',
+      packageFactor: it.metadata?.package_factor ?? null,
+      internalQuantity: it.metadata?.internal_quantity ?? Number(it.quantity),
+      internalUnit: it.metadata?.internal_unit ?? it.products?.unit ?? it.metadata?.unit ?? 'UN',
       unitPriceCents: uCents,
       unitPrice: rawPrice,
       subtotalCents: sCents,
@@ -603,13 +656,18 @@ export function formatQuoteForWhatsApp(quote: EnterpriseQuote): string {
     const formattedSub = item.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     const statusIcon = item.status === 'confirmed' ? '•' : '⏳'
     const ruleLabel = item.appliedRule ? ` (${item.appliedRule})` : ''
+    const pkgDetail = (item.packageFactor && item.packageFactor > 1 && item.requestedUnit && item.requestedUnit !== item.unit)
+      ? ` (${item.requestedQuantity} ${item.requestedUnit} c/ ${item.packageFactor} un = ${item.quantity} ${item.unit})`
+      : ''
 
     lines.push(`${index + 1}. *${item.name}*`)
     if (item.status === 'confirmed') {
-      lines.push(`   ${statusIcon} Qtd: ${item.quantity} ${item.unit}${ruleLabel}`)
+      lines.push(`   ${statusIcon} Qtd: ${item.quantity} ${item.unit}${pkgDetail}${ruleLabel}`)
       lines.push(`   ${statusIcon} ${formattedUnit} un | Subtotal: *${formattedSub}*`)
     } else {
-      lines.push(`   ${statusIcon} Qtd: ${item.quantity} ${item.unit} — _${item.pendingReason || 'Preço pendente de confirmação'}_`)
+      const displayQty = item.requestedQuantity ?? item.quantity
+      const displayUnit = item.requestedUnit ?? item.unit
+      lines.push(`   ${statusIcon} Qtd: ${displayQty} ${displayUnit} — _${item.pendingReason || 'Preço pendente de confirmação'}_`)
     }
   })
 
@@ -628,4 +686,26 @@ export function formatQuoteForWhatsApp(quote: EnterpriseQuote): string {
   lines.push('ℹ️ _Esta proposta é válida por tempo limitado e não reserva estoque. Para formalizar o pedido ou tirar dúvidas, é só me avisar!_ 😊')
 
   return lines.join('\n')
+}
+
+/**
+ * Recupera o orçamento ativo de uma conversa a partir do banco de dados (resiliência a reinício).
+ */
+export async function getActiveQuoteForConversation(
+  companyId: string, 
+  conversationId: string
+): Promise<EnterpriseQuote | null> {
+  const supabase = createAdminClient()
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select('id')
+    .eq('company_id', companyId)
+    .in('status', ['draft', 'pending_validation', 'ready'])
+    .contains('metadata', { conversation_id: conversationId })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !quote) return null
+  return getQuote({ companyId, quoteId: quote.id })
 }

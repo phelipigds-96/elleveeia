@@ -17,6 +17,8 @@ export type CommercialIntent =
   | 'recipe_yield_estimate'
   | 'multi_item_order'
 
+export type CommercialSaleUnit = 'UN' | 'CX' | 'FD' | 'PC' | 'KG' | 'L'
+
 export interface StructuredParsedQuery {
   originalQuery: string
   normalizedQuery: string
@@ -26,7 +28,7 @@ export interface StructuredParsedQuery {
   requestedBrandUnavailable?: string | null
   category: string | null
   quantity: number
-  saleUnit: 'UN' | 'CX' | 'FD' | 'KG' | 'L'
+  saleUnit: CommercialSaleUnit
   weight?: {
     value: number
     unit: 'g' | 'kg' | 'ml' | 'l'
@@ -139,9 +141,9 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
     }
   }
 
-  // 2. Extração de Quantidade Solicitada (ex: "quero 2 caixas", "3 barras", "5 unidades", "5 leite condensado")
+  // 2. Extração de Quantidade Solicitada (ex: "quero 2 caixas", "3 barras", "5 unidades", "5 leite condensado", "2 fardos", "3 pacotes")
   let quantity = 1
-  const qtyMatch = workingText.match(/\b(?:quero|me\s+ve|separa|adiciona|coloca|vou\s+querer|preciso\s+de)?\s*(?:tambem|mais|ai|pra\s+mim)?\s*(\d+)\s*(?:unidades?|un|und|pecas?|pçs?|itens?|barras?|latas?|pacotes?|pcts?|caixas?|cx)\b/i)
+  const qtyMatch = workingText.match(/\b(?:quero|me\s+ve|separa|adiciona|coloca|vou\s+querer|preciso\s+de)?\s*(?:tambem|mais|ai|pra\s+mim)?\s*(\d+)\s*(?:unidades?|un|und|pecas?|pçs?|itens?|barras?|latas?|pacotes?|pcts?|pc|caixas?|cx|fardos?|fd|quilos?|kg|litros?|l)\b/i)
   if (qtyMatch) {
     const qVal = parseInt(qtyMatch[1], 10)
     if (qVal > 0 && qVal < 10000) {
@@ -196,10 +198,18 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
     application = 'receita_festa'
   }
 
-  // 5. Unidade de Venda e Intenção de Atacado / Caixa Fechada vs Varejo
+  // 5. Unidade de Venda e Intenção de Embalagem / Atacado / Caixa Fechada vs Varejo
   let saleUnit: StructuredParsedQuery['saleUnit'] = 'UN'
-  if (/\b(?:caixa\s+fechada|fardo|fardos|display|displays|atacado|revenda)\b/i.test(normalized) || /\b(?:cx|caixa|caixas)\b/i.test(normalized)) {
+  if (/\b(?:fardo|fardos|fd)\b/i.test(normalized)) {
+    saleUnit = 'FD'
+  } else if (/\b(?:caixa\s+fechada|display|displays|atacado|revenda)\b/i.test(normalized) || /\b(?:cx|caixa|caixas)\b/i.test(normalized)) {
     saleUnit = 'CX'
+  } else if (/\b(?:pacote|pacotes|pct|pcts|pc)\b/i.test(normalized)) {
+    saleUnit = 'PC'
+  } else if (/\b(?:quilos?|kg)\b/i.test(normalized)) {
+    saleUnit = 'KG'
+  } else if (/\b(?:litros?)\b/i.test(normalized) || /\b\d+\s*l\b/i.test(normalized)) {
+    saleUnit = 'L'
   }
 
   // 6. Expansão de Nomes Populares (ex: "leite moça" -> Leite Condensado Nestlé, "pó royal" -> Fermento Royal)

@@ -9,6 +9,73 @@ import {
   type StructuredProductCandidate 
 } from './search-engine'
 
+export interface PackageFactorResult {
+  factor: number | null
+  source: 'metadata' | 'package_description' | 'name' | null
+  confidence: 'exact' | 'probable' | 'unconfirmed'
+}
+
+/**
+ * Extrai o fator de embalagem (unidades internas por caixa/fardo/pacote)
+ * com validação estrita e determinística.
+ */
+export function extractProductPackageFactor(product: {
+  name?: string
+  unit?: string | null
+  package_description?: string | null
+  metadata?: any
+}): PackageFactorResult {
+  if (!product) {
+    return { factor: null, source: null, confidence: 'unconfirmed' }
+  }
+
+  // 1. Metadata explícito do produto (ex: { package_factor: 27 }, { units_per_package: 27 }, { fator_conversao: 27 })
+  const metaFactor = product.metadata?.package_factor 
+    ?? product.metadata?.units_per_package 
+    ?? product.metadata?.fator_conversao
+    ?? product.metadata?.itens_por_caixa
+  if (typeof metaFactor === 'number' && metaFactor > 1 && metaFactor <= 1000) {
+    return { factor: Math.round(metaFactor), source: 'metadata', confidence: 'exact' }
+  }
+
+  // 2. package_description (ex: "Caixa com 27 unidades", "Cx c/ 27 latas", "Fardo c/ 6", "Pacote com 10")
+  if (product.package_description && typeof product.package_description === 'string') {
+    const desc = product.package_description.trim()
+    const descMatch = desc.match(/\b(?:c\/|com|contem|cx|caixa|fd|fardo|pct|pacote)\s*(\d+)\s*(?:un|und|unidades?|latas?|barras?|saches?|pcts?|itens?)?\b/i)
+      || desc.match(/\b(\d+)\s*(?:un|und|unidades?|latas?|barras?|saches?|pcts?|itens?)\b/i)
+    if (descMatch) {
+      const val = parseInt(descMatch[1], 10)
+      if (val > 1 && val <= 1000) {
+        return { factor: val, source: 'package_description', confidence: 'exact' }
+      }
+    }
+  }
+
+  // 3. Extração a partir do nome do produto (ex: "CX 27X395G", "C/ 24 UN", "CX COM 27", "FD C/ 6 UN", "DISPLAY 12X")
+  if (product.name && typeof product.name === 'string') {
+    const name = product.name
+    // Padrão multiplicador "27X395G", "12X90G", "6X1KG"
+    const multMatch = name.match(/\b(\d+)\s*x\s*\d+\s*(?:g|kg|ml|l|mg)?\b/i)
+    if (multMatch) {
+      const val = parseInt(multMatch[1], 10)
+      if (val > 1 && val <= 1000) {
+        return { factor: val, source: 'name', confidence: 'exact' }
+      }
+    }
+
+    // Padrão explícito "CX C/ 27", "FD C/ 6", "C/ 24 UN", "CX 27 UN"
+    const cMatch = name.match(/\b(?:c\/|com|cx|caixa|fd|fardo|pct|pacote)\s*(\d+)\s*(?:un|und|unidades?|latas?|barras?|saches?)?\b/i)
+    if (cMatch) {
+      const val = parseInt(cMatch[1], 10)
+      if (val > 1 && val <= 1000) {
+        return { factor: val, source: 'name', confidence: 'probable' }
+      }
+    }
+  }
+
+  return { factor: null, source: null, confidence: 'unconfirmed' }
+}
+
 export interface ProductSearchResult {
   id: string
   name: string
@@ -21,6 +88,8 @@ export interface ProductSearchResult {
   match_score?: number
   matchType?: 'exact_match' | 'probable_match' | 'compatible_alternative' | 'ambiguous' | 'not_found'
   verifiedAttributes?: any
+  packageDescription?: string | null
+  packageFactor?: number | null
   justification?: string
 }
 
@@ -53,7 +122,7 @@ export async function searchProducts(
     const cleanId = structuredParsed.identifiers[0].replace(/["\\]/g, '').trim()
     const { data: exactData } = await supabase
       .from('products')
-      .select(`id, name, sku, barcode, unit, active, company_id, product_brands ( name ), product_categories ( name )`)
+      .select(`id, name, sku, barcode, unit, package_description, metadata, active, company_id, product_brands ( name ), product_categories ( name )`)
       .eq('company_id', companyId)
       .eq('active', true)
       .or(`barcode.eq."${cleanId}",sku.ilike."${cleanId}"`)
@@ -72,6 +141,8 @@ export async function searchProducts(
           brand: p.brand,
           category: p.category,
           unit: p.unit,
+          packageDescription: p.package_description || null,
+          packageFactor: p.package_factor || null,
           active: p.active !== false,
           match_score: 100,
           matchType: 'exact_match',
@@ -121,7 +192,7 @@ export async function searchProducts(
 
   let dbQuery = supabase
     .from('products')
-    .select(`id, name, sku, barcode, unit, active, normalized_name, company_id, product_brands ( name ), product_categories ( name )`)
+    .select(`id, name, sku, barcode, unit, package_description, metadata, active, normalized_name, company_id, product_brands ( name ), product_categories ( name )`)
     .eq('company_id', companyId)
     .eq('active', true)
 
@@ -149,7 +220,7 @@ export async function searchProducts(
     const fallbackToken = tokensList[0].replace(/["\\]/g, '').trim()
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('products')
-      .select(`id, name, sku, barcode, unit, active, normalized_name, company_id, product_brands ( name ), product_categories ( name )`)
+      .select(`id, name, sku, barcode, unit, package_description, metadata, active, normalized_name, company_id, product_brands ( name ), product_categories ( name )`)
       .eq('company_id', companyId)
       .eq('active', true)
       .or(`normalized_name.ilike."%${fallbackToken}%"`)
@@ -186,6 +257,8 @@ export async function searchProducts(
     match_score: m.score,
     matchType: m.matchType,
     verifiedAttributes: m.verifiedAttributes,
+    packageDescription: m.packageDescription || null,
+    packageFactor: m.packageFactor || null,
     justification: m.justification
   }))
 
@@ -200,12 +273,22 @@ export async function searchProducts(
 }
 
 function mapCandidateRow(row: any): StructuredProductCandidate {
+  const pkgFactorInfo = extractProductPackageFactor({
+    name: row.name,
+    unit: row.unit,
+    package_description: row.package_description,
+    metadata: row.metadata
+  })
+
   return {
     id: row.id,
     name: normalizeCatalogName(row.name),
     sku: row.sku || null,
     barcode: row.barcode || null,
     unit: row.unit || null,
+    package_description: row.package_description || null,
+    package_factor: pkgFactorInfo.factor,
+    metadata: row.metadata || {},
     active: row.active !== false,
     company_id: row.company_id,
     brand: row.product_brands?.name || null,
