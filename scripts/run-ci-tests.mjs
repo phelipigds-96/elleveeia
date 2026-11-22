@@ -73,7 +73,6 @@ runSuite('AC-SEC-01.4-H1 — Validação de Estabilidade do JWT Refresh e Víncu
 runSuite('Etapa AC-02 — Compreensão Comercial e Memória Contextual (10 Cenários)', [
   'tests/ci/ac02-commercial-understanding.test.ts',
 ])
-])
 
 runSuite('Etapa AC-03 — Conversação Natural e Consultiva do Agente Comercial (8 Comportamentos)', [
   'tests/ci/ac03-conversational-nature.test.ts',
