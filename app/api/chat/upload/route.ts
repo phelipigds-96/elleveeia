@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
+import {
+  resolveEffectiveSessionContext,
+  ImpersonationError,
+  type ContextGuard,
+} from "@/lib/services/platform/impersonation"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -15,69 +20,38 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: authData, error: authErr } = await supabase.auth.getUser()
+    const expComp = req.headers.get("x-expected-company-id")
+    const expSess = req.headers.get("x-expected-session-id")
+    const contextGuard: ContextGuard | undefined =
+      expComp || expSess ? { expectedCompanyId: expComp, expectedSessionId: expSess } : undefined
 
-    if (authErr || !authData?.user) {
+    let sessionContext
+    try {
+      sessionContext = await resolveEffectiveSessionContext({
+        contextGuard,
+      })
+    } catch (err: any) {
+      if (err instanceof ImpersonationError) {
+        return NextResponse.json(
+          { success: false, error: err.message, code: err.code },
+          { status: err.statusCode }
+        )
+      }
       return NextResponse.json(
         { success: false, error: "Não autorizado: sessão de autenticação inválida ou ausente." },
         { status: 401 }
       )
     }
 
-    const userId = authData.user.id
-    const adminClient = createAdminClient()
-
-    const { data: profile, error: profileErr } = await adminClient
-      .from("profiles")
-      .select("company_id, role")
-      .eq("id", userId)
-      .maybeSingle()
-
-    if (profileErr || !profile?.company_id) {
+    if (!sessionContext.effectiveCompanyId || sessionContext.effectiveCompanyId === "00000000-0000-0000-0000-000000000000") {
       return NextResponse.json(
         { success: false, error: "Acesso negado: empresa não vinculada ao perfil do usuário." },
         { status: 403 }
       )
     }
 
-    let companyId = profile.company_id
-
-    // Suporte restrito e validado ao Impersonate: EXCLUSIVO para SuperAdmins ativos
-    try {
-      const { data: operator } = await adminClient
-        .from("platform_admins")
-        .select("id, role, active")
-        .eq("id", userId)
-        .maybeSingle()
-
-      const isSuperAdmin = operator && operator.active === true && operator.role === "superadmin"
-
-      if (isSuperAdmin) {
-        const cookieStore = await cookies()
-        const impersonateId = cookieStore.get("ellevee_impersonate_active")?.value
-        if (impersonateId && UUID_REGEX.test(impersonateId)) {
-          const { data: targetComp } = await adminClient
-            .from("companies")
-            .select("id, status")
-            .eq("id", impersonateId)
-            .maybeSingle()
-
-          if (targetComp && targetComp.status !== "suspended") {
-            companyId = targetComp.id
-          }
-        }
-      }
-    } catch {
-      // cookies() pode não estar disponível em certos contextos
-    }
-
-    if (!companyId) {
-      return NextResponse.json(
-        { success: false, error: "Acesso negado: empresa não identificada." },
-        { status: 403 }
-      )
-    }
+    const companyId = sessionContext.effectiveCompanyId
+    const adminClient = createAdminClient()
 
     const formData = await req.formData()
     const file = formData.get("file") as File | null

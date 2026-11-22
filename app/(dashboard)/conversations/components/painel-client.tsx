@@ -439,6 +439,13 @@ export default function PainelClient({
   
   // 2. Estados de navegação e filtros (Nova Taxonomia corporativa)
   const isMasterOrAdmin = currentUser?.role === "master" || currentUser?.role === "admin"
+  const contextGuard = useMemo(() => {
+    if (!currentUser?.isImpersonating) return undefined
+    return {
+      expectedCompanyId: currentUser.companyId,
+      expectedSessionId: currentUser.sessionId,
+    }
+  }, [currentUser?.isImpersonating, currentUser?.companyId, currentUser?.sessionId])
   const [activeTab, setActiveTab] = useState<"all" | "waiting" | "in_progress" | "ai" | "closed">(
     isMasterOrAdmin ? "all" : "waiting"
   )
@@ -739,7 +746,7 @@ export default function PainelClient({
   // SUB-SCRIÇÃO REALTIME: Mensagens da Conversa Ativa
   // =========================================================================
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId || currentUser?.isImpersonating) return
 
     const messagesChannel = supabase
       .channel(`realtime:messages:${selectedId}`)
@@ -812,12 +819,14 @@ export default function PainelClient({
     return () => {
       supabase.removeChannel(messagesChannel)
     }
-  }, [selectedId, supabase, markConversationAsRead])
+  }, [selectedId, supabase, markConversationAsRead, currentUser?.isImpersonating])
 
   // =========================================================================
   // SUB-SCRIÇÃO REALTIME: Lista de Conversas (Atualizações de status / nova msg)
   // =========================================================================
   useEffect(() => {
+    if (currentUser?.isImpersonating) return
+
     const convChannel = supabase
       .channel("realtime:conversations-list")
       .on(
@@ -911,7 +920,7 @@ export default function PainelClient({
       }
       supabase.removeChannel(convChannel)
     }
-  }, [supabase, markConversationAsRead])
+  }, [supabase, markConversationAsRead, currentUser?.isImpersonating])
 
   // =========================================================================
   // RECONCILIAÇÃO REALTIME CONTÍNUA: Polling em Segundo Plano (Zero F5)
@@ -926,7 +935,7 @@ export default function PainelClient({
       if (typeof document !== "undefined" && document.hidden) return
 
       try {
-        const latestMsgs = await getConversationMessages(selectedId)
+        const latestMsgs = await getConversationMessages(selectedId, contextGuard)
         if (!isMounted || !latestMsgs) return
 
         const prevMsgs = messagesRef.current
@@ -975,7 +984,7 @@ export default function PainelClient({
 
       try {
         const pollStartVersion = markReadSeqRef.current
-        const updatedList = await getConversationsList()
+        const updatedList = await getConversationsList(contextGuard)
         if (!isMounted || !updatedList || updatedList.length === 0) return
 
         const activeId = selectedIdRef.current
@@ -1056,7 +1065,7 @@ export default function PainelClient({
     markConversationAsRead(convId)
 
     try {
-      const msgs = await getConversationMessages(convId)
+      const msgs = await getConversationMessages(convId, contextGuard)
       if (selectedIdRef.current === convId) {
         setMessages(msgs)
         scrollToBottom(false)
@@ -1113,7 +1122,7 @@ export default function PainelClient({
     scrollToBottom(true)
 
     try {
-      const result = await sendMessageAction(selectedId, trimmed, clientMessageId)
+      const result = await sendMessageAction(selectedId, trimmed, clientMessageId, contextGuard)
 
       if (result?.success) {
         setConversations((prev) =>
@@ -1285,8 +1294,13 @@ export default function PainelClient({
 
     // 1ª Tentativa: Route Handler dedicado /api/chat/upload
     try {
+      const uploadHeaders: Record<string, string> = {}
+      if (contextGuard?.expectedCompanyId) uploadHeaders["x-expected-company-id"] = contextGuard.expectedCompanyId
+      if (contextGuard?.expectedSessionId) uploadHeaders["x-expected-session-id"] = contextGuard.expectedSessionId
+
       const response = await fetch("/api/chat/upload", {
         method: "POST",
+        headers: uploadHeaders,
         body: formData,
       })
 
@@ -1311,7 +1325,7 @@ export default function PainelClient({
 
     // 2ª Tentativa: Server Action uploadChatMediaAction
     try {
-      const actionRes = await uploadChatMediaAction(formData)
+      const actionRes = await uploadChatMediaAction(formData, contextGuard)
       if (actionRes?.success && actionRes?.url) {
         return actionRes
       }
@@ -1383,6 +1397,7 @@ export default function PainelClient({
         fileName: fileToSend.name,
         caption: caption || undefined,
         clientMessageId,
+        contextGuard,
       })
 
       if (sendRes?.success) {
@@ -1579,6 +1594,7 @@ export default function PainelClient({
         mediaType: "audio",
         fileName: audioFileName,
         clientMessageId,
+        contextGuard,
       })
 
       if (sendRes?.success) {
@@ -1684,7 +1700,7 @@ export default function PainelClient({
     setIsChangingStage(true)
 
     try {
-      const res = await updateConversationStageAction(selectedId, targetStage.id)
+      const res = await updateConversationStageAction(selectedId, targetStage.id, contextGuard)
       if (!res.success) {
         // Reverte otimista
         setConversations((prev) =>
@@ -1817,7 +1833,7 @@ export default function PainelClient({
 
     setIsTakingOver(true)
     try {
-      const result = await takeoverConversationAction(selectedId)
+      const result = await takeoverConversationAction(selectedId, contextGuard)
 
       if (result?.success) {
         toast.success(
@@ -1864,7 +1880,7 @@ export default function PainelClient({
     const currentAgentName = activeConversation?.agent_name || "IA"
 
     try {
-      const result = await returnToAIAction(selectedId)
+      const result = await returnToAIAction(selectedId, contextGuard)
 
       if (result?.success) {
         const resolvedName = result.agentName || currentAgentName
@@ -1920,11 +1936,15 @@ export default function PainelClient({
 
     setIsClosing(true)
     try {
-      const result = await closeConversationAction(selectedId, {
-        reasonId: targetReasonId || null,
-        reasonText: reasonTitle,
-        closedNotes: notes || null,
-      })
+      const result = await closeConversationAction(
+        selectedId,
+        {
+          reasonId: targetReasonId || null,
+          reasonText: reasonTitle,
+          closedNotes: notes || null,
+        },
+        contextGuard
+      )
 
       if (result?.success) {
         toast.success(
@@ -1980,7 +2000,7 @@ export default function PainelClient({
 
     setIsReopening(true)
     try {
-      const result = await reopenConversationAction(selectedId)
+      const result = await reopenConversationAction(selectedId, contextGuard)
 
       if (result?.success) {
         toast.success(
@@ -2045,7 +2065,7 @@ export default function PainelClient({
         setNewChatName("")
         setNewChatMessage("")
 
-        const updatedList = await getConversationsList()
+        const updatedList = await getConversationsList(contextGuard)
         if (updatedList && updatedList.length > 0) {
           setConversations(updatedList)
         }
