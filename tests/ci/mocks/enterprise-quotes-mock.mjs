@@ -25,9 +25,45 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
     return { data: null, error: { message: 'O orçamento deve conter pelo menos um item.' } }
   }
 
+  // Validação consistente de vínculos de catálogo e multi-tenant
+  if (mockDb.customers && p_customer_id) {
+    const cust = mockDb.customers.find(c => c.id === p_customer_id)
+    if (cust && cust.company_id !== p_company_id) {
+      return {
+        data: null,
+        error: { message: `ORCAMENTO_CROSS_COMPANY_FORBIDDEN: O cliente ${p_customer_id} pertence a outra empresa.` }
+      }
+    }
+  }
+
+  if (mockDb.conversations && p_conversation_id) {
+    const conv = mockDb.conversations.find(c => c.id === p_conversation_id)
+    if (conv) {
+      if (conv.company_id !== p_company_id) {
+        return {
+          data: null,
+          error: { message: `ORCAMENTO_CROSS_COMPANY_FORBIDDEN: A conversa ${p_conversation_id} pertence a outra empresa.` }
+        }
+      }
+      if (p_customer_id && conv.customer_id && conv.customer_id !== p_customer_id) {
+        return {
+          data: null,
+          error: { message: `ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN: O cliente ${p_customer_id} não corresponde ao cliente vinculado à conversa ${p_conversation_id}.` }
+        }
+      }
+    }
+  }
+
   let targetQuote = null
 
   if (p_existing_quote_id) {
+    if (p_expected_version === null || p_expected_version === undefined) {
+      return {
+        data: null,
+        error: { message: 'ORCAMENTO_VERSION_REQUIRED: Controle de versão (expectedVersion) é obrigatório para atualização de orçamento existente.' }
+      }
+    }
+
     targetQuote = mockDb.quotes.find(q => q.id === p_existing_quote_id && q.company_id === p_company_id)
     if (!targetQuote) {
       return {
@@ -51,7 +87,7 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
     }
 
     const currentVer = targetQuote.metadata?.version || 1
-    if (p_expected_version !== null && p_expected_version !== undefined && currentVer !== p_expected_version) {
+    if (currentVer !== p_expected_version) {
       return {
         data: null,
         error: { message: `ORCAMENTO_CONCURRENCY_CONFLICT: Versão esperada ${p_expected_version} difere da versão atual ${currentVer}.` }
@@ -66,6 +102,13 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
     )
 
     if (existingActive) {
+      if (p_customer_id && existingActive.customer_id && existingActive.customer_id !== p_customer_id) {
+        return {
+          data: null,
+          error: { message: `ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN: Orçamento ativo da conversa pertence a outro cliente.` }
+        }
+      }
+
       if (p_expected_version === null || p_expected_version === undefined) {
         return {
           data: null,
@@ -90,11 +133,30 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
   const quoteId = targetQuote ? targetQuote.id : crypto.randomUUID()
   const nowIso = new Date().toISOString()
 
+  // Sanitização de metadados
+  const cleanMetadata = { ...p_metadata }
+  delete cleanMetadata.version
+  delete cleanMetadata.company_id
+  delete cleanMetadata.customer_id
+  delete cleanMetadata.id
+  delete cleanMetadata.created_at
+  delete cleanMetadata.updated_at
+  delete cleanMetadata.status
+  delete cleanMetadata.total
+  if (p_conversation_id) {
+    cleanMetadata.conversation_id = p_conversation_id
+  } else if (targetQuote?.metadata?.conversation_id) {
+    cleanMetadata.conversation_id = targetQuote.metadata.conversation_id
+  } else {
+    delete cleanMetadata.conversation_id
+  }
+  cleanMetadata.version = version
+
   if (targetQuote) {
     targetQuote.total = p_total
     targetQuote.status = p_status
     targetQuote.customer_id = p_customer_id || targetQuote.customer_id
-    targetQuote.metadata = { ...p_metadata, version }
+    targetQuote.metadata = cleanMetadata
     targetQuote.updated_at = nowIso
     mockDb.quoteItems = mockDb.quoteItems.filter(qi => qi.quote_id !== targetQuote.id)
   } else {
@@ -104,7 +166,7 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
       customer_id: p_customer_id || null,
       status: p_status,
       total: p_total,
-      metadata: { ...p_metadata, version: 1 },
+      metadata: cleanMetadata,
       created_at: nowIso,
       updated_at: nowIso
     }

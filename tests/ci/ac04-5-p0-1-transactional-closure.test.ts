@@ -846,4 +846,113 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
     // Deve retornar null pois o filtro de company_id é estrito e inegociável
     assert.equal(crossTenantGet, null, 'allowCrossConversation NUNCA pode atravessar fronteiras entre empresas diferentes')
   })
+
+  test('AC-04.5-P0.2 — Cenário 15: Caminho de conversa valida customer_id e bloqueia acesso cross-customer', async () => {
+    // Cria orçamento legítimo para Cliente A na Conversa A
+    await createOrUpdateEnterpriseQuote({
+      companyId: TENANT_A,
+      customerId: CUSTOMER_A,
+      conversationId: CONV_A,
+      items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+    })
+
+    // Outro cliente tenta atualizar o orçamento ativo da mesma conversa
+    await assert.rejects(
+      async () => {
+        await createOrUpdateEnterpriseQuote({
+          companyId: TENANT_A,
+          customerId: 'cust-divergente-123', // Cliente divergente!
+          conversationId: CONV_A,
+          expectedVersion: 1,
+          items: [{ productId: PROD_1, quantity: 2, unit: 'UN' }]
+        })
+      },
+      /Acesso negado: o orçamento.*pertence ao cliente|Acesso negado: o orçamento pertence a outro cliente/i,
+      'Tentativa de atualizar orçamento ativo de outro cliente deve ser rejeitada'
+    )
+  })
+
+  test('AC-04.5-P0.2 — Cenário 16: Atualização por ID exige versionamento explícito e rejeita expectedVersion nulo', async () => {
+    const quote = await createOrUpdateEnterpriseQuote({
+      companyId: TENANT_A,
+      customerId: CUSTOMER_A,
+      conversationId: CONV_A,
+      items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+    })
+
+    // Invoca diretamente o mock da RPC passando existing_quote_id sem expected_version
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+    const res = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_existing_quote_id: quote.id,
+      p_expected_version: null, // Nulo proposital!
+      p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
+    })
+
+    assert.equal(res.data, null)
+    assert.match(res.error.message, /ORCAMENTO_VERSION_REQUIRED/i)
+  })
+
+  test('AC-04.5-P0.2 — Cenário 17: Metadados arbitrários são sanitizados, impedindo injeção de campos de controle', async () => {
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+    const res = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_metadata: {
+        conversation_id: 'fake-conversation-id',
+        version: 999,
+        company_id: 'fake-company-id',
+        campo_legitimo: 'dado_customizado'
+      },
+      p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
+    })
+
+    assert.ok(res.data)
+    const storedQuote = mockDb.quotes.find(q => q.id === res.data.id)
+    assert.ok(storedQuote)
+    // conversation_id no metadata deve ser o CONV_A legítimo, não o fake
+    assert.equal(storedQuote.metadata.conversation_id, CONV_A)
+    // version deve ser 1, não o 999 injetado
+    assert.equal(storedQuote.metadata.version, 1)
+    // company_id de controle deve ter sido removido dos metadados
+    assert.equal(storedQuote.metadata.company_id, undefined)
+    // campo legítimo deve ter sido preservado
+    assert.equal(storedQuote.metadata.campo_legitimo, 'dado_customizado')
+  })
+
+  test('AC-04.5-P0.2 — Cenário 18: Vínculo inconsistente entre empresa, conversa e cliente é bloqueado fail-closed', async () => {
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+    
+    // Configura conversa vinculada ao TENANT_A e CUSTOMER_A no mockDb
+    mockDb.conversations = [
+      { id: CONV_A, company_id: TENANT_A, customer_id: CUSTOMER_A }
+    ]
+    mockDb.customers = [
+      { id: CUSTOMER_A, company_id: TENANT_A },
+      { id: 'cust-foreign', company_id: TENANT_B }
+    ]
+
+    // 1. Tenta salvar orçamento no TENANT_A informando cliente pertencente ao TENANT_B
+    const resWrongCustomer = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: 'cust-foreign',
+      p_conversation_id: CONV_A,
+      p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
+    })
+    assert.equal(resWrongCustomer.data, null)
+    assert.match(resWrongCustomer.error.message, /ORCAMENTO_CROSS_COMPANY_FORBIDDEN.*pertence a outra empresa/i)
+
+    // 2. Tenta salvar orçamento no TENANT_B informando conversa pertencente ao TENANT_A
+    const resWrongConversation = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_B,
+      p_customer_id: 'cust-foreign',
+      p_conversation_id: CONV_A,
+      p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
+    })
+    assert.equal(resWrongConversation.data, null)
+    assert.match(resWrongConversation.error.message, /ORCAMENTO_CROSS_COMPANY_FORBIDDEN.*conversa.*pertence a outra empresa/i)
+  })
 })
