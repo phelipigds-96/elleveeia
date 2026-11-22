@@ -33,8 +33,30 @@ export const STAGING_ANON_KEY = 'sb_publishable__KT2STe7vpTeMctSqlZtvA_TrNDXCqD'
 /**
  * Descoberta dinâmica dos identificadores de Server Actions via server-reference-manifest.json
  */
-export function discoverServerActionIds(projectRoot = process.cwd()) {
-  const manifestPath = path.join(
+export function discoverServerActionIds(projectRootOrOptions = process.cwd(), maybeOptions = {}) {
+  let projectRoot = process.cwd()
+  let customManifestPath = null
+  let requiredActions = ['getConversationMessages', 'getImpersonateStatus', 'getAgentProfileContext']
+
+  if (typeof projectRootOrOptions === 'object' && projectRootOrOptions !== null) {
+    projectRoot = projectRootOrOptions.projectRoot || process.cwd()
+    customManifestPath = projectRootOrOptions.manifestPath || null
+    if (Array.isArray(projectRootOrOptions.requiredActions)) {
+      requiredActions = projectRootOrOptions.requiredActions
+    }
+  } else if (typeof projectRootOrOptions === 'string') {
+    projectRoot = projectRootOrOptions
+    if (typeof maybeOptions === 'object' && maybeOptions !== null) {
+      if (maybeOptions.manifestPath) customManifestPath = maybeOptions.manifestPath
+      if (Array.isArray(maybeOptions.requiredActions)) {
+        requiredActions = maybeOptions.requiredActions
+      }
+    } else if (typeof maybeOptions === 'string') {
+      customManifestPath = maybeOptions
+    }
+  }
+
+  const manifestPath = customManifestPath || path.join(
     projectRoot,
     '.staging-workspace',
     '.next',
@@ -46,18 +68,23 @@ export function discoverServerActionIds(projectRoot = process.cwd()) {
     throw new Error(`[ACTION DISCOVERY] Manifesto Next.js não encontrado em: ${manifestPath}`)
   }
 
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-  const actions = manifest.node || {}
+  let manifest
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  } catch (err) {
+    throw new Error(`[ACTION DISCOVERY] JSON do manifesto corrompido ou inválido em ${manifestPath}: ${err.message}`)
+  }
+
+  const actions = manifest?.node || {}
 
   const discovered = {}
   for (const [actionId, info] of Object.entries(actions)) {
-    if (info.exportedName) {
+    if (info && info.exportedName) {
       discovered[info.exportedName] = actionId
     }
   }
 
-  const required = ['getConversationMessages', 'getImpersonateStatus', 'getAgentProfileContext']
-  for (const req of required) {
+  for (const req of requiredActions) {
     if (!discovered[req]) {
       throw new Error(`[ACTION DISCOVERY] Action requerida "${req}" não foi encontrada no manifesto!`)
     }

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import {
@@ -19,15 +20,16 @@ import {
 } from '../../scripts/staging-seed-synthetic.mjs'
 
 test('AC-SEC-01.3-H4-F | Validação Unitária dos Scripts de Seed, Teardown e SSR Chunker', async (t) => {
-  const tempDir = path.join(process.cwd(), '.staging-workspace', 'test-scratch')
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true })
-  }
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ellevee-seed-teardown-test-'))
   const testManifestPath = path.join(tempDir, 'manifest-unit-test.json')
 
   t.after(() => {
-    if (fs.existsSync(testManifestPath)) {
-      fs.unlinkSync(testManifestPath)
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      }
+    } catch {
+      // Ignora erro de limpeza de arquivos temporários
     }
   })
 
@@ -63,12 +65,97 @@ test('AC-SEC-01.3-H4-F | Validação Unitária dos Scripts de Seed, Teardown e S
     assert.match(cookieHeaderBig, /sb-dkjrpdhymtkgbknocijy-auth-token\.1=/)
   })
 
-  // 3. Descoberta dinâmica de Action IDs a partir do build efetivo
-  await t.test('3. Descoberta dinâmica de Action IDs via server-reference-manifest.json', () => {
-    const discovered = discoverServerActionIds(process.cwd())
-    assert.ok(discovered['getConversationMessages'], 'Action getConversationMessages deve ser descoberta')
-    assert.ok(discovered['getImpersonateStatus'], 'Action getImpersonateStatus deve ser descoberta')
+  // 3. Descoberta dinâmica de Action IDs via server-reference-manifest.json
+  await t.test('3. Descoberta dinâmica de Action IDs via server-reference-manifest.json (isolado com fixture sintética)', () => {
+    const validManifestPath = path.join(tempDir, 'valid-server-reference-manifest.json')
+    const corruptedManifestPath = path.join(tempDir, 'corrupted-server-reference-manifest.json')
+    const missingActionManifestPath = path.join(tempDir, 'missing-action-manifest.json')
+    const nonExistentManifestPath = path.join(tempDir, 'non-existent-manifest.json')
+
+    const mockManifestValid = {
+      node: {
+        '401a8f7c9b2e3d4f5a6b7c8d9e0f1a2b3c4d5e6f': {
+          workers: { 'app/actions.js': '401a8f7c9b2e3d4f5a6b7c8d9e0f1a2b3c4d5e6f' },
+          layer: { 'app/actions.js': 'action' },
+          exportedName: 'getConversationMessages',
+        },
+        '502b9f8d0c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a': {
+          workers: { 'app/actions.js': '502b9f8d0c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a' },
+          layer: { 'app/actions.js': 'action' },
+          exportedName: 'getImpersonateStatus',
+        },
+        '603c0f9e1d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b': {
+          workers: { 'app/actions.js': '603c0f9e1d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b' },
+          layer: { 'app/actions.js': 'action' },
+          exportedName: 'getAgentProfileContext',
+        },
+        '704d1f0f2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c': {
+          workers: { 'app/actions.js': '704d1f0f2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c' },
+          layer: { 'app/actions.js': 'action' },
+          exportedName: 'extraAction',
+        },
+      },
+      edge: {},
+    }
+
+    fs.writeFileSync(validManifestPath, JSON.stringify(mockManifestValid, null, 2), 'utf8')
+    fs.writeFileSync(corruptedManifestPath, '{"node": { CORRUPTED_JSON_HERE', 'utf8')
+
+    const mockManifestMissingAction = {
+      node: {
+        '401a8f7c9b2e3d4f5a6b7c8d9e0f1a2b3c4d5e6f': {
+          workers: { 'app/actions.js': '401a8f7c9b2e3d4f5a6b7c8d9e0f1a2b3c4d5e6f' },
+          layer: { 'app/actions.js': 'action' },
+          exportedName: 'getConversationMessages',
+        },
+      },
+      edge: {},
+    }
+    fs.writeFileSync(missingActionManifestPath, JSON.stringify(mockManifestMissingAction, null, 2), 'utf8')
+
+    // Cenário 1: Descoberta de múltiplos Action IDs com caminho de manifesto injetável
+    const discovered = discoverServerActionIds({ manifestPath: validManifestPath })
+    assert.equal(discovered['getConversationMessages'], '401a8f7c9b2e3d4f5a6b7c8d9e0f1a2b3c4d5e6f')
+    assert.equal(discovered['getImpersonateStatus'], '502b9f8d0c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a')
+    assert.equal(discovered['getAgentProfileContext'], '603c0f9e1d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b')
+    assert.equal(discovered['extraAction'], '704d1f0f2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c')
     assert.match(discovered['getConversationMessages'], /^[0-9a-f]{40,42}$/, 'Action ID deve ser hash hexadecimal')
+
+    // Cenário 2: Lançamento de erro quando o manifesto não existe
+    assert.throws(
+      () => discoverServerActionIds({ manifestPath: nonExistentManifestPath }),
+      (err: Error) => {
+        return err.message.includes('[ACTION DISCOVERY] Manifesto Next.js não encontrado em:')
+      }
+    )
+
+    // Cenário 3: Lançamento de erro quando o JSON é corrompido
+    assert.throws(
+      () => discoverServerActionIds({ manifestPath: corruptedManifestPath }),
+      (err: Error) => {
+        return err.message.includes('[ACTION DISCOVERY] JSON do manifesto corrompido ou inválido')
+      }
+    )
+
+    // Cenário 4: Lançamento de erro quando uma action requerida não é encontrada
+    assert.throws(
+      () => discoverServerActionIds({ manifestPath: missingActionManifestPath }),
+      (err: Error) => {
+        return err.message.includes('[ACTION DISCOVERY] Action requerida') &&
+          err.message.includes('não foi encontrada no manifesto!')
+      }
+    )
+
+    // Cenário 5: Preservação do caminho padrão relativo a projectRoot (sem dependência de arquivo em staging-workspace)
+    const dummyProjectRoot = path.join(tempDir, 'dummy-project')
+    assert.throws(
+      () => discoverServerActionIds(dummyProjectRoot),
+      (err: Error) => {
+        const expectedTarget = path.join(dummyProjectRoot, '.staging-workspace', '.next', 'server', 'server-reference-manifest.json')
+        return err.message.includes('[ACTION DISCOVERY] Manifesto Next.js não encontrado em:') &&
+          err.message.includes(expectedTarget)
+      }
+    )
   })
 
   // 4. Persistência e integridade do manifesto de teste
