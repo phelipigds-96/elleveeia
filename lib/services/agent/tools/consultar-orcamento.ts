@@ -14,6 +14,13 @@ export const consultarOrcamentoTool: ToolDefinition = {
   metadata: { category: 'quotes', capabilities: ['quote.read'] },
   schema: InputSchema,
   execute: async (input, context) => {
+    if (!context.companyId || !context.conversationId) {
+      return {
+        success: false,
+        error: 'Contexto de execução inválido: companyId e conversationId são obrigatórios para consultar orçamento.'
+      }
+    }
+
     const { quote_id } = input as z.infer<typeof InputSchema>
     const targetQuoteId = quote_id?.trim() || context.workingMemory?.activeQuote?.id
 

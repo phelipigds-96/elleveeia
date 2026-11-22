@@ -19,6 +19,13 @@ export const gerarOrcamentoTool: ToolDefinition = {
   metadata: { category: 'quotes', capabilities: ['quote.create'] },
   schema: InputSchema,
   execute: async (input, context) => {
+    if (!context.companyId || !context.conversationId) {
+      return {
+        success: false,
+        error: 'Contexto de execução inválido: companyId e conversationId são obrigatórios para gerar orçamento.'
+      }
+    }
+
     const { items, customer_notes } = input as z.infer<typeof InputSchema>
 
     let quoteItems: Array<{ productId: string; quantity: number }> = []

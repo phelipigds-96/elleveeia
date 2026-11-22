@@ -1,8 +1,16 @@
 -- Migration: 2026112204_enterprise_quotes_atomic_rpc.sql
--- ELLEVEE IA — AC-04.5-P0: Persistência Atômica Transacional de Orçamentos Comerciais
+-- ELLEVEE IA — AC-04.5-P0.1: Persistência Atômica Transacional e Concorrência de Orçamentos
 -- Garante gravação atômica (cabeçalho, itens, versão e histórico) em transação única no PostgreSQL,
--- com bloqueio pessimista (FOR UPDATE) e validação de concorrência e autorização.
+-- com serialização por conversa (pg_advisory_xact_lock), bloqueio pessimista (FOR UPDATE)
+-- e constraint de unicidade parcial para orçamentos ativos por conversa.
 
+-- 1. Índice de Unicidade Parcial: Garante que uma conversa tenha no máximo UM orçamento ativo
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_active_conversation_unique
+ON public.quotes (company_id, (metadata->>'conversation_id'))
+WHERE status IN ('draft', 'pending_validation', 'ready')
+  AND (metadata->>'conversation_id') IS NOT NULL;
+
+-- 2. Função RPC Atômica com Serialização e Controle de Concorrência
 CREATE OR REPLACE FUNCTION public.save_enterprise_quote_atomic(
     p_company_id UUID,
     p_customer_id UUID DEFAULT NULL,
@@ -36,7 +44,12 @@ BEGIN
         RAISE EXCEPTION 'O orçamento deve conter pelo menos um item.';
     END IF;
 
-    -- 2. Localização e Bloqueio de Orçamento Existente (Pessimistic Concurrency Lock)
+    -- 2. Serialização transacional de concorrência por conversa
+    IF p_conversation_id IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtext(p_company_id::text || ':' || p_conversation_id));
+    END IF;
+
+    -- 3. Localização e Bloqueio de Orçamento Existente (Pessimistic Concurrency Lock)
     IF p_existing_quote_id IS NOT NULL THEN
         SELECT id, company_id, customer_id, status, metadata
         INTO v_existing_quote
@@ -76,7 +89,8 @@ BEGIN
         v_new_version := v_current_version + 1;
 
     ELSIF p_conversation_id IS NOT NULL THEN
-        -- Busca por conversa com lock pessimista
+        -- Tentativa de criação sem existing_quote_id explícito
+        -- Busca se já existe orçamento ativo para esta conversa
         SELECT id, company_id, customer_id, status, metadata
         INTO v_existing_quote
         FROM public.quotes
@@ -88,8 +102,15 @@ BEGIN
         FOR UPDATE;
 
         IF FOUND THEN
+            -- Se a chamada não esperava versão (ou seja, tentou criar um NOVO draft sem saber que já existia um ativo),
+            -- impede a sobreposição silenciosa e a duplicação concorrente
+            IF p_expected_version IS NULL THEN
+                RAISE EXCEPTION 'ORCAMENTO_ACTIVE_EXISTS: Já existe um orçamento ativo (%) para a conversa %. Informe existingQuoteId e expectedVersion para atualizar.',
+                    v_existing_quote.id, p_conversation_id;
+            END IF;
+
             v_current_version := COALESCE((v_existing_quote.metadata->>'version')::INTEGER, 1);
-            IF p_expected_version IS NOT NULL AND v_current_version <> p_expected_version THEN
+            IF v_current_version <> p_expected_version THEN
                 RAISE EXCEPTION 'ORCAMENTO_CONCURRENCY_CONFLICT: Versão esperada % difere da versão atual % no banco de dados.',
                     p_expected_version, v_current_version;
             END IF;
@@ -99,9 +120,8 @@ BEGIN
         END IF;
     END IF;
 
-    -- 3. Atualização ou Inserção do Cabeçalho
+    -- 4. Atualização ou Inserção do Cabeçalho
     IF v_target_quote_id IS NOT NULL THEN
-        -- Atualiza cabeçalho existente
         UPDATE public.quotes
         SET total = p_total,
             status = p_status,
@@ -113,7 +133,7 @@ BEGIN
         -- Exclui itens anteriores atomicamente dentro da transação
         DELETE FROM public.quote_items WHERE quote_id = v_target_quote_id;
     ELSE
-        -- Cria novo orçamento
+        -- Criação de novo orçamento
         v_target_quote_id := gen_random_uuid();
         v_new_version := 1;
 
@@ -138,7 +158,7 @@ BEGIN
         );
     END IF;
 
-    -- 4. Inserção Atômica dos Itens
+    -- 5. Inserção Atômica dos Itens
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
     LOOP
         INSERT INTO public.quote_items (
@@ -164,7 +184,7 @@ BEGIN
         );
     END LOOP;
 
-    -- 5. Retorno estruturado atômico
+    -- 6. Retorno estruturado atômico
     v_result := jsonb_build_object(
         'id', v_target_quote_id,
         'company_id', p_company_id,
@@ -179,3 +199,7 @@ BEGIN
     RETURN v_result;
 END;
 $$;
+
+-- 3. Permissões de Segurança Estritas
+REVOKE ALL ON FUNCTION public.save_enterprise_quote_atomic FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.save_enterprise_quote_atomic TO service_role, authenticated;

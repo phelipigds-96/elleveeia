@@ -87,6 +87,10 @@ export interface CreateEnterpriseQuoteRequest {
   actionSummary?: string
   isClubEligible?: boolean
   forceStatus?: QuoteStatus
+  adminContext?: {
+    isPlatformAdmin?: boolean
+    reason?: string
+  }
 }
 
 export interface CreateQuoteRequest {
@@ -98,6 +102,10 @@ export interface CreateQuoteRequest {
   items: QuoteItemRequest[]
   customerNotes?: string
   isClubEligible?: boolean
+  adminContext?: {
+    isPlatformAdmin?: boolean
+    reason?: string
+  }
 }
 
 export interface GetQuoteRequest {
@@ -106,6 +114,10 @@ export interface GetQuoteRequest {
   customerId?: string | null
   conversationId?: string | null
   allowCrossConversation?: boolean
+  adminContext?: {
+    isPlatformAdmin?: boolean
+    reason?: string
+  }
 }
 
 /**
@@ -165,11 +177,17 @@ export async function createOrUpdateEnterpriseQuote(
     validityDays = 3,
     actionSummary,
     isClubEligible = false,
-    forceStatus
+    forceStatus,
+    adminContext
   } = params
 
-  if (!companyId || typeof companyId !== 'string') {
+  if (!companyId || typeof companyId !== 'string' || companyId.trim() === '') {
     throw new Error('companyId é obrigatório para gerar orçamento.')
+  }
+
+  const isPlatformAdmin = Boolean(adminContext?.isPlatformAdmin)
+  if (!conversationId && !isPlatformAdmin) {
+    throw new Error('conversationId é obrigatório para operações comerciais de orçamento.')
   }
 
   if (!items || items.length === 0) {
@@ -265,6 +283,20 @@ export async function createOrUpdateEnterpriseQuote(
       status: isConfirmed ? 'confirmed' : 'pending',
       pendingReason: isConfirmed ? undefined : (item.pendingReason || priced?.unavailableReason)
     })
+  }
+
+  // Verificação de integridade matemática financeira estrita pré-persistência
+  let calculatedSumCents = 0
+  for (const it of quoteItems) {
+    if (it.isConfirmed) {
+      if (it.unitPriceCents * it.quantity !== it.subtotalCents) {
+        throw new Error(`Inconsistência financeira no item ${it.productId}: subtotal (${it.subtotalCents}) diverge do produto unitPrice (${it.unitPriceCents}) x quantidade (${it.quantity}).`)
+      }
+      calculatedSumCents += it.subtotalCents
+    }
+  }
+  if (calculatedSumCents !== totalConfirmedCents) {
+    throw new Error(`Inconsistência matemática no total do orçamento: soma dos itens (${calculatedSumCents}) diverge do total confirmado (${totalConfirmedCents}).`)
   }
 
   const hasPendingItems = pendingReasons.length > 0 || !batchPricing.allConfirmed || quoteItems.some(i => i.status === 'pending' || !i.isConfirmed)
@@ -396,206 +428,51 @@ export async function createOrUpdateEnterpriseQuote(
     }
   }))
 
-  if (typeof (supabase as any)?.rpc === 'function') {
-    try {
-      const { data: atomicResult, error: atomicErr } = await (supabase as any).rpc('save_enterprise_quote_atomic', {
-        p_company_id: companyId,
-        p_customer_id: customerId || null,
-        p_conversation_id: conversationId || null,
-        p_existing_quote_id: targetQuoteId || null,
-        p_expected_version: expectedVersion ?? (targetQuoteId ? (targetVersionForSave - 1) : null),
-        p_status: status,
-        p_total: totalConfirmed,
-        p_metadata: updatedMetadata,
-        p_items: itemsPayloadForRpc
-      })
-
-      if (!atomicErr && atomicResult?.id) {
-        return {
-          id: atomicResult.id,
-          quoteId: atomicResult.id,
-          companyId,
-          customerId: customerId || null,
-          conversationId: conversationId || null,
-          status,
-          version: atomicResult.version || targetVersionForSave,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-          validUntil: validUntilIso,
-          items: quoteItems,
-          totalConfirmedCents,
-          totalConfirmed,
-          total: totalConfirmed,
-          totalPendingCents,
-          totalPending,
-          grandTotalCents,
-          grandTotal,
-          hasPendingItems,
-          pendingReasons,
-          changeHistory,
-          customerNotes: customerNotes || null,
-          isReused: Boolean(targetQuoteId),
-          metadata: updatedMetadata
-        }
-      }
-
-      if (atomicErr) {
-        const errMsg = String(atomicErr.message || '')
-        if (errMsg.includes('ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN') || errMsg.includes('pertence à conversa')) {
-          throw new Error(`Acesso negado: o orçamento pertence a outra conversa e não pode ser modificado.`)
-        }
-        if (errMsg.includes('ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN') || errMsg.includes('outro cliente')) {
-          throw new Error(`Acesso negado: o orçamento pertence a outro cliente.`)
-        }
-        if (errMsg.includes('ORCAMENTO_CONCURRENCY_CONFLICT')) {
-          throw new Error(`Conflito de concorrência no orçamento: versão esperada ${expectedVersion} difere da versão atual no banco de dados.`)
-        }
-        const isMissingRoutine = atomicErr.code === '42883' || atomicErr.code === 'PGRST202' || errMsg.includes('could not find the function')
-        if (!isMissingRoutine) {
-          throw new Error(`Erro na transação atômica do orçamento: ${errMsg}`)
-        }
-      }
-    } catch (rpcErr: any) {
-      if (rpcErr.message?.includes('Acesso negado') || rpcErr.message?.includes('Conflito de concorrência') || rpcErr.message?.includes('transação atômica')) {
-        throw rpcErr
-      }
-    }
+  if (typeof (supabase as any)?.rpc !== 'function') {
+    throw new Error('Falha transacional: a RPC save_enterprise_quote_atomic é obrigatória para operações financeiras e não está disponível.')
   }
 
-  // Fallback seguro se RPC não estiver registrada no runtime
-  if (targetQuoteId) {
-    const { error: updateErr } = await supabase
-      .from('quotes')
-      .update({
-        total: totalConfirmed,
-        status,
-        metadata: updatedMetadata,
-        updated_at: nowIso
-      })
-      .eq('id', targetQuoteId)
+  const { data: atomicResult, error: atomicErr } = await (supabase as any).rpc('save_enterprise_quote_atomic', {
+    p_company_id: companyId,
+    p_customer_id: customerId || null,
+    p_conversation_id: conversationId || null,
+    p_existing_quote_id: targetQuoteId || null,
+    p_expected_version: expectedVersion ?? (targetQuoteId ? (targetVersionForSave - 1) : null),
+    p_status: status,
+    p_total: totalConfirmed,
+    p_metadata: updatedMetadata,
+    p_items: itemsPayloadForRpc
+  })
 
-    if (updateErr) {
-      throw new Error(`Erro ao atualizar orçamento: ${updateErr.message}`)
+  if (atomicErr) {
+    const errMsg = String(atomicErr.message || '')
+    if (errMsg.includes('ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN') || errMsg.includes('pertence à conversa')) {
+      throw new Error(`Acesso negado: o orçamento pertence a outra conversa e não pode ser modificado.`)
     }
-
-    // Atualiza itens do orçamento
-    await supabase.from('quote_items').delete().eq('quote_id', targetQuoteId)
-
-    const quoteItemsPayload = quoteItems.map(item => ({
-      quote_id: targetQuoteId,
-      company_id: companyId,
-      product_id: item.productId,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      subtotal: item.subtotal,
-      metadata: {
-        sku: item.sku,
-        unit: item.unit,
-        requested_quantity: item.requestedQuantity,
-        requested_unit: item.requestedUnit,
-        package_factor: item.packageFactor,
-        internal_quantity: item.internalQuantity,
-        internal_unit: item.internalUnit,
-        unit_price_cents: item.unitPriceCents,
-        subtotal_cents: item.subtotalCents,
-        price_type: item.priceType,
-        applied_rule: item.appliedRule,
-        price_source_id: item.priceSourceId,
-        is_confirmed: item.isConfirmed,
-        status: item.status,
-        pending_reason: item.pendingReason
-      }
-    }))
-
-    const { error: itemsErr } = await supabase.from('quote_items').insert(quoteItemsPayload)
-    if (itemsErr) {
-      throw new Error(`Erro ao salvar itens do orçamento: ${itemsErr.message}`)
+    if (errMsg.includes('ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN') || errMsg.includes('outro cliente')) {
+      throw new Error(`Acesso negado: o orçamento pertence a outro cliente.`)
     }
-
-    return {
-      id: targetQuoteId,
-      quoteId: targetQuoteId,
-      companyId,
-      customerId: customerId || null,
-      conversationId: conversationId || null,
-      status,
-      version: currentVersion,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      validUntil: validUntilIso,
-      items: quoteItems,
-      totalConfirmedCents,
-      totalConfirmed,
-      total: totalConfirmed,
-      totalPendingCents,
-      totalPending,
-      grandTotalCents,
-      grandTotal,
-      hasPendingItems,
-      pendingReasons,
-      changeHistory,
-      customerNotes: customerNotes || null,
-      isReused: true,
-      metadata: updatedMetadata
+    if (errMsg.includes('ORCAMENTO_CONCURRENCY_CONFLICT')) {
+      throw new Error(`Conflito de concorrência no orçamento: versão esperada ${expectedVersion} difere da versão atual no banco de dados.`)
     }
+    if (errMsg.includes('ORCAMENTO_ACTIVE_EXISTS')) {
+      throw new Error(`Conflito de concorrência: já existe um orçamento ativo para esta conversa.`)
+    }
+    throw new Error(`Falha transacional obrigatória na persistência do orçamento: ${errMsg}`)
   }
 
-  // Novo orçamento no fallback
-  const { data: quote, error: quoteErr } = await supabase
-    .from('quotes')
-    .insert({
-      company_id: companyId,
-      customer_id: customerId || null,
-      status,
-      total: totalConfirmed,
-      metadata: updatedMetadata
-    })
-    .select('id')
-    .single()
-
-  if (quoteErr || !quote) {
-    throw new Error(`Erro ao criar orçamento: ${quoteErr?.message}`)
-  }
-
-  const quoteItemsPayload = quoteItems.map(item => ({
-    quote_id: quote.id,
-    company_id: companyId,
-    product_id: item.productId,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    subtotal: item.subtotal,
-    metadata: {
-      sku: item.sku,
-      unit: item.unit,
-      requested_quantity: item.requestedQuantity,
-      requested_unit: item.requestedUnit,
-      package_factor: item.packageFactor,
-      internal_quantity: item.internalQuantity,
-      internal_unit: item.internalUnit,
-      unit_price_cents: item.unitPriceCents,
-      subtotal_cents: item.subtotalCents,
-      price_type: item.priceType,
-      applied_rule: item.appliedRule,
-      price_source_id: item.priceSourceId,
-      is_confirmed: item.isConfirmed,
-      status: item.status,
-      pending_reason: item.pendingReason
-    }
-  }))
-
-  const { error: itemsErr } = await supabase.from('quote_items').insert(quoteItemsPayload)
-  if (itemsErr) {
-    throw new Error(`Erro ao salvar itens do orçamento: ${itemsErr.message}`)
+  if (!atomicResult?.id) {
+    throw new Error('Falha transacional: a RPC save_enterprise_quote_atomic não retornou o identificador do orçamento persistido.')
   }
 
   return {
-    id: quote.id,
-    quoteId: quote.id,
+    id: atomicResult.id,
+    quoteId: atomicResult.id,
     companyId,
     customerId: customerId || null,
     conversationId: conversationId || null,
     status,
-    version: 1,
+    version: atomicResult.version || targetVersionForSave,
     createdAt: nowIso,
     updatedAt: nowIso,
     validUntil: validUntilIso,
@@ -611,7 +488,7 @@ export async function createOrUpdateEnterpriseQuote(
     pendingReasons,
     changeHistory,
     customerNotes: customerNotes || null,
-    isReused: false,
+    isReused: Boolean(targetQuoteId),
     metadata: updatedMetadata
   }
 }
@@ -634,7 +511,23 @@ export async function createQuote(params: CreateQuoteRequest) {
  * Consulta um orçamento comercial completo
  */
 export async function getQuote(params: GetQuoteRequest): Promise<EnterpriseQuote | null> {
-  const { companyId, quoteId, customerId, conversationId, allowCrossConversation = false } = params
+  const { companyId, quoteId, customerId, conversationId, allowCrossConversation = false, adminContext } = params
+
+  if (!companyId || typeof companyId !== 'string' || companyId.trim() === '') {
+    throw new Error('companyId é obrigatório para consultar orçamento.')
+  }
+  if (!quoteId || typeof quoteId !== 'string' || quoteId.trim() === '') {
+    throw new Error('quoteId é obrigatório para consultar orçamento.')
+  }
+
+  const isAdministrative = Boolean(allowCrossConversation || adminContext?.isPlatformAdmin)
+
+  // Gate 1 / Gate 2: Proibir contorno de isolamento por omissão
+  if (!conversationId && !isAdministrative) {
+    console.warn(`[getQuote Unauthorized] Parâmetros essenciais omitidos: conversationId é obrigatório na ausência de permissão administrativa.`)
+    return null
+  }
+
   const supabase = createAdminClient()
 
   const { data: quote, error } = await supabase
@@ -673,21 +566,25 @@ export async function getQuote(params: GetQuoteRequest): Promise<EnterpriseQuote
 
   // Gate 1: Validação de isolamento no nível de conversa e cliente (mesmo tenant)
   const quoteConvId = quote.metadata?.conversation_id
-  if (!allowCrossConversation && conversationId) {
+  if (!isAdministrative) {
     if (quoteConvId && quoteConvId !== conversationId) {
       console.warn(`[getQuote Unauthorized] Tentativa de acesso cruzado: quote ${quoteId} (conv:${quoteConvId}) acessado pela conv:${conversationId}`)
       return null
     }
-  }
 
-  if (customerId && quote.customer_id && quote.customer_id !== customerId) {
-    console.warn(`[getQuote Unauthorized] Tentativa de acesso cruzado: quote ${quoteId} (cust:${quote.customer_id}) acessado pelo cust:${customerId}`)
-    return null
-  }
+    if (quoteConvId && !conversationId) {
+      return null
+    }
 
-  // Orçamentos legados sem conversation_id: se tiver customer_id e o caller informou customer_id diferente, bloqueia
-  if (!allowCrossConversation && conversationId && !quoteConvId && quote.customer_id && customerId && quote.customer_id !== customerId) {
-    return null
+    if (customerId && quote.customer_id && quote.customer_id !== customerId) {
+      console.warn(`[getQuote Unauthorized] Tentativa de acesso cruzado: quote ${quoteId} (cust:${quote.customer_id}) acessado pelo cust:${customerId}`)
+      return null
+    }
+
+    // Orçamentos legados sem conversation_id: se tiver customer_id e o caller informou customer_id diferente, bloqueia
+    if (conversationId && !quoteConvId && quote.customer_id && customerId && quote.customer_id !== customerId) {
+      return null
+    }
   }
 
   const items: QuoteItemData[] = (quote.quote_items || []).map((it: any) => {
@@ -810,6 +707,7 @@ export async function getActiveQuoteForConversation(
   companyId: string, 
   conversationId: string
 ): Promise<EnterpriseQuote | null> {
+  if (!companyId || !conversationId) return null
   const supabase = createAdminClient()
   const { data: quote, error } = await supabase
     .from('quotes')

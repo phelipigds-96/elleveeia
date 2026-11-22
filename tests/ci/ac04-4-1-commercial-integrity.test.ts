@@ -15,6 +15,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key'
 import { test, describe, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { setMockSupabaseClient } from './mocks/supabase-mock.mjs'
+import { handleSaveEnterpriseQuoteAtomicMock } from './mocks/enterprise-quotes-mock.mjs'
 import { parseStructuredQuery, type CommercialSaleUnit } from '../../lib/services/catalog/query-parser'
 import { extractProductPackageFactor } from '../../lib/services/catalog/products'
 import { sanitizeStockAssertions } from '../../lib/services/agent/engine'
@@ -428,6 +429,12 @@ describe('ELLEVEE IA — AC-04.4.1 | CORREÇÕES DE INTEGRIDADE COMERCIAL', () =
         }
 
         return builder
+      },
+      rpc: async (fn: string, args: any) => {
+        if (fn === 'save_enterprise_quote_atomic') {
+          return handleSaveEnterpriseQuoteAtomicMock(mockDb, args)
+        }
+        return { data: null, error: { message: `Unknown RPC ${fn}` } }
       }
     }
 

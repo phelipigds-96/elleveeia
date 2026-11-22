@@ -5,6 +5,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321'
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key'
 
 import { setMockSupabaseClient } from './mocks/supabase-mock.mjs'
+import { handleSaveEnterpriseQuoteAtomicMock } from './mocks/enterprise-quotes-mock.mjs'
 import {
   createOrUpdateEnterpriseQuote,
   getQuote,
@@ -546,6 +547,12 @@ function setupMockSupabase() {
       }
 
       return builder
+    },
+    rpc: async (fn: string, args: any) => {
+      if (fn === 'save_enterprise_quote_atomic') {
+        return handleSaveEnterpriseQuoteAtomicMock(mockDb, args)
+      }
+      return { data: null, error: { message: `Unknown RPC ${fn}` } }
     }
   }
 

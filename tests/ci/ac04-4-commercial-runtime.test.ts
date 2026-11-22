@@ -5,6 +5,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321'
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key'
 
 import { setMockSupabaseClient } from './mocks/supabase-mock.mjs'
+import { handleSaveEnterpriseQuoteAtomicMock } from './mocks/enterprise-quotes-mock.mjs'
 import { runAgentEngine } from '@/lib/services/agent/engine'
 import type { LLMProvider, LLMRequest, LLMResponse } from '@/lib/services/llm/types'
 import {
@@ -504,6 +505,12 @@ function setupMockSupabase() {
       }
 
       return builder
+    },
+    rpc: async (fn: string, args: any) => {
+      if (fn === 'save_enterprise_quote_atomic') {
+        return handleSaveEnterpriseQuoteAtomicMock(mockDb, args)
+      }
+      return { data: null, error: { message: `Unknown RPC ${fn}` } }
     }
   }
 
@@ -1013,10 +1020,11 @@ describe('ELLEVEE IA — AC-04.4 | COMMERCIAL AGENT RUNTIME INTEGRATION', () => 
       ]
     })
 
-    // 2. Simula novo processo consultando diretamente pelo ID do orçamento
+    // 2. Simula novo processo consultando diretamente pelo ID do orçamento com a conversa autorizada
     const recovered = await getQuote({
       companyId: TENANT_A,
-      quoteId: created.id
+      quoteId: created.id,
+      conversationId: CONVERSATION_ID
     })
 
     assert.ok(recovered)

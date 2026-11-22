@@ -13,6 +13,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key'
 import { test, describe, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { setMockSupabaseClient } from './mocks/supabase-mock.mjs'
+import { handleSaveEnterpriseQuoteAtomicMock } from './mocks/enterprise-quotes-mock.mjs'
 import {
   createOrUpdateEnterpriseQuote,
   getQuote,
@@ -456,84 +457,7 @@ describe('ELLEVEE IA — AC-04.5-P0 | VERIFICAÇÃO DE BLOQUEADORES CRÍTICOS', 
         }
 
         if (fn === 'save_enterprise_quote_atomic') {
-          const {
-            p_company_id,
-            p_customer_id,
-            p_conversation_id,
-            p_existing_quote_id,
-            p_expected_version,
-            p_status,
-            p_total,
-            p_metadata,
-            p_items
-          } = args
-
-          let targetQuote = null
-          if (p_existing_quote_id) {
-            targetQuote = mockDb.quotes.find((q: any) => q.id === p_existing_quote_id && q.company_id === p_company_id)
-            if (!targetQuote) {
-              return { data: null, error: { message: `ORCAMENTO_NOT_FOUND_OR_FORBIDDEN: Orçamento ${p_existing_quote_id} não localizado.` } }
-            }
-
-            if (p_conversation_id && targetQuote.metadata?.conversation_id && targetQuote.metadata.conversation_id !== p_conversation_id) {
-              return { data: null, error: { message: `ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN: Orçamento pertence à conversa ${targetQuote.metadata.conversation_id}.` } }
-            }
-
-            if (p_customer_id && targetQuote.customer_id && targetQuote.customer_id !== p_customer_id) {
-              return { data: null, error: { message: `ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN: Orçamento pertence a outro cliente.` } }
-            }
-
-            const currentVer = targetQuote.metadata?.version || 1
-            if (p_expected_version !== null && p_expected_version !== undefined && currentVer !== p_expected_version) {
-              return { data: null, error: { message: `ORCAMENTO_CONCURRENCY_CONFLICT: Versão esperada ${p_expected_version} difere da versão atual ${currentVer}.` } }
-            }
-          }
-
-          const version = targetQuote ? (targetQuote.metadata?.version || 1) + 1 : 1
-          const quoteId = targetQuote ? targetQuote.id : crypto.randomUUID()
-
-          if (targetQuote) {
-            targetQuote.total = p_total
-            targetQuote.status = p_status
-            targetQuote.metadata = { ...p_metadata, version }
-            targetQuote.updated_at = new Date().toISOString()
-            mockDb.quoteItems = mockDb.quoteItems.filter((qi: any) => qi.quote_id !== targetQuote.id)
-          } else {
-            const newQ = {
-              id: quoteId,
-              company_id: p_company_id,
-              customer_id: p_customer_id,
-              status: p_status,
-              total: p_total,
-              metadata: { ...p_metadata, version: 1 },
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }
-            mockDb.quotes.push(newQ)
-          }
-
-          for (const it of p_items) {
-            mockDb.quoteItems.push({
-              id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              quote_id: quoteId,
-              company_id: p_company_id,
-              product_id: it.product_id,
-              quantity: it.quantity,
-              unit_price: it.unit_price,
-              subtotal: it.subtotal,
-              metadata: it.metadata || {}
-            })
-          }
-
-          return {
-            data: {
-              id: quoteId,
-              version,
-              status: p_status,
-              total: p_total
-            },
-            error: null
-          }
+          return handleSaveEnterpriseQuoteAtomicMock(mockDb, args)
         }
 
         if (fn === 'acquire_conversation_processing_lock') {
