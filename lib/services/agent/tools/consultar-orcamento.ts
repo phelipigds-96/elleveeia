@@ -34,13 +34,15 @@ export const consultarOrcamentoTool: ToolDefinition = {
     try {
       const quote = await getQuote({
         companyId: context.companyId,
-        quoteId: targetQuoteId
+        quoteId: targetQuoteId,
+        conversationId: context.conversationId,
+        customerId: context.customerId
       })
 
       if (!quote) {
         return {
           success: false,
-          error: `Orçamento não encontrado com o ID ${targetQuoteId}.`
+          error: `Orçamento não localizado ou acesso não autorizado para esta conversa/cliente.`
         }
       }
 

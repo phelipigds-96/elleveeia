@@ -98,4 +98,8 @@ runSuite('Etapa AC-04.4.1 — Correções de Integridade Comercial & Preparaçã
   'tests/ci/ac04-4-1-commercial-integrity.test.ts',
 ])
 
+runSuite('Etapa AC-04.5-P0 — Verificação de Bloqueadores para Homologação Comercial (12 Cenários)', [
+  'tests/ci/ac04-5-p0-blockers-verification.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

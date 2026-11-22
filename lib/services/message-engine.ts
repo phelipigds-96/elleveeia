@@ -9,7 +9,7 @@ import { assignDefaultWorkflowStages } from '@/lib/services/workflows/conversati
 import { getBrazilianPhoneVariants } from '@/lib/services/phone-normalization'
 import { buildFallbackCustomerName, isPlausibleHumanName, normalizeRawName, sanitizeCustomerName } from '@/lib/services/customer-name'
 export type ProcessWebhookResult = 
-  | { success: true; duplicate: true; event_id: string; webhook_event_id?: string; conversation_id?: undefined; message_id?: undefined }
+  | { success: true; duplicate: true; event_id: string; webhook_event_id?: string; conversation_id?: string; message_id?: string }
   | { success: true; duplicate: false; event_id: string; webhook_event_id?: string; conversation_id: string; message_id: string }
 
 export async function processWebhookEvent(
@@ -277,9 +277,31 @@ export async function processWebhookEvent(
 
     const messageId = rpcRow.message_id
     // wasInserted: true = nova mensagem; false = duplicata (event_id diferente, mesmo external_id)
-    // O RPC já tratou unread_count e last_message_at de forma condicional.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const wasInserted: boolean = rpcRow.was_inserted
+
+    // Deduplicação Atômica: Se o external_id já foi persistido anteriormente nesta conversa,
+    // interrompe o ciclo autônomo imediatamente, evitando execuções duplicadas do agente/LLM e tools.
+    if (!wasInserted) {
+      const nowIso = new Date().toISOString()
+      await supabase.from('webhook_events').update({
+        status: 'processed',
+        processed_at: nowIso,
+        conversation_id: conversationId,
+        message_id: messageId,
+        autonomous_status: 'skipped',
+        autonomous_last_error: 'duplicate_external_id',
+        updated_at: nowIso
+      }).eq('id', eventRecord.id).eq('company_id', companyId)
+
+      return {
+        success: true,
+        duplicate: true,
+        event_id: payload.event_id,
+        webhook_event_id: eventRecord.id,
+        conversation_id: conversationId,
+        message_id: messageId
+      }
+    }
 
     // 5. Atualização de estado da Conversa (status e closed_at)
     // unread_count e last_message_at já foram atualizados atomicamente pelo RPC.
@@ -785,6 +807,28 @@ async function executeLockedAutonomousCycle(
       agentId: selectedAgentId,
       replyMessageId: existingOutbox.message_id,
       outboxId: existingOutbox.id
+    }
+  }
+
+  // 4.2 Deduplicação Pré-LLM adicional por trigger_message_id
+  if (messageId) {
+    const { data: existingOutboxByMsg } = await supabase
+      .from('message_outbox')
+      .select('id, message_id, status')
+      .eq('company_id', companyId)
+      .eq('metadata->>trigger_message_id', messageId)
+      .maybeSingle()
+
+    if (existingOutboxByMsg) {
+      console.log(`[AutonomousCycle Duplicate Pre-LLM] Outbox já existe para trigger_message_id ${messageId}`)
+      return {
+        executed: true,
+        dispatched: false,
+        reason: 'idempotent_duplicate',
+        agentId: selectedAgentId,
+        replyMessageId: existingOutboxByMsg.message_id,
+        outboxId: existingOutboxByMsg.id
+      }
     }
   }
 
