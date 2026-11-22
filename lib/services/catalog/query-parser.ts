@@ -62,6 +62,8 @@ export function sanitizeSearchInput(input: string): string {
   return input
     .replace(/\[\s*(?:SISTEMA|SYSTEM|INSTRUCOES|INSTRUCTIONS|PROMPT|OVERRIDE)[^\]]*\]/gi, ' ')
     .replace(/(?:ignore\s+(?:todas?\s+as?\s+)?instruco(?:es|ões)|libere\s+desconto|voce\s+agora\s+e\s+um|esqueca\s+regras)/gi, ' ')
+    .replace(/(?:pelo\s+pre[çc]o\s+de|por\s+r\$|no\s+valor\s+de|a\s+r\$)\s*[\d,.]+(?:\s*(?:cada|reais))?/gi, ' ')
+    .replace(/(?:porque|pq)\s+(?:sou\s+o\s+dono|falei\s+com\s+o\s+gerente|tenho\s+autorizacao)[^,.]*/gi, ' ')
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -122,17 +124,37 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
   if (/^\d{8,14}$/.test(cleanId)) {
     // Código de barras (EAN-8, EAN-13, EAN-14)
     identifiers.push(cleanId)
-  } else if (/^[a-z0-9]{2,}-[a-z0-9\-]+$/i.test(rawClean) || (/^[a-z0-9]{4,15}$/i.test(cleanId) && cleanId.length >= 6 && /\d/.test(cleanId))) {
-    identifiers.push(cleanId.toLowerCase())
+  } else {
+    // Busca por SKU no meio do texto (ex: "SKU-FAR-001" ou "1 pacote do SKU-FAR-001")
+    const skuInlineMatch = sanitized.match(/\b([A-Za-z0-9]{2,}-[A-Za-z0-9\-]+)\b/)
+    if (skuInlineMatch) {
+      identifiers.push(skuInlineMatch[1].trim())
+    } else {
+      const barcodeInlineMatch = sanitized.match(/\b(\d{8,14})\b/)
+      if (barcodeInlineMatch) {
+        identifiers.push(barcodeInlineMatch[1].trim())
+      } else if (/^[a-z0-9]{4,15}$/i.test(cleanId) && cleanId.length >= 6 && /\d/.test(cleanId)) {
+        identifiers.push(cleanId.toLowerCase())
+      }
+    }
   }
 
-  // 2. Extração de Quantidade Solicitada (ex: "quero 2 caixas", "3 barras", "5 unidades")
+  // 2. Extração de Quantidade Solicitada (ex: "quero 2 caixas", "3 barras", "5 unidades", "5 leite condensado")
   let quantity = 1
-  const qtyMatch = workingText.match(/\b(?:quero|me\s+ve|separa|adiciona|vou\s+querer|preciso\s+de)?\s*(\d+)\s*(?:unidades?|un|und|pecas?|pçs?|itens?|barras?|latas?|pacotes?|pcts?)\b/i)
+  const qtyMatch = workingText.match(/\b(?:quero|me\s+ve|separa|adiciona|coloca|vou\s+querer|preciso\s+de)?\s*(?:tambem|mais|ai|pra\s+mim)?\s*(\d+)\s*(?:unidades?|un|und|pecas?|pçs?|itens?|barras?|latas?|pacotes?|pcts?|caixas?|cx)\b/i)
   if (qtyMatch) {
     const qVal = parseInt(qtyMatch[1], 10)
     if (qVal > 0 && qVal < 10000) {
       quantity = qVal
+    }
+  } else {
+    // Quantidade implícita no início ou antes do produto (ex: "5 leite condensado", "adiciona tambem 2 chocolate sicao barra")
+    const leadingQtyMatch = workingText.match(/\b(?:quero|me\s+ve|separa|adiciona|coloca|vou\s+querer|preciso\s+de)?\s*(?:tambem|mais|ai|pra\s+mim)?\s*(\d+)\s+(?!(?:kg|k|g|ml|l|mg)\b)(.+)$/i)
+    if (leadingQtyMatch) {
+      const qVal = parseInt(leadingQtyMatch[1], 10)
+      if (qVal > 0 && qVal < 10000) {
+        quantity = qVal
+      }
     }
   }
 

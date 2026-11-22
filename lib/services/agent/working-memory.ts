@@ -1,12 +1,21 @@
 export interface CartItem {
   productId: string
+  sku?: string | null
   name: string
   quantity: number
+  unit?: string
+  unitPriceCents?: number
   unitPrice?: number
+  subtotalCents?: number
   subtotal?: number
   priceType?: string
+  appliedRule?: string
+  priceSourceId?: string
   lastPricingQueryId?: string
   isPriceConfirmed: boolean
+  status?: 'confirmed' | 'pending' | 'unavailable' | 'ambiguous'
+  pendingReason?: string
+  differentiatingQuestion?: string
 }
 
 export interface DiscoveredProduct {
@@ -32,27 +41,43 @@ export interface WorkingMemory {
     id: string
     total: number
     status: string
+    version?: number
   }
   discoveredProducts?: DiscoveredProduct[]
+  version?: number
+  processedMessageIds?: string[]
+  lastEventId?: string
   updatedAt?: string
   expiredAt?: string
 }
 
 export interface AddCartItemParams {
   productId: string
+  sku?: string | null
   name: string
   quantity: number
+  unit?: string
+  unitPriceCents?: number
   unitPrice?: number
+  subtotalCents?: number
   subtotal?: number
   priceType?: string
+  appliedRule?: string
+  priceSourceId?: string
   lastPricingQueryId?: string
   isPriceConfirmed?: boolean
+  status?: 'confirmed' | 'pending' | 'unavailable' | 'ambiguous'
+  pendingReason?: string
+  differentiatingQuestion?: string
 }
 
 export interface CartCalculationResult {
   total: number
+  totalConfirmedCents: number
+  totalPendingCents: number
   itemCount: number
   allPricesConfirmed: boolean
+  hasPendingItems: boolean
   unconfirmedProductIds: string[]
 }
 
@@ -63,6 +88,7 @@ export interface CartCalculationResult {
  * - Adicionar o mesmo produto atualiza sua quantidade sem duplicar.
  * - Se a quantidade mudar sem novo preço confirmado, invalida o preço definitivo.
  * - Valores não validados não são aceitos como preço confirmado.
+ * - Conduz cálculos em centavos inteiros determinísticos.
  */
 export function addItemToCart(
   memory: WorkingMemory | null | undefined,
@@ -87,6 +113,10 @@ export function addItemToCart(
   const hasValidPrice = typeof item.unitPrice === 'number' && Number.isFinite(item.unitPrice) && item.unitPrice > 0
   const isConfirmed = hasValidPrice && item.isPriceConfirmed !== false
 
+  const unitPriceCents = item.unitPriceCents ?? (hasValidPrice ? Math.round(item.unitPrice! * 100) : 0)
+  const subtotalCents = unitPriceCents > 0 ? unitPriceCents * item.quantity : undefined
+  const subtotal = subtotalCents != null ? subtotalCents / 100 : (typeof item.subtotal === 'number' ? item.subtotal : undefined)
+
   const existingIndex = currentCart.findIndex(i => i.productId === pId)
 
   if (existingIndex >= 0) {
@@ -95,46 +125,318 @@ export function addItemToCart(
 
     const updatedItem: CartItem = {
       ...existing,
+      sku: item.sku ?? existing.sku,
       name: pName,
       quantity: item.quantity,
+      unit: item.unit ?? existing.unit ?? 'UN',
       priceType: item.priceType ?? existing.priceType,
-      lastPricingQueryId: item.lastPricingQueryId ?? existing.lastPricingQueryId
+      appliedRule: item.appliedRule ?? existing.appliedRule,
+      priceSourceId: item.priceSourceId ?? existing.priceSourceId,
+      lastPricingQueryId: item.lastPricingQueryId ?? existing.lastPricingQueryId,
+      status: item.status ?? (isConfirmed ? 'confirmed' : existing.status),
+      pendingReason: item.pendingReason ?? existing.pendingReason,
+      differentiatingQuestion: item.differentiatingQuestion ?? existing.differentiatingQuestion
     }
 
     if (hasValidPrice && item.isPriceConfirmed) {
+      updatedItem.unitPriceCents = unitPriceCents
       updatedItem.unitPrice = item.unitPrice
-      updatedItem.subtotal = typeof item.subtotal === 'number'
-        ? Math.round(item.subtotal * 100) / 100
-        : Math.round(item.unitPrice! * item.quantity * 100) / 100
+      updatedItem.subtotalCents = subtotalCents
+      updatedItem.subtotal = subtotal
       updatedItem.isPriceConfirmed = true
+      updatedItem.status = 'confirmed'
     } else if (quantityChanged) {
       // Invalidação determinística de preço: mudança de quantidade sem nova precificação
       updatedItem.isPriceConfirmed = false
+      updatedItem.status = 'pending'
       delete updatedItem.subtotal
+      delete updatedItem.subtotalCents
     }
 
     currentCart[existingIndex] = updatedItem
   } else {
     const newItem: CartItem = {
       productId: pId,
+      sku: item.sku || null,
       name: pName,
       quantity: item.quantity,
+      unit: item.unit || 'UN',
       priceType: item.priceType,
+      appliedRule: item.appliedRule,
+      priceSourceId: item.priceSourceId,
       lastPricingQueryId: item.lastPricingQueryId,
-      isPriceConfirmed: isConfirmed
+      isPriceConfirmed: isConfirmed,
+      status: item.status || (isConfirmed ? 'confirmed' : 'pending'),
+      pendingReason: item.pendingReason,
+      differentiatingQuestion: item.differentiatingQuestion
     }
 
     if (isConfirmed && hasValidPrice) {
+      newItem.unitPriceCents = unitPriceCents
       newItem.unitPrice = item.unitPrice
-      newItem.subtotal = typeof item.subtotal === 'number'
-        ? Math.round(item.subtotal * 100) / 100
-        : Math.round(item.unitPrice! * item.quantity * 100) / 100
+      newItem.subtotalCents = subtotalCents
+      newItem.subtotal = subtotal
     }
 
     currentCart.push(newItem)
   }
 
   next.activeCart = currentCart
+  next.version = (next.version || 0) + 1
+  next.updatedAt = new Date().toISOString()
+  return next
+}
+
+/**
+ * Adiciona múltiplos itens ao carrinho em lote de forma atômica
+ */
+export function addMultipleItemsToCart(
+  memory: WorkingMemory | null | undefined,
+  items: AddCartItemParams[]
+): WorkingMemory {
+  let current = memory
+  for (const item of items) {
+    current = addItemToCart(current, item)
+  }
+  return current || {}
+}
+
+/**
+ * Substitui um item existente no carrinho por outro produto (ex: troca de marca ou apresentação)
+ */
+export function replaceCartItem(
+  memory: WorkingMemory | null | undefined,
+  oldProductId: string,
+  newItem: AddCartItemParams
+): WorkingMemory {
+  const next: WorkingMemory = { ...(memory || {}) }
+  if (!next.activeCart || next.activeCart.length === 0) {
+    return addItemToCart(next, newItem)
+  }
+
+  const cleanOldId = oldProductId.trim()
+  const index = next.activeCart.findIndex(i => i.productId === cleanOldId)
+  if (index === -1) {
+    return addItemToCart(next, newItem)
+  }
+
+  const updatedCart = [...next.activeCart]
+  
+  const hasValidPrice = typeof newItem.unitPrice === 'number' && Number.isFinite(newItem.unitPrice) && newItem.unitPrice > 0
+  const isConfirmed = hasValidPrice && newItem.isPriceConfirmed !== false
+  const unitPriceCents = newItem.unitPriceCents ?? (hasValidPrice ? Math.round(newItem.unitPrice! * 100) : 0)
+  const subtotalCents = unitPriceCents > 0 ? unitPriceCents * newItem.quantity : undefined
+  const subtotal = subtotalCents != null ? subtotalCents / 100 : (typeof newItem.subtotal === 'number' ? newItem.subtotal : undefined)
+
+  updatedCart[index] = {
+    productId: newItem.productId.trim(),
+    sku: newItem.sku || null,
+    name: newItem.name.trim(),
+    quantity: newItem.quantity,
+    unit: newItem.unit || 'UN',
+    unitPriceCents: unitPriceCents > 0 ? unitPriceCents : undefined,
+    unitPrice: hasValidPrice ? newItem.unitPrice : undefined,
+    subtotalCents,
+    subtotal,
+    priceType: newItem.priceType,
+    appliedRule: newItem.appliedRule,
+    priceSourceId: newItem.priceSourceId,
+    lastPricingQueryId: newItem.lastPricingQueryId,
+    isPriceConfirmed: isConfirmed,
+    status: newItem.status || (isConfirmed ? 'confirmed' : 'pending'),
+    pendingReason: newItem.pendingReason,
+    differentiatingQuestion: newItem.differentiatingQuestion
+  }
+
+  next.activeCart = updatedCart
+  next.activeProduct = { id: newItem.productId.trim(), name: newItem.name.trim() }
+  next.version = (next.version || 0) + 1
+  next.updatedAt = new Date().toISOString()
+  return next
+}
+
+/**
+ * Resolve referências a itens do carrinho (ex: "o segundo", "aquele branco", "o de 1kg", "o da tirol")
+ */
+export function resolveCartItemReference(
+  referenceText: string,
+  memory: WorkingMemory | null | undefined
+): { item: CartItem | null; index: number; resolvedReason?: string } {
+  if (!memory?.activeCart || memory.activeCart.length === 0) {
+    return { item: null, index: -1 }
+  }
+
+  const norm = referenceText
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+
+  const cart = memory.activeCart
+
+  // 1. Ordinais ("primeiro", "segundo", "terceiro", "ultimo", "1", "2")
+  const ordinalMap: Array<{ regex: RegExp; index: number }> = [
+    { regex: /\b(?:o\s+)?(?:primeir[oa]|1[oºaª]|opcao\s+1|item\s+1|o\s+1)\b/i, index: 0 },
+    { regex: /\b(?:o\s+)?(?:segund[oa]|2[oºaª]|opcao\s+2|item\s+2|o\s+2)\b/i, index: 1 },
+    { regex: /\b(?:o\s+)?(?:terceir[oa]|3[oºaª]|opcao\s+3|item\s+3|o\s+3)\b/i, index: 2 },
+    { regex: /\b(?:o\s+)?(?:quart[oa]|4[oºaª]|opcao\s+4|item\s+4|o\s+4)\b/i, index: 3 },
+    { regex: /\b(?:o\s+)?(?:quint[oa]|5[oºaª]|opcao\s+5|item\s+5|o\s+5)\b/i, index: 4 },
+    { regex: /\b(?:o\s+)?(?:ultim[oa]|ultimo\s+item)\b/i, index: -1 }
+  ]
+
+  for (const { regex, index } of ordinalMap) {
+    if (regex.test(norm)) {
+      const targetIdx = index === -1 ? cart.length - 1 : index
+      if (targetIdx >= 0 && targetIdx < cart.length) {
+        return { item: cart[targetIdx], index: targetIdx, resolvedReason: `Ordinal (${index === -1 ? 'último' : `${targetIdx + 1}º`})` }
+      }
+    }
+  }
+
+  // 2. Peso / Gramagem ("o de 1kg", "o de 400g", "o de 395g")
+  const weightMatch = norm.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|k|g|ml|l)\b/i)
+  if (weightMatch) {
+    const rawWeight = weightMatch[0].replace(/\s+/g, '')
+    const foundIdx = cart.findIndex(i => {
+      const iname = i.name.toLowerCase().replace(/\s+/g, '')
+      return iname.includes(rawWeight)
+    })
+    if (foundIdx >= 0) {
+      return { item: cart[foundIdx], index: foundIdx, resolvedReason: `Gramagem (${weightMatch[0]})` }
+    }
+  }
+
+  // 3. Sabor / Cor / Tipo ("aquele branco", "o meio amargo", "ao leite", "fracionada", "em po")
+  const flavorTokens = ['branco', 'meio amargo', 'amargo', 'ao leite', 'blend', 'fracionad', 'nobre', 'po', 'barra', 'gotas']
+  for (const ft of flavorTokens) {
+    if (norm.includes(ft)) {
+      const foundIdx = cart.findIndex(i => i.name.toLowerCase().includes(ft))
+      if (foundIdx >= 0) {
+        return { item: cart[foundIdx], index: foundIdx, resolvedReason: `Variante/Sabor (${ft})` }
+      }
+    }
+  }
+
+  // 4. Marca ("tirol", "italac", "sicao", "nestle", "harald")
+  const brandTokens = ['tirol', 'italac', 'sicao', 'nestle', 'moca', 'harald', 'melken', 'cargill', 'arcolor']
+  for (const bt of brandTokens) {
+    if (norm.includes(bt)) {
+      const foundIdx = cart.findIndex(i => i.name.toLowerCase().includes(bt))
+      if (foundIdx >= 0) {
+        return { item: cart[foundIdx], index: foundIdx, resolvedReason: `Marca (${bt})` }
+      }
+    }
+  }
+
+  // 5. Fallback para carrinho com item único
+  if (cart.length === 1) {
+    return { item: cart[0], index: 0, resolvedReason: 'Item único no carrinho' }
+  }
+
+  return { item: null, index: -1 }
+}
+
+/**
+ * Idempotência: verifica se um evento/mensagem de entrada já foi processado
+ */
+export function isEventAlreadyProcessed(
+  memory: WorkingMemory | null | undefined,
+  eventId: string | null | undefined
+): boolean {
+  if (!eventId || typeof eventId !== 'string' || eventId.trim() === '') return false
+  const cleanId = eventId.trim()
+  if (memory?.lastEventId === cleanId) return true
+  if (Array.isArray(memory?.processedMessageIds) && memory.processedMessageIds.includes(cleanId)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Idempotência: registra um evento/mensagem de entrada como processado
+ */
+export function recordProcessedEvent(
+  memory: WorkingMemory | null | undefined,
+  eventId: string
+): WorkingMemory {
+  const next: WorkingMemory = { ...(memory || {}) }
+  if (!eventId || typeof eventId !== 'string' || eventId.trim() === '') return next
+  const cleanId = eventId.trim()
+  const existingList = Array.isArray(next.processedMessageIds) ? [...next.processedMessageIds] : []
+  if (!existingList.includes(cleanId)) {
+    existingList.push(cleanId)
+    if (existingList.length > 50) {
+      existingList.splice(0, existingList.length - 50)
+    }
+  }
+  next.processedMessageIds = existingList
+  next.lastEventId = cleanId
+  return next
+}
+
+/**
+ * Concorrência: mescla deterministicamente duas atualizações simultâneas da mesma conversa
+ * sem perda de nenhum item do carrinho
+ */
+export function mergeConcurrentWorkingMemories(
+  base: WorkingMemory | null | undefined,
+  updateA: WorkingMemory,
+  updateB: WorkingMemory
+): WorkingMemory {
+  const merged: WorkingMemory = { ...(base || {}) }
+  const cartMap = new Map<string, CartItem>()
+
+  for (const item of (base?.activeCart || [])) {
+    cartMap.set(item.productId, { ...item })
+  }
+  for (const item of (updateA.activeCart || [])) {
+    cartMap.set(item.productId, { ...item })
+  }
+  for (const item of (updateB.activeCart || [])) {
+    const existing = cartMap.get(item.productId)
+    if (existing) {
+      cartMap.set(item.productId, { ...existing, ...item })
+    } else {
+      cartMap.set(item.productId, { ...item })
+    }
+  }
+
+  merged.activeCart = Array.from(cartMap.values())
+  merged.version = Math.max(base?.version || 0, updateA.version || 0, updateB.version || 0) + 1
+  merged.updatedAt = new Date().toISOString()
+
+  const allEvents = new Set([
+    ...(base?.processedMessageIds || []),
+    ...(updateA.processedMessageIds || []),
+    ...(updateB.processedMessageIds || [])
+  ])
+  merged.processedMessageIds = Array.from(allEvents).slice(-50)
+  merged.lastEventId = updateB.lastEventId || updateA.lastEventId || base?.lastEventId
+  merged.activeProduct = updateB.activeProduct || updateA.activeProduct || base?.activeProduct
+  merged.activeQuote = updateB.activeQuote || updateA.activeQuote || base?.activeQuote
+
+  return merged
+}
+
+/**
+ * Invalidação: desmarca preços confirmados quando condições comerciais mudarem
+ */
+export function invalidateCartPricesOnConditionChange(
+  memory: WorkingMemory | null | undefined,
+  reason: string
+): WorkingMemory {
+  const next: WorkingMemory = { ...(memory || {}) }
+  if (!next.activeCart || next.activeCart.length === 0) return next
+
+  const updatedCart: CartItem[] = next.activeCart.map(item => ({
+    ...item,
+    isPriceConfirmed: false,
+    status: 'pending',
+    pendingReason: reason
+  }))
+
+  next.activeCart = updatedCart
+  next.version = (next.version || 0) + 1
   next.updatedAt = new Date().toISOString()
   return next
 }
@@ -248,23 +550,33 @@ export function getCartItems(memory: WorkingMemory | null | undefined): CartItem
  */
 export function calculateCartTotal(memory: WorkingMemory | null | undefined): CartCalculationResult {
   const items = memory?.activeCart || []
-  let totalCents = 0
+  let totalConfirmedCents = 0
+  let totalPendingCents = 0
   let allPricesConfirmed = true
   const unconfirmedProductIds: string[] = []
 
   for (const item of items) {
-    if (item.isPriceConfirmed && typeof item.subtotal === 'number' && item.subtotal > 0) {
-      totalCents += Math.round(item.subtotal * 100)
+    const itemSubtotalCents = item.subtotalCents ?? (typeof item.subtotal === 'number' ? Math.round(item.subtotal * 100) : 0)
+    if (item.isPriceConfirmed && itemSubtotalCents > 0) {
+      totalConfirmedCents += itemSubtotalCents
     } else {
       allPricesConfirmed = false
       unconfirmedProductIds.push(item.productId)
+      if (itemSubtotalCents > 0) {
+        totalPendingCents += itemSubtotalCents
+      }
     }
   }
 
+  const hasPendingItems = !allPricesConfirmed || unconfirmedProductIds.length > 0
+
   return {
-    total: totalCents / 100,
+    total: totalConfirmedCents / 100,
+    totalConfirmedCents,
+    totalPendingCents,
     itemCount: items.length,
     allPricesConfirmed: items.length > 0 ? allPricesConfirmed : true,
+    hasPendingItems,
     unconfirmedProductIds
   }
 }

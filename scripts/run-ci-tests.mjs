@@ -86,4 +86,8 @@ runSuite('Etapa AC-04.2 — Enterprise Pricing Engine & Batch Calculations (18 C
   'tests/ci/ac04-2-enterprise-pricing.test.ts',
 ])
 
+runSuite('Etapa AC-04.3 — Enterprise Quote Engine & Intelligent Cart (20 Cenários)', [
+  'tests/ci/ac04-3-enterprise-quotes.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')
