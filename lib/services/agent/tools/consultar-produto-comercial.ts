@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { ToolDefinition } from '../tools'
 import { searchProducts } from '../../catalog/products'
 import { parseQuery } from '../../catalog/search-logic'
-import { resolveProductPrice } from '../../commercial/pricing'
+import { resolveProductPrice, resolveBatchProductPrices } from '../../commercial/pricing'
 import { applyCommercialStrategy, resolveReferenceQuery } from '../commercial-strategy'
 
 export const consultarProdutoComercialTool: ToolDefinition = {
@@ -59,26 +59,25 @@ export const consultarProdutoComercialTool: ToolDefinition = {
 
     if (searchResult.matches && searchResult.matches.length > 0) {
       const targetMatches = searchResult.matches.slice(0, 10)
-      await Promise.all(
-        targetMatches.map(async (prod) => {
-          try {
-            const p = await resolveProductPrice({
-              companyId: context.companyId,
-              productId: prod.id,
-              quantity,
-              priceType: price_type
-            })
-            candidatePrices.set(prod.id, {
-              unit_price: p.unitPrice,
-              subtotal: p.subtotal
-            })
-          } catch (err: any) {
-            // Tratamento individual: produtos sem preço configurado não travam os demais,
-            // mas preservamos a mensagem de erro específica para o diagnóstico
-            candidateErrors.set(prod.id, err?.message || 'Produto não possui preço configurado ou está indisponível.')
-          }
-        })
-      )
+      const batchResult = await resolveBatchProductPrices({
+        companyId: context.companyId,
+        items: targetMatches.map(prod => ({
+          productId: prod.id,
+          quantity,
+          priceType: price_type
+        }))
+      })
+
+      for (const item of batchResult.items) {
+        if (item.status === 'confirmed') {
+          candidatePrices.set(item.productId, {
+            unit_price: item.unitPrice,
+            subtotal: item.subtotal
+          })
+        } else {
+          candidateErrors.set(item.productId, item.unavailableReason || 'Produto não possui preço configurado ou está indisponível.')
+        }
+      }
     }
 
     let pricingData: any = undefined

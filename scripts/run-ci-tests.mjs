@@ -82,4 +82,8 @@ runSuite('Etapa AC-04.1 — Intelligent Product Search Engine & Deterministic Ra
   'tests/ci/ac04-1-intelligent-search.test.ts',
 ])
 
+runSuite('Etapa AC-04.2 — Enterprise Pricing Engine & Batch Calculations (18 Cenários)', [
+  'tests/ci/ac04-2-enterprise-pricing.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

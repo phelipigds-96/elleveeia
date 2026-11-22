@@ -25,6 +25,7 @@ export interface VerifiedAttributes {
   flavor?: string
   form?: string
   packaging?: 'unit' | 'wholesale'
+  pendingConfirmation?: string[]
 }
 
 export interface StructuredProductMatch {
@@ -109,7 +110,15 @@ export function evaluateCandidateScore(
   candidate: StructuredProductCandidate,
   parsed: StructuredParsedQuery,
   allCatalogBrands: Set<string>
-): { score: number; confidence: number; justification: string; verifiedAttributes: VerifiedAttributes; isCompatibleAlternative: boolean; isBrandMismatch: boolean } {
+): { 
+  score: number
+  confidence: number
+  justification: string
+  verifiedAttributes: VerifiedAttributes
+  isCompatibleAlternative: boolean
+  isBrandMismatch: boolean
+  hadPhoneticOrTypoCorrection: boolean 
+} {
   const cleanName = normalizeCatalogName(candidate.name)
   // Higieniza contra prompt injection no nome do produto
   const sanitizedName = sanitizeSearchInput(cleanName)
@@ -125,6 +134,7 @@ export function evaluateCandidateScore(
   const verifiedAttributes: VerifiedAttributes = {}
   let isCompatibleAlternative = false
   let isBrandMismatch = false
+  let hadPhoneticOrTypoCorrection = false
 
   // 1. Identificadores exatos (Código de barras ou SKU)
   if (parsed.identifiers.length > 0) {
@@ -138,7 +148,8 @@ export function evaluateCandidateScore(
         justification: `Correspondência exata por código (${matchBarcode ? 'Código de barras' : 'SKU'}: ${id})`,
         verifiedAttributes: { brand: candidate.brand || undefined },
         isCompatibleAlternative: false,
-        isBrandMismatch: false
+        isBrandMismatch: false,
+        hadPhoneticOrTypoCorrection: false
       }
     }
   }
@@ -201,13 +212,19 @@ export function evaluateCandidateScore(
   // 5. Restrições Explícitas (ex: Zero Lactose)
   if (parsed.restrictions.includes('zero_lactose')) {
     const isZeroLactose = /\b(?:zero\s+lactose|0\s+lactose|sem\s+lactose|0%\s+lactose)\b/i.test(cleanName)
+    const isDairy = /\b(?:leite|condensado|creme|manteiga|requeijao|iogurte|queijo|nata)\b/i.test(cleanName)
     if (isZeroLactose) {
       score += 40
       verifiedAttributes.flavor = 'zero lactose'
       reasons.push(`Restrição alimentar Zero Lactose atendida (+40)`)
+    } else if (isDairy) {
+      penalty += 80 // Penalidade extrema: derivado lácteo comprovado NÃO atende restrição médica/dietética
+      reasons.push(`Não atende restrição médica Zero Lactose (-80)`)
     } else {
-      penalty += 60 // Penalidade extrema: produto convencional NÃO atende restrição médica/dietética
-      reasons.push(`Não atende restrição médica Zero Lactose (-60)`)
+      // Produto não tem menção a lácteos nem selo explícito: marcar como pendente de confirmação
+      verifiedAttributes.pendingConfirmation = verifiedAttributes.pendingConfirmation || []
+      verifiedAttributes.pendingConfirmation.push('zero_lactose')
+      reasons.push(`Atributo de restrição alimentar não confirmado no cadastro`)
     }
   }
 
@@ -330,6 +347,7 @@ export function evaluateCandidateScore(
           score += 15
         } else if (eq.method === 'typo' || eq.method === 'phonetic') {
           score += 12
+          hadPhoneticOrTypoCorrection = true
           reasons.push(`Token "${token}" reconhecido via correção (${eq.method}: "${w}") (+12)`)
         }
         break
@@ -353,7 +371,8 @@ export function evaluateCandidateScore(
     justification: reasons.join('; '),
     verifiedAttributes,
     isCompatibleAlternative,
-    isBrandMismatch
+    isBrandMismatch,
+    hadPhoneticOrTypoCorrection
   }
 }
 
@@ -507,9 +526,12 @@ export function rankProductsIntelligently(
       differentiatingQuestion = 'Temos diferentes opções disponíveis. Qual delas melhor atende a sua receita? 😊'
     }
   }
-  // Caso C: Match Provável (boa confiança, mas falta atributo ou pontuação média)
-  else if (top.confidence < 0.85 || top.score < 50) {
+  // Caso C: Match Provável (boa confiança, mas falta atributo, pontuação média ou houve correção fonética/typo)
+  else if (top.confidence < 0.85 || top.score < 50 || top.hadPhoneticOrTypoCorrection) {
     overallStatus = 'probable_match'
+    if (top.hadPhoneticOrTypoCorrection) {
+      top.confidence = Math.min(top.confidence, 0.90)
+    }
   }
 
   // 4. Mapeamento dos resultados com contratos tipados
@@ -521,6 +543,8 @@ export function rankProductsIntelligently(
       matchType = 'compatible_alternative'
     } else if (overallStatus === 'ambiguous') {
       matchType = 'ambiguous'
+    } else if (p.hadPhoneticOrTypoCorrection) {
+      matchType = 'probable_match'
     }
 
     return {
@@ -536,9 +560,10 @@ export function rankProductsIntelligently(
       active: p.candidate.active !== false,
       matchType,
       score: p.score,
-      confidence: p.confidence,
+      confidence: p.hadPhoneticOrTypoCorrection ? Math.min(p.confidence, 0.90) : p.confidence,
       justification: p.justification,
       verifiedAttributes: p.verifiedAttributes,
+      pendingAttributes: p.verifiedAttributes.pendingConfirmation,
       match_score: p.score
     }
   })

@@ -142,7 +142,7 @@ export async function searchProducts(
     dbQuery = dbQuery.or('normalized_name.ilike."%cobertura%",normalized_name.ilike."%chocolate%"')
   }
 
-  let { data, error } = await dbQuery.limit(200)
+  let { data, error } = await dbQuery.limit(500)
 
   // Fallback se nada foi retornado: tenta apenas o primeiro token específico
   if ((!data || data.length === 0) && tokensList.length > 0) {

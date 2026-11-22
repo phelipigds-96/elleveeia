@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/service'
-import { resolveProductPrice } from './pricing'
+import { resolveProductPrice, resolveBatchProductPrices } from './pricing'
 
 export interface QuoteItemRequest {
   productId: string
@@ -28,23 +28,22 @@ export async function createQuote(params: CreateQuoteRequest) {
 
   const supabase = createAdminClient()
 
-  // 1. Resolver todos os preços pelo motor comercial
-  const resolvedItems = []
-  let totalCents = 0
-
-  for (const item of items) {
-    // resolveProductPrice garante a validação da quantidade e cálculo financeiro exato
-    const pricing = await resolveProductPrice({
-      companyId,
+  // 1. Resolver todos os preços pelo motor comercial em lote (ZERO N+1)
+  const batchPricing = await resolveBatchProductPrices({
+    companyId,
+    items: items.map(item => ({
       productId: item.productId,
       quantity: item.quantity
-    })
+    }))
+  })
 
-    resolvedItems.push(pricing)
-    totalCents += Math.round(pricing.subtotal * 100)
+  if (!batchPricing.allConfirmed) {
+    const failedItem = batchPricing.items.find(i => i.status !== 'confirmed')
+    throw new Error(failedItem?.unavailableReason || 'Um ou mais produtos não possuem preço ativo ou válido para a quantidade informada.')
   }
 
-  const grandTotal = totalCents / 100
+  const resolvedItems = batchPricing.items
+  const grandTotal = batchPricing.total
 
   // 2. Prevenção de duplicação: verificar se já existe um orçamento draft para este contexto
   let targetQuoteId: string | null = null
