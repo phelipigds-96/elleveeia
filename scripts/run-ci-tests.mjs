@@ -78,4 +78,8 @@ runSuite('Etapa AC-03 — Conversação Natural e Consultiva do Agente Comercial
   'tests/ci/ac03-conversational-nature.test.ts',
 ])
 
+runSuite('Etapa AC-04.1 — Intelligent Product Search Engine & Deterministic Ranking (16 Cenários)', [
+  'tests/ci/ac04-1-intelligent-search.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

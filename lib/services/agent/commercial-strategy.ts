@@ -406,6 +406,26 @@ export function applyCommercialStrategy(
     return decorateConsultativePayload(payload, searchResult, candidatePrices, parsedQuery)
   }
 
+  // 1.1 COMPATIBLE ALTERNATIVE (Marca solicitada não disponível no catálogo da loja)
+  if (searchResult.status === 'compatible_alternative') {
+    const altBrands = extractUniqueBrands(searchResult.matches)
+    const originalBrand = (searchResult as any).alternativeRecommendation?.originalBrandRequested || 'solicitada'
+    const payload: any = {
+      strategy: 'brand_alternative',
+      original_brand_excluded: originalBrand,
+      brands: altBrands,
+      products: searchResult.matches.slice(0, 5).map((m: any) => {
+        const item: any = { id: m.id, name: m.name, brand: m.brand || null }
+        if (m.unit) item.unit = m.unit
+        const p = candidatePrices?.get(m.id)
+        if (p) item.price = { unit_price: p.unit_price, subtotal: p.subtotal }
+        return item
+      }),
+      consultative_hint: `A marca "${originalBrand}" não consta no catálogo desta loja. Informe com simpatia que não trabalhamos com a marca ${originalBrand}, e apresente de imediato as ótimas opções disponíveis da mesma linha (${altBrands.join(', ')}).`
+    }
+    return decorateConsultativePayload(payload, searchResult, candidatePrices, parsedQuery)
+  }
+
   // 2. EXACT MATCH / SPECIFIC PRODUCT OU MATCH EXATO DE NOME
   const normalizedQuery = query.toLowerCase().trim()
   const exactNameMatch = searchResult.matches.find(
