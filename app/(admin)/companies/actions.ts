@@ -5,6 +5,11 @@ import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/service"
 import { createClient } from "@/lib/supabase/server"
 import { requirePlatformAdmin } from "@/lib/services/platform/admin"
+import {
+  startImpersonationSession,
+  terminateImpersonationSession,
+  resolveEffectiveSessionContext,
+} from "@/lib/services/platform/impersonation"
 import type { CompanyAddonRecord, CompanyMock } from "@/components/companies/mock-companies"
 import {
   ADDON_PACKAGE_SIZES,
@@ -1384,83 +1389,26 @@ export async function applyCompanyWorkflowTemplateAction(params: {
 
 /**
  * Inicia uma sessão administrativa de Impersonate para o SuperAdmin operar como o tenant alvo
+ * utilizando sessões efêmeras controladas no servidor (SEM MODIFICAR PROFILES).
  */
 export async function impersonateCompanyAction(
   targetCompanyId: string
-): Promise<ActionResult<{ redirectUrl: string; targetName: string }>> {
+): Promise<ActionResult<{ redirectUrl: string; targetName: string; sessionId?: string; targetCompanyId?: string }>> {
   try {
     // 1. Validação estrita: apenas operadores superadmin em platform_admins podem impersonar
-    const { operator, user } = await requirePlatformAdmin()
+    await requirePlatformAdmin()
 
-    const adminClient = createAdminClient()
-
-    // 2. Consulta os dados da empresa alvo
-    const { data: targetCompany, error: compErr } = await adminClient
-      .from("companies")
-      .select("id, name, slug, status")
-      .eq("id", targetCompanyId)
-      .single()
-
-    if (compErr || !targetCompany) {
-      return { success: false, error: "Empresa de destino não encontrada." }
-    }
-
-    if (targetCompany.status === "suspended") {
-      return { success: false, error: "Não é possível impersonar uma organização suspensa." }
-    }
-
-    // 3. Captura o vínculo atual de company_id do profile do superadmin
-    const { data: currentProfile } = await adminClient
-      .from("profiles")
-      .select("company_id")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    const originalCompanyId =
-      currentProfile?.company_id || "90e69b50-1b4e-4f4a-94f2-78be1cf82833"
-
-    // 4. Grava os cookies seguros de impersonação
-    const cookieStore = await cookies()
-    cookieStore.set("ellevee_impersonate_active", targetCompanyId, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 horas
-    })
-    cookieStore.set("ellevee_impersonate_original", originalCompanyId, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24,
+    // 2. Inicia sessão efêmera auditada via serviço central (zero mutação em profiles)
+    const result = await startImpersonationSession({
+      targetCompanyId,
+      reason: "Sessão de suporte e onboarding administrativo via Painel SuperAdmin",
     })
 
-    // 5. Atualiza o profile do operador no banco para conceder acesso RLS transparente
-    await adminClient
-      .from("profiles")
-      .update({
-        company_id: targetCompanyId,
-        role: "owner",
-      })
-      .eq("id", user.id)
-
-    // 6. Auditoria obrigatória
-    try {
-      await adminClient.from("platform_audit_logs").insert({
-        actor_id: user.id,
-        actor_email: user.email,
-        action: "platform.impersonate_started",
-        target_company_id: targetCompanyId,
-        payload_summary: {
-          operator_role: operator.role,
-          target_name: targetCompany.name,
-          target_slug: targetCompany.slug,
-          original_company_id: originalCompanyId,
-        },
-        reason: "Sessão de suporte e onboarding administrativo via Painel SuperAdmin",
-        status: "success",
-      })
-    } catch (auditErr: any) {
-      console.warn("[SuperAdmin] Aviso de auditoria impersonate:", auditErr.message)
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Falha ao iniciar sessão de impersonação.",
+      }
     }
 
     revalidatePath("/", "layout")
@@ -1470,8 +1418,10 @@ export async function impersonateCompanyAction(
     return {
       success: true,
       data: {
-        redirectUrl: "/dashboard",
-        targetName: targetCompany.name,
+        redirectUrl: result.data.redirectUrl,
+        targetName: result.data.targetCompanyName,
+        sessionId: result.data.sessionId,
+        targetCompanyId: result.data.targetCompanyId,
       },
     }
   } catch (err: any) {
@@ -1484,59 +1434,31 @@ export async function impersonateCompanyAction(
 }
 
 /**
- * Encerra a sessão de Impersonate e restaura o perfil original do SuperAdmin
+ * Encerra a sessão de Impersonate revogando no banco e excluindo cookies (SEM MODIFICAR PROFILES).
  */
 export async function stopImpersonateAction(): Promise<ActionResult<{ redirectUrl: string }>> {
   try {
-    const { user } = await requirePlatformAdmin()
-    const adminClient = createAdminClient()
-    const cookieStore = await cookies()
+    await requirePlatformAdmin()
 
-    const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
-    const originalCompanyId =
-      cookieStore.get("ellevee_impersonate_original")?.value ||
-      "90e69b50-1b4e-4f4a-94f2-78be1cf82833"
-
-    // 1. Restaura o perfil do operador para sua empresa original
-    await adminClient
-      .from("profiles")
-      .update({
-        company_id: originalCompanyId,
-        role: "admin",
-      })
-      .eq("id", user.id)
-
-    // 2. Remove os cookies
-    cookieStore.delete("ellevee_impersonate_active")
-    cookieStore.delete("ellevee_impersonate_original")
-
-    // 3. Auditoria obrigatória
-    if (targetCompanyId) {
-      try {
-        await adminClient.from("platform_audit_logs").insert({
-          actor_id: user.id,
-          actor_email: user.email,
-          action: "platform.impersonate_stopped",
-          target_company_id: targetCompanyId,
-          payload_summary: {
-            restored_company_id: originalCompanyId,
-          },
-          reason: "Encerramento voluntário de sessão de impersonação",
-          status: "success",
-        })
-      } catch (auditErr: any) {
-        console.warn("[SuperAdmin] Aviso de auditoria stop impersonate:", auditErr.message)
-      }
-    }
+    const result = await terminateImpersonationSession({
+      reason: "Encerramento voluntário de sessão de impersonação",
+    })
 
     revalidatePath("/", "layout")
     revalidatePath("/dashboard")
     revalidatePath("/companies")
 
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Falha ao encerrar impersonação.",
+      }
+    }
+
     return {
       success: true,
       data: {
-        redirectUrl: "/companies",
+        redirectUrl: result.data.redirectUrl,
       },
     }
   } catch (err: any) {
@@ -1550,41 +1472,35 @@ export async function stopImpersonateAction(): Promise<ActionResult<{ redirectUr
 
 /**
  * Retorna os detalhes da empresa atualmente impersonada, caso haja uma sessão ativa autorizada.
- * Exige estritamente autorização de SuperAdmin ativo antes de consultar qualquer informação da empresa.
+ * Exige estritamente autorização de SuperAdmin ativo via resolveEffectiveSessionContext.
  */
 export async function getImpersonateStatus(): Promise<{
   isImpersonating: boolean
   targetCompanyId?: string
   targetCompanyName?: string
   targetCompanySlug?: string
+  sessionId?: string
+  expiresAt?: string
 }> {
   try {
     // 1. Exige autorização estrita de SuperAdmin ativo da plataforma
     await requirePlatformAdmin()
 
-    const cookieStore = await cookies()
-    const targetCompanyId = cookieStore.get("ellevee_impersonate_active")?.value
-    if (!targetCompanyId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetCompanyId)) {
-      return { isImpersonating: false }
+    // 2. Consulta via resolvedor de contexto seguro
+    const context = await resolveEffectiveSessionContext({ pathname: "/dashboard" })
+
+    if (context.isImpersonating && context.impersonationSession) {
+      return {
+        isImpersonating: true,
+        sessionId: context.impersonationSession.sessionId,
+        targetCompanyId: context.impersonationSession.targetCompanyId,
+        targetCompanyName: context.impersonationSession.targetCompanyName,
+        targetCompanySlug: context.impersonationSession.targetCompanySlug,
+        expiresAt: context.impersonationSession.expiresAt,
+      }
     }
 
-    const adminClient = createAdminClient()
-    const { data: comp } = await adminClient
-      .from("companies")
-      .select("id, name, slug")
-      .eq("id", targetCompanyId)
-      .maybeSingle()
-
-    if (!comp) {
-      return { isImpersonating: false }
-    }
-
-    return {
-      isImpersonating: true,
-      targetCompanyId: comp.id,
-      targetCompanyName: comp.name,
-      targetCompanySlug: comp.slug,
-    }
+    return { isImpersonating: false }
   } catch {
     // Se não for SuperAdmin ou se a sessão for inválida, falha fechado
     return { isImpersonating: false }

@@ -50,4 +50,24 @@ runSuite('AC-SEC-01.3 — Correção Emergencial de Autorização Multi-Tenant e
   'tests/ci/ac-sec-01-3-emergency-auth.test.ts',
 ])
 
+runSuite('AC-SEC-01.3-H1-F — Blindagem dos Launchers de Homologação (9 Cenários Negativos)', [
+  'tests/ci/staging-launchers-hardening.test.ts',
+])
+
+runSuite('AC-SEC-01.3-H4-F — Validação de Seed, Teardown e SSR Chunker (7 Cenários)', [
+  'tests/ci/staging-synthetic-seed-teardown.test.ts',
+])
+
+runSuite('AC-SEC-01.4-I1 — Core Seguro de Impersonação do SuperAdmin (12 Cenários)', [
+  'tests/ci/ac-sec-01-4-impersonation-core.test.ts',
+])
+
+runSuite('AC-SEC-01.4-I2 — Integração Segura das Server Actions e Serviços (12 Cenários)', [
+  'tests/ci/ac-sec-01-4-server-actions-integration.test.ts',
+])
+
+runSuite('AC-SEC-01.4-H1 — Validação de Estabilidade do JWT Refresh e Vínculo de Sessão (7 Cenários)', [
+  'tests/ci/ac-sec-01-4-token-refresh.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

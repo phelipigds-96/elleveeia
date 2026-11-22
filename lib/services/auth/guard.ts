@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { resolveEffectiveSessionContext } from '@/lib/services/platform/impersonation'
 
 export interface CurrentUserProfile {
   id: string
@@ -33,42 +34,68 @@ export interface AssertTenantAdminOptions {
  * Previne IDOR garantindo que o tenant autenticado corresponda ao targetCompanyId especificado.
  */
 export async function assertTenantAdmin(options: AssertTenantAdminOptions = {}): Promise<CurrentUserProfile> {
-  const supabase = options.client || (await createClient())
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new TenantAuthError('Usuário não autenticado.', 401, 'UNAUTHORIZED')
+  let sessionContext
+  try {
+    sessionContext = await resolveEffectiveSessionContext({
+      contextGuard: options.targetCompanyId ? { expectedCompanyId: options.targetCompanyId } : undefined,
+      injectedUserClient: options.client,
+    })
+  } catch (err: any) {
+    if (err.code === 'UNAUTHORIZED' || err.statusCode === 401) {
+      throw new TenantAuthError('Usuário não autenticado.', 401, 'UNAUTHORIZED')
+    }
+    if (err.code === 'TENANT_CONTEXT_MISMATCH' || err.code === 'TENANT_MISMATCH' || err.statusCode === 403) {
+      throw new TenantAuthError('Acesso não autorizado aos recursos de outra empresa.', 403, 'TENANT_MISMATCH')
+    }
+    throw new TenantAuthError(err.message || 'Falha na autenticação do tenant.', err.statusCode || 401, err.code || 'UNAUTHORIZED')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, role, company_id')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!profile || !profile.company_id) {
+  if (!sessionContext?.effectiveCompanyId || sessionContext.effectiveCompanyId === '00000000-0000-0000-0000-000000000000') {
     throw new TenantAuthError('Perfil de usuário ou vínculo empresarial não localizado.', 403, 'NO_COMPANY')
   }
 
-  // SuperAdmin da plataforma (role 'master') possui autorização global
-  if (profile.role === 'master') {
+  // SuperAdmin da plataforma em rota administrativa
+  if (sessionContext.isPlatformAdmin && !sessionContext.isImpersonating) {
     return {
-      ...profile,
-      company_id: options.targetCompanyId || profile.company_id,
+      id: sessionContext.userId,
+      email: sessionContext.operatorEmail,
+      full_name: sessionContext.userName,
+      role: 'owner',
+      company_id: options.targetCompanyId || sessionContext.effectiveCompanyId,
     }
   }
 
+  // Em sessão de suporte ativa
+  if (sessionContext.isImpersonating) {
+    if (options.targetCompanyId && options.targetCompanyId !== sessionContext.effectiveCompanyId) {
+      throw new TenantAuthError('Acesso não autorizado aos recursos de outra empresa.', 403, 'TENANT_MISMATCH')
+    }
+    return {
+      id: sessionContext.userId,
+      email: sessionContext.operatorEmail,
+      full_name: sessionContext.userName,
+      role: sessionContext.effectiveRole,
+      company_id: sessionContext.effectiveCompanyId,
+    }
+  }
+
+  // Usuário comum do tenant
   const allowedRoles = options.allowedRoles || ['owner', 'admin']
-  if (!allowedRoles.includes(profile.role)) {
+  if (!allowedRoles.includes(sessionContext.effectiveRole)) {
     throw new TenantAuthError('Ação restrita a administradores e proprietários da empresa.', 403, 'FORBIDDEN_ROLE')
   }
 
-  // Prevenção estrita de IDOR: operador não pode agir em nome de outro tenant
-  if (options.targetCompanyId && options.targetCompanyId !== profile.company_id) {
+  if (options.targetCompanyId && options.targetCompanyId !== sessionContext.effectiveCompanyId) {
     throw new TenantAuthError('Acesso não autorizado aos recursos de outra empresa.', 403, 'TENANT_MISMATCH')
   }
 
-  return profile
+  return {
+    id: sessionContext.userId,
+    email: sessionContext.operatorEmail,
+    full_name: sessionContext.userName,
+    role: sessionContext.effectiveRole,
+    company_id: sessionContext.effectiveCompanyId,
+  }
 }
 
 /**
@@ -76,17 +103,14 @@ export async function assertTenantAdmin(options: AssertTenantAdminOptions = {}):
  */
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email, full_name, role, company_id')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    return profile || null
+    const sessionContext = await resolveEffectiveSessionContext()
+    return {
+      id: sessionContext.userId,
+      email: sessionContext.operatorEmail,
+      full_name: sessionContext.userName,
+      role: sessionContext.effectiveRole,
+      company_id: sessionContext.effectiveCompanyId,
+    }
   } catch {
     return null
   }
@@ -97,47 +121,46 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
  * Se for Atendente (ou usuário comum restrito), redireciona compulsoriamente para /conversations.
  */
 export async function requireCompanyAdmin(): Promise<CurrentUserProfile> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
+  let sessionContext
+  try {
+    sessionContext = await resolveEffectiveSessionContext()
+  } catch {
     redirect('/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, role, company_id')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!profile) {
+  if (!sessionContext) {
     redirect('/login')
   }
 
-  // Se estiver em modo Impersonate do SuperAdmin (exclusivo para role master com UUID válido)
-  if (profile.role === 'master') {
-    try {
-      const { cookies } = await import('next/headers')
-      const cookieStore = await cookies()
-      const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-      if (impersonateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(impersonateId)) {
-        return {
-          id: user.id,
-          email: profile.email || user.email || '',
-          full_name: profile.full_name || 'Administrador',
-          role: 'admin',
-          company_id: impersonateId,
-        }
-      }
-    } catch {
-      // segue fluxo normal
+  if (sessionContext.isPlatformAdmin && !sessionContext.isImpersonating) {
+    return {
+      id: sessionContext.userId,
+      email: sessionContext.operatorEmail,
+      full_name: sessionContext.userName,
+      role: 'owner',
+      company_id: sessionContext.effectiveCompanyId,
     }
   }
 
-  // Atendentes e operadores comuns têm acesso exclusivo ao chat/conversas
-  if (profile.role === 'attendant' || profile.role === 'user') {
+  if (sessionContext.isImpersonating) {
+    return {
+      id: sessionContext.userId,
+      email: sessionContext.operatorEmail,
+      full_name: sessionContext.userName,
+      role: sessionContext.effectiveRole,
+      company_id: sessionContext.effectiveCompanyId,
+    }
+  }
+
+  if ((sessionContext.effectiveRole as string) === 'attendant' || (sessionContext.effectiveRole as string) === 'user') {
     redirect('/conversations')
   }
 
-  return profile
+  return {
+    id: sessionContext.userId,
+    email: sessionContext.operatorEmail,
+    full_name: sessionContext.userName,
+    role: sessionContext.effectiveRole,
+    company_id: sessionContext.effectiveCompanyId,
+  }
 }

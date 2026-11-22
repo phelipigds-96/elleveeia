@@ -39,5 +39,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# staging isolated workspace
+/.staging-workspace/
+
 # local test scripts
 test-*.ts

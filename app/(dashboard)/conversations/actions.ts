@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/service"
+import {
+  resolveEffectiveSessionContext,
+  type ContextGuard,
+  ImpersonationError,
+} from "@/lib/services/platform/impersonation"
 import { dispatchOutboxRecordHardened } from "@/lib/services/conversations-internal"
 import { moveConversationToStageType } from "@/lib/services/workflows/workflows"
 import { assignDefaultWorkflowStages } from "@/lib/services/workflows/conversation-workflow"
@@ -91,96 +96,63 @@ export interface UserProfileContext {
   companyId: string
   role: string
   userName: string
+  isImpersonating?: boolean
+  sessionId?: string
 }
 
 const CONVERSATION_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
- * Extrai o company_id, sender_id, role e full_name da sessão segura do servidor via SSR auth.
+ * Extrai o company_id, sender_id, role e full_name da sessão segura do servidor via resolveEffectiveSessionContext.
  * Fail-closed: rejeita qualquer requisição sem sessão válida ou sem perfil cadastrado.
- * Impede sobreposição de companyId por cookies forjados por usuários comuns.
+ * Previne contaminação de contexto e mutações em profiles.
  */
-async function getAuthenticatedAgentContext(): Promise<UserProfileContext> {
-  const supabase = await createClient()
-  const { data: authData, error: authError } = await supabase.auth.getUser()
-
-  if (authError || !authData?.user) {
-    throw new Error("UNAUTHENTICATED: Sessão de usuário não encontrada.")
-  }
-
-  const userId = authData.user.id
-  const adminClient = createAdminClient()
-
-  const { data: profile, error: profileErr } = await adminClient
-    .from("profiles")
-    .select("company_id, role, full_name")
-    .eq("id", userId)
-    .maybeSingle()
-
-  if (profileErr || !profile) {
-    throw new Error("UNAUTHENTICATED: Perfil de usuário não encontrado.")
-  }
-
-  let companyId: string | null = profile.company_id || null
-  let role = profile.role || "attendant"
-  let userName = profile.full_name || "Atendente"
-
-  // Suporte estrito e seguro ao Impersonate: EXCLUSIVO para SuperAdmins ativos
+async function getAuthenticatedAgentContext(
+  contextGuard?: ContextGuard,
+  options?: { requireGuardIfImpersonating?: boolean }
+): Promise<UserProfileContext> {
   try {
-    const { data: operator } = await adminClient
-      .from("platform_admins")
-      .select("id, role, active")
-      .eq("id", userId)
-      .maybeSingle()
+    const sessionContext = await resolveEffectiveSessionContext({
+      contextGuard,
+      requireGuardIfImpersonating: options?.requireGuardIfImpersonating ?? false,
+    })
 
-    const isSuperAdmin = operator && operator.active === true && operator.role === "superadmin"
-
-    if (isSuperAdmin) {
-      const cookieStore = await cookies()
-      const impersonateId = cookieStore.get("ellevee_impersonate_active")?.value
-      if (impersonateId && CONVERSATION_UUID_REGEX.test(impersonateId)) {
-        const { data: targetComp } = await adminClient
-          .from("companies")
-          .select("id, status")
-          .eq("id", impersonateId)
-          .maybeSingle()
-
-        if (targetComp && targetComp.status !== "suspended") {
-          companyId = targetComp.id
-          role = "admin"
-        }
-      }
+    if (!sessionContext.effectiveCompanyId || sessionContext.effectiveCompanyId === "00000000-0000-0000-0000-000000000000") {
+      throw new Error("UNAUTHENTICATED: Empresa não vinculada ao perfil.")
     }
-  } catch {
-    // cookies() pode não estar disponível em certos contextos SSR
-  }
 
-  if (!companyId) {
-    throw new Error("UNAUTHENTICATED: Empresa não vinculada ao perfil.")
-  }
-
-  return {
-    userId,
-    companyId,
-    role,
-    userName,
+    return {
+      userId: sessionContext.userId,
+      companyId: sessionContext.effectiveCompanyId,
+      role: sessionContext.effectiveRole,
+      userName: sessionContext.userName,
+      isImpersonating: sessionContext.isImpersonating,
+      sessionId: sessionContext.impersonationSession?.sessionId,
+    }
+  } catch (err: any) {
+    if (err instanceof ImpersonationError) {
+      throw new Error(`UNAUTHORIZED: [${err.code}] ${err.message}`)
+    }
+    throw err
   }
 }
 
 /**
  * Provê o perfil do usuário atual para Client Components.
  */
-export async function getAgentProfileContext(): Promise<UserProfileContext> {
-  return await getAuthenticatedAgentContext()
+export async function getAgentProfileContext(contextGuard?: ContextGuard): Promise<UserProfileContext> {
+  return await getAuthenticatedAgentContext(contextGuard)
 }
 
 /**
  * Obtém a lista real de conversas com filtro RBAC (Master vs Atendente)
  */
-export async function getConversationsList(): Promise<ConversationData[]> {
+export async function getConversationsList(contextGuard?: ContextGuard): Promise<ConversationData[]> {
   try {
-    const { userId, companyId, role } = await getAuthenticatedAgentContext()
+    const { userId, companyId, role } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const client = createAdminClient()
 
     // 1. Descobrir o agente ativo padrão da empresa (ex: 'Ana', 'Coalito')
@@ -324,7 +296,8 @@ export async function getConversationsList(): Promise<ConversationData[]> {
  * Respeita governança RBAC e atribuição de atendentes.
  */
 export async function getConversationMessages(
-  conversationId: string
+  conversationId: string,
+  contextGuard?: ContextGuard
 ): Promise<MessageData[]> {
   try {
     if (!conversationId || typeof conversationId !== "string" || !CONVERSATION_UUID_REGEX.test(conversationId.trim())) {
@@ -332,7 +305,9 @@ export async function getConversationMessages(
     }
 
     const cleanConvId = conversationId.trim()
-    const { userId, companyId, role } = await getAuthenticatedAgentContext()
+    const { userId, companyId, role } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const client = createAdminClient()
 
     // 1. Validar que a conversa existe e pertence ao tenant autenticado
@@ -452,7 +427,8 @@ async function syncWorkflowStage(
 export async function sendMessageAction(
   conversationId: string,
   content: string,
-  clientMessageId?: string
+  clientMessageId?: string,
+  contextGuard?: ContextGuard
 ): Promise<SendMessageResult> {
   try {
     const trimmed = content?.trim()
@@ -463,7 +439,9 @@ export async function sendMessageAction(
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const adminClient = createAdminClient()
 
     // 1. Obter conversa e canal
@@ -625,14 +603,17 @@ export async function sendMessageAction(
  * Server Action para Handoff (Transbordo Humano) e pausa da IA
  */
 export async function takeoverConversationAction(
-  conversationId: string
+  conversationId: string,
+  contextGuard?: ContextGuard
 ): Promise<{ success: boolean; status?: string; error?: string }> {
   try {
     if (!conversationId) {
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const adminClient = createAdminClient()
 
     // 1. Atualizar status da conversa para 'human' e designar atendente (assigned_to)
@@ -696,14 +677,17 @@ export async function takeoverConversationAction(
  * Server Action para devolver o atendimento para o Agente de IA com nome dinâmico
  */
 export async function returnToAIAction(
-  conversationId: string
+  conversationId: string,
+  contextGuard?: ContextGuard
 ): Promise<{ success: boolean; status?: string; agentName?: string; error?: string }> {
   try {
     if (!conversationId) {
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { companyId } = await getAuthenticatedAgentContext()
+    const { companyId } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const adminClient = createAdminClient()
 
     // 1. Obter nome do agente da conversa ou ativo da empresa
@@ -814,14 +798,17 @@ export async function getChatOperationsContextAction(): Promise<{
  */
 export async function closeConversationAction(
   conversationId: string,
-  options?: CloseConversationOptions
+  options?: CloseConversationOptions,
+  contextGuard?: ContextGuard
 ): Promise<{ success: boolean; status?: string; error?: string; reasonText?: string }> {
   try {
     if (!conversationId) {
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const adminClient = createAdminClient()
     const now = new Date().toISOString()
 
@@ -934,14 +921,17 @@ export async function closeConversationAction(
  * Server Action para reabrir atendimento encerrado
  */
 export async function reopenConversationAction(
-  conversationId: string
+  conversationId: string,
+  contextGuard?: ContextGuard
 ): Promise<{ success: boolean; status?: string; error?: string }> {
   try {
     if (!conversationId) {
       return { success: false, error: "Identificador da conversa inválido." }
     }
 
-    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     const adminClient = createAdminClient()
     const now = new Date().toISOString()
 
@@ -1229,9 +1219,14 @@ export interface UploadMediaResult {
 /**
  * Faz upload de arquivo/mídia (imagem, áudio, PDF) para o bucket chat-media do Supabase Storage
  */
-export async function uploadChatMediaAction(formData: FormData): Promise<UploadMediaResult> {
+export async function uploadChatMediaAction(
+  formData: FormData,
+  contextGuard?: ContextGuard
+): Promise<UploadMediaResult> {
   try {
-    const { companyId } = await getAuthenticatedAgentContext()
+    const { companyId } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
     
     const file = formData.get("file") as File
     if (!file) {
@@ -1289,16 +1284,19 @@ export async function sendMediaMessageAction(params: {
   fileName?: string
   caption?: string
   clientMessageId?: string
+  contextGuard?: ContextGuard
 }): Promise<SendMessageResult> {
   try {
-    const { conversationId, mediaUrl, mediaType, fileName, caption, clientMessageId } = params
+    const { conversationId, mediaUrl, mediaType, fileName, caption, clientMessageId, contextGuard } = params
 
     if (!conversationId || !mediaUrl) {
       return { success: false, error: "Dados incompletos para envio de mídia." }
     }
 
-    const { userId, companyId, userName } = await getAuthenticatedAgentContext()
-        const adminClient = createAdminClient()
+    const { userId, companyId, userName } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
+    const adminClient = createAdminClient()
 
     // 1. Obter conversa
     const { data: conv, error: convErr } = await adminClient
@@ -1661,8 +1659,27 @@ export async function getCompanyWorkflowStagesAction(): Promise<WorkflowStageOpt
 /**
  * Altera a etapa do funil (workflow_stage) de uma conversa.
  */
-export async function updateConversationStageAction(conversationId: string, stageId: string) {
+export async function updateConversationStageAction(
+  conversationId: string,
+  stageId: string,
+  contextGuard?: ContextGuard
+) {
   try {
+    const { companyId } = await getAuthenticatedAgentContext(contextGuard, {
+      requireGuardIfImpersonating: true,
+    })
+    const adminClient = createAdminClient()
+    const { data: conv } = await adminClient
+      .from("conversations")
+      .select("id")
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    if (!conv) {
+      return { success: false, error: "Conversa não localizada ou não autorizada para o tenant." }
+    }
+
     const { moveConversationStage } = await import("@/lib/services/workflows/workflows")
     await moveConversationStage(conversationId, stageId)
     revalidatePath("/conversations")

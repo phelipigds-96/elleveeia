@@ -1,46 +1,22 @@
-import { cookies } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/service'
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { resolveEffectiveSessionContext } from '@/lib/services/platform/impersonation'
 
 export async function resolvePushSessionContext() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return null
-  }
-
-  const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('company_id, role, full_name')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  let companyId = profile?.company_id || null
-
-  if (profile?.role === 'master') {
-    const cookieStore = await cookies()
-    const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-    if (impersonateId && UUID_REGEX.test(impersonateId)) {
-      companyId = impersonateId
+  try {
+    const sessionContext = await resolveEffectiveSessionContext()
+    if (!sessionContext?.effectiveCompanyId || sessionContext.effectiveCompanyId === '00000000-0000-0000-0000-000000000000') {
+      return null
     }
-  }
 
-  if (!companyId) {
+    const adminClient = createAdminClient()
+    return {
+      userId: sessionContext.userId,
+      companyId: sessionContext.effectiveCompanyId,
+      role: sessionContext.effectiveRole,
+      fullName: sessionContext.userName || null,
+      adminClient,
+    }
+  } catch {
     return null
-  }
-
-  return {
-    userId: user.id,
-    companyId,
-    role: profile?.role || 'attendant',
-    fullName: profile?.full_name || null,
-    adminClient,
   }
 }

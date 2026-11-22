@@ -4,6 +4,10 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/service'
 import { getEvolutionWhatsAppStatus } from '@/lib/services/whatsapp-evolution'
+import {
+  resolveEffectiveSessionContext,
+  type ContextGuard,
+} from '@/lib/services/platform/impersonation'
 
 export type ChartDataPoint = {
   label: string
@@ -74,7 +78,10 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
-export async function getDashboardData(period: 'today' | '7days' | '30days'): Promise<DashboardData> {
+export async function getDashboardData(
+  period: 'today' | '7days' | '30days',
+  contextGuard?: ContextGuard
+): Promise<DashboardData> {
   const fallbackData: DashboardData = {
     metrics: {
       total_conversations: 0,
@@ -125,74 +132,46 @@ export async function getDashboardData(period: 'today' | '7days' | '30days'): Pr
   }
 
   try {
-    const supabase = await createClient()
     const adminClient = createAdminClient()
 
-    // 1. Obter usuário logado e sua empresa (respeitando Impersonate EXCLUSIVO do SuperAdmin)
     let companyId: string | null = null
     let companyName = 'Ellevee IA'
     let companySlug = ''
     let companyPlan = 'Starter'
 
-    // Exige usuário autenticado no servidor
-    const { data: authData } = await supabase.auth.getUser()
-    const user = authData?.user
-    if (!user) {
+    // 1. Resolve o contexto efetivo de sessão via serviço central
+    let sessionContext
+    try {
+      sessionContext = await resolveEffectiveSessionContext({
+        contextGuard,
+        pathname: "/dashboard",
+      })
+    } catch {
       return fallbackData
     }
 
-    // Consulta perfil do usuário logado
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('company_id, role, companies(id, name, slug, plan_tier)')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profile?.company_id) {
-      companyId = profile.company_id
-      const comp = Array.isArray(profile.companies) ? profile.companies[0] : (profile.companies as any)
-      if (comp) {
-        companyName = comp.name || companyName
-        companySlug = comp.slug || ''
-        companyPlan = comp.plan_tier || companyPlan
-      }
-    }
-
-    // Suporte ao Impersonate: estritamente restrito a SuperAdmins ativos em platform_admins
-    const { data: operator } = await adminClient
-      .from('platform_admins')
-      .select('id, role, active')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    const isSuperAdmin = operator && operator.active === true && operator.role === 'superadmin'
-
-    if (isSuperAdmin) {
-      try {
-        const cookieStore = await cookies()
-        const impersonateId = cookieStore.get('ellevee_impersonate_active')?.value
-        if (impersonateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(impersonateId)) {
-          const { data: impComp } = await adminClient
-            .from('companies')
-            .select('id, name, slug, plan_tier, status')
-            .eq('id', impersonateId)
-            .maybeSingle()
-
-          if (impComp && impComp.status !== 'suspended') {
-            companyId = impComp.id
-            companyName = impComp.name || companyName
-            companySlug = impComp.slug || ''
-            companyPlan = impComp.plan_tier || companyPlan
-          }
-        }
-      } catch {
-        // cookies() pode não estar disponível em certos contextos
-      }
-    }
-
-    // Se mesmo assim não houver empresa (falha fechada - NUNCA buscar primeira empresa)
-    if (!companyId) {
+    if (!sessionContext?.effectiveCompanyId || sessionContext.effectiveCompanyId === "00000000-0000-0000-0000-000000000000") {
       return fallbackData
+    }
+
+    companyId = sessionContext.effectiveCompanyId
+
+    if (sessionContext.isImpersonating && sessionContext.impersonationSession) {
+      companyName = sessionContext.impersonationSession.targetCompanyName
+      companySlug = sessionContext.impersonationSession.targetCompanySlug
+    }
+
+    // Busca dados complementares do plano da empresa
+    const { data: comp } = await adminClient
+      .from('companies')
+      .select('name, slug, plan_tier')
+      .eq('id', companyId)
+      .maybeSingle()
+
+    if (comp) {
+      companyName = comp.name || companyName
+      companySlug = comp.slug || companySlug
+      companyPlan = comp.plan_tier || companyPlan
     }
 
     // 2. Definir intervalo de datas
