@@ -102,8 +102,12 @@ runSuite('Etapa AC-04.5-P0 — Verificação de Bloqueadores para Homologação 
   'tests/ci/ac04-5-p0-blockers-verification.test.ts',
 ])
 
-runSuite('Etapa AC-04.5-P0.1/P0.2 — Fechamento Transacional & Concorrência (14 Cenários)', [
+runSuite('Etapa AC-04.5-P0.1/P0.2/P0.3 — Fechamento Transacional & Concorrência (21 Cenários)', [
   'tests/ci/ac04-5-p0-1-transactional-closure.test.ts',
+])
+
+runSuite('Etapa AC-04.5-P0.5 — Guardas de Segurança e Confiabilidade do Runner (6 Cenários)', [
+  'tests/ci/ac04-5-p0-5-runner-offline-guards.test.ts',
 ])
 
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

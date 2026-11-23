@@ -1,14 +1,14 @@
 -- ==============================================================================
--- ELLEVEE IA — AC-04.5-P0.3 / P0.4 | ROTEIRO DE HOMOLOGAÇÃO POSTGRESQL REAL
+-- ELLEVEE IA — AC-04.5-P0.5 | ROTEIRO DE HOMOLOGAÇÃO POSTGRESQL REAL
 -- ==============================================================================
 -- Este roteiro e o runner automatizado realizam a validação completa da migration:
 -- 1. Consultas de compatibilidade (somente leitura) pré-aplicação da migration.
--- 2. Testes de permissões e princípio do menor privilégio (anon, authenticated, service_role).
--- 3. Setup de fixtures sintéticas rastreadas e isoladas com integridade referencial.
--- 4. Testes transacionais ACID (criação, versionamento, rollback de criação e rollback de atualização).
+-- 2. Testes de permissões e menor privilégio desacoplados (anon, authenticated, service_role).
+-- 3. Setup de fixtures sintéticas rastreadas com integridade referencial.
+-- 4. Testes transacionais ACID (criação, versionamento, rollback de erro e rollback de transação com alterações).
 -- 5. Testes de integridade multi-tenant, invariantes financeiros e preservação de metadados.
 -- 6. Teste de concorrência atômica com duas conexões independentes (Advisory Locks).
--- 7. Teardown cirúrgico e garantido (exclusão estrita apenas dos registros criados).
+-- 7. Teardown cirúrgico e garantido com confirmação de 0 resíduos.
 --
 -- ==============================================================================
 -- PROCEDIMENTO OPERACIONAL RECOMENDADO:
@@ -20,11 +20,14 @@
 --   node scripts/run-real-postgres-atomic-test.mjs
 --
 -- O runner local:
--- 1. Abre duas conexões TCP persistentes com o PostgreSQL (pg.Client nativo).
--- 2. Torna as fixtures criadas pela Conexão 1 imediatamente visíveis à Conexão 2.
--- 3. Mantém o manifesto de UUIDs em memória no Node.js e gravado em disco (.staging-workspace).
--- 4. Executa o teardown cirúrgico no bloco FINALLY incondicional, mesmo se houver falha.
--- 5. Não depende de tabelas temporárias entre sessões nem de afinidade do SQL Editor.
+-- 1. Abre duas conexões TCP persistentes com o PostgreSQL (pg.Client nativo com TLS validado).
+-- 2. Valida positivamente a identidade do host autorizado (db.dkjrpdhymtkgbknocijy.supabase.co).
+-- 3. Audita marcadores de referência imutáveis da base antes de qualquer escrita.
+-- 4. Torna as fixtures criadas pela Conexão 1 imediatamente visíveis à Conexão 2.
+-- 5. Mantém o manifesto de UUIDs em memória no Node.js e gravado incrementalmente em disco.
+-- 6. Executa o teardown cirúrgico no bloco FINALLY incondicional, com cliente reserva se necessário.
+-- 7. Confirma ativamente a ausência de registros residuais por IDs rastreados (0 restantes).
+-- 8. Comprova concorrência via inspeção direta em pg_locks (sem sleeps arbitrários).
 --
 -- Caso deseje executar manualmente via SQL Editor ou psql, utilize os blocos abaixo.
 --
@@ -82,18 +85,23 @@ ORDER BY company_id, status;
 
 
 -- ==============================================================================
--- SEÇÃO 2: VALIDAÇÃO DE PERMISSÕES E PRINCÍPIO DO MENOR PRIVILÉGIO
+-- SEÇÃO 2: VALIDAÇÃO DE PERMISSÕES E PRINCÍPIO DO MENOR PRIVILÉGIO (DESACOPLADA)
 -- ==============================================================================
 -- A RPC save_enterprise_quote_atomic deve ser EXCLUSIVA da role service_role.
 -- Chamadas diretas como anon ou authenticated devem falhar com erro 42501 (insufficient_privilege).
 
--- 2.1 Teste com role 'anon' (DEVE FALHAR com erro 42501)
+-- 2.1 Teste com role 'anon' (Separa confirmação do role da rejeição da RPC)
 SET ROLE anon;
 DO $$
 DECLARE
     v_failed BOOLEAN := false;
     v_err_msg TEXT;
+    v_err_code TEXT;
 BEGIN
+    IF current_user <> 'anon' THEN
+        RAISE EXCEPTION 'Falha ao assumir role anon (current_user=%)', current_user;
+    END IF;
+
     BEGIN
         PERFORM public.save_enterprise_quote_atomic(
             p_company_id := gen_random_uuid(),
@@ -102,23 +110,29 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN
         v_failed := true;
         v_err_msg := SQLERRM;
+        GET STACKED DIAGNOSTICS v_err_code = RETURNED_SQLSTATE;
     END;
 
     IF NOT v_failed THEN
         RAISE EXCEPTION 'VULNERABILIDADE CRÍTICA: anon conseguiu executar save_enterprise_quote_atomic!';
     END IF;
 
-    RAISE NOTICE 'SUCESSO 2.1: Execução como anon rejeitada com insufficient_privilege (42501).';
+    RAISE NOTICE 'SUCESSO 2.1: Role anon confirmada e execução rejeitada com insufficient_privilege (SQLSTATE: %).', v_err_code;
 END $$;
 RESET ROLE;
 
--- 2.2 Teste com role 'authenticated' (DEVE FALHAR com erro 42501)
+-- 2.2 Teste com role 'authenticated' (Separa confirmação do role da rejeição da RPC)
 SET ROLE authenticated;
 DO $$
 DECLARE
     v_failed BOOLEAN := false;
     v_err_msg TEXT;
+    v_err_code TEXT;
 BEGIN
+    IF current_user <> 'authenticated' THEN
+        RAISE EXCEPTION 'Falha ao assumir role authenticated (current_user=%)', current_user;
+    END IF;
+
     BEGIN
         PERFORM public.save_enterprise_quote_atomic(
             p_company_id := gen_random_uuid(),
@@ -127,15 +141,31 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN
         v_failed := true;
         v_err_msg := SQLERRM;
+        GET STACKED DIAGNOSTICS v_err_code = RETURNED_SQLSTATE;
     END;
 
     IF NOT v_failed THEN
         RAISE EXCEPTION 'VULNERABILIDADE CRÍTICA: authenticated conseguiu executar save_enterprise_quote_atomic!';
     END IF;
 
-    RAISE NOTICE 'SUCESSO 2.2: Execução como authenticated rejeitada com insufficient_privilege (42501).';
+    RAISE NOTICE 'SUCESSO 2.2: Role authenticated confirmada e execução rejeitada com insufficient_privilege (SQLSTATE: %).', v_err_code;
 END $$;
 RESET ROLE;
+
+-- 2.3 Confirmação de privilégio EXECUTE concedido a service_role
+DO $$
+DECLARE
+    v_has_exec BOOLEAN;
+BEGIN
+    SELECT has_function_privilege('service_role', 'public.save_enterprise_quote_atomic(uuid, uuid, text, uuid, integer, text, numeric, jsonb, jsonb)', 'EXECUTE')
+    INTO v_has_exec;
+
+    IF NOT v_has_exec THEN
+        RAISE EXCEPTION 'FALHA DE PERMISSÃO: service_role não possui privilégio EXECUTE na RPC!';
+    END IF;
+
+    RAISE NOTICE 'SUCESSO 2.3: Privilégio de EXECUTE confirmado exclusivamente para service_role.';
+END $$;
 
 
 -- ==============================================================================
@@ -143,8 +173,7 @@ RESET ROLE;
 -- ==============================================================================
 -- Para execução no SQL Editor ou psql em uma única sessão persistente.
 -- Utiliza sufixo rastreável exclusivo (v_run_suffix) para identificar todas as entidades
--- criadas, permitindo tanto o rastreamento em TEMP TABLE na sessão atual quanto o teardown
--- cirúrgico infalível mesmo se a conexão cair ou for reaberta.
+-- criadas, permitindo tanto o rastreamento atômico quanto o teardown cirúrgico infalível.
 
 SET ROLE service_role;
 
@@ -180,6 +209,7 @@ DECLARE
     v_item_ids_after UUID[];
     v_failed_subtotal BOOLEAN := false;
     v_failed_total BOOLEAN := false;
+    v_item_record RECORD;
 BEGIN
     RAISE NOTICE '====================================================================';
     RAISE NOTICE 'INICIANDO SETUP E TESTES ACID COM SUFIXO: %', v_run_suffix;
@@ -334,7 +364,53 @@ BEGIN
     RAISE NOTICE '✓ 4.4 Preservação integral em rollback de atualização confirmada.';
 
     -- -------------------------------------------------------------------------
-    -- 4.5 Concorrência Otimista: Rejeição de Versão Defasada
+    -- 4.5 Rollback Real de Transação com Alterações Efetuadas (Subtransação/Savepoint)
+    -- -------------------------------------------------------------------------
+    -- Simula uma atualização bem-sucedida para versão 3 seguida de aborto da transação
+    BEGIN
+        -- Executa atualização que seria válida
+        PERFORM public.save_enterprise_quote_atomic(
+            p_company_id := v_company_id,
+            p_customer_id := v_customer_id,
+            p_conversation_id := v_conv_id::text,
+            p_existing_quote_id := v_quote_id,
+            p_expected_version := 2,
+            p_status := 'ready',
+            p_total := 175.00,
+            p_metadata := '{"nova_nota": "alteracao abortada propositalmente"}'::jsonb,
+            p_items := jsonb_build_array(
+                jsonb_build_object('product_id', v_prod_a_id, 'quantity', 5, 'unit_price', 35.00, 'subtotal', 175.00)
+            )
+        );
+
+        -- Dispara aborto explícito da transação
+        RAISE EXCEPTION 'ABORT_TRANSACTION_TEST';
+    EXCEPTION WHEN OTHERS THEN
+        IF SQLERRM NOT LIKE '%ABORT_TRANSACTION_TEST%' THEN
+            RAISE EXCEPTION 'Erro inesperado no teste 4.5: %', SQLERRM;
+        END IF;
+    END;
+
+    -- Comprova que após o rollback da transação o estado é rigorosamente idêntico à versão 2
+    SELECT (metadata->>'version')::int, total, metadata INTO v_ver_after, v_total_after, v_saved_metadata FROM public.quotes WHERE id = v_quote_id;
+    SELECT ARRAY_AGG(id ORDER BY id) INTO v_item_ids_after FROM public.quote_items WHERE quote_id = v_quote_id;
+
+    IF v_ver_after <> 2 OR v_total_after <> 105.00 THEN
+        RAISE EXCEPTION 'VIOLAÇÃO DE ATOMICIDADE 4.5: Cabeçalho modificado após rollback de transação! (ver=%, total=%)', v_ver_after, v_total_after;
+    END IF;
+
+    IF v_saved_metadata ? 'nova_nota' THEN
+        RAISE EXCEPTION 'VIOLAÇÃO DE ATOMICIDADE 4.5: Metadados da transação revertida vazaram!';
+    END IF;
+
+    IF v_item_ids_after <> v_item_ids_before THEN
+        RAISE EXCEPTION 'VIOLAÇÃO DE ATOMICIDADE 4.5: Itens corrompidos após rollback de transação!';
+    END IF;
+
+    RAISE NOTICE '✓ 4.5 Rollback real de transação do chamador comprovado (versão 2, total 105.00 e itens originais intactos).';
+
+    -- -------------------------------------------------------------------------
+    -- 4.6 Concorrência Otimista: Rejeição de Versão Defasada
     -- -------------------------------------------------------------------------
     v_failed := false;
     BEGIN
@@ -355,12 +431,12 @@ BEGIN
     END;
 
     IF NOT v_failed OR v_err_msg NOT LIKE '%ORCAMENTO_CONCURRENCY_CONFLICT%' THEN
-        RAISE EXCEPTION 'TESTE FALHOU 4.5: Versão defasada permitida sem conflito: %', v_err_msg;
+        RAISE EXCEPTION 'TESTE FALHOU 4.6: Versão defasada permitida sem conflito: %', v_err_msg;
     END IF;
-    RAISE NOTICE '✓ 4.5 Concorrência otimista comprovada: rejeição de versão obsoleta.';
+    RAISE NOTICE '✓ 4.6 Concorrência otimista comprovada: rejeição de versão obsoleta.';
 
     -- -------------------------------------------------------------------------
-    -- 4.6 Isolamento entre Conversas (Bloqueio de Sequestro)
+    -- 4.7 Isolamento entre Conversas (Bloqueio de Sequestro)
     -- -------------------------------------------------------------------------
     v_failed := false;
     BEGIN
@@ -381,12 +457,12 @@ BEGIN
     END;
 
     IF NOT v_failed OR v_err_msg NOT LIKE '%ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN%' THEN
-        RAISE EXCEPTION 'TESTE FALHOU 4.6: Sequestro entre conversas permitido: %', v_err_msg;
+        RAISE EXCEPTION 'TESTE FALHOU 4.7: Sequestro entre conversas permitido: %', v_err_msg;
     END IF;
-    RAISE NOTICE '✓ 4.6 Isolamento entre conversas comprovado.';
+    RAISE NOTICE '✓ 4.7 Isolamento entre conversas comprovado.';
 
     -- -------------------------------------------------------------------------
-    -- 4.7 Isolamento entre Clientes no Caminho de Conversa
+    -- 4.8 Isolamento entre Clientes no Caminho de Conversa
     -- -------------------------------------------------------------------------
     v_failed := false;
     BEGIN
@@ -405,12 +481,12 @@ BEGIN
     END;
 
     IF NOT v_failed OR (v_err_msg NOT LIKE '%ORCAMENTO_CROSS_COMPANY_FORBIDDEN%' AND v_err_msg NOT LIKE '%ORCAMENTO_CROSS_CUSTOMER_FORBIDDEN%') THEN
-        RAISE EXCEPTION 'TESTE FALHOU 4.7: Cliente inconsistente com empresa/conversa permitido: %', v_err_msg;
+        RAISE EXCEPTION 'TESTE FALHOU 4.8: Cliente inconsistente com empresa/conversa permitido: %', v_err_msg;
     END IF;
-    RAISE NOTICE '✓ 4.7 Isolamento multi-tenant de cliente comprovado.';
+    RAISE NOTICE '✓ 4.8 Isolamento multi-tenant de cliente comprovado.';
 
     -- -------------------------------------------------------------------------
-    -- 4.8 Validação Financeira Estrita: Subtotal Inconsistente e Total Divergente
+    -- 4.9 Validação Financeira Estrita: Subtotal Inconsistente e Total Divergente
     -- -------------------------------------------------------------------------
     v_failed_subtotal := false;
     BEGIN
@@ -430,7 +506,7 @@ BEGIN
     END;
 
     IF NOT v_failed_subtotal OR v_err_msg NOT LIKE '%FINANCEIRO_SUBTOTAL_INCONSISTENTE%' THEN
-        RAISE EXCEPTION 'TESTE FALHOU 4.8A: Subtotal inconsistente não rejeitado: %', v_err_msg;
+        RAISE EXCEPTION 'TESTE FALHOU 4.9A: Subtotal inconsistente não rejeitado: %', v_err_msg;
     END IF;
 
     v_failed_total := false;
@@ -451,12 +527,12 @@ BEGIN
     END;
 
     IF NOT v_failed_total OR v_err_msg NOT LIKE '%FINANCEIRO_TOTAL_INCONSISTENTE%' THEN
-        RAISE EXCEPTION 'TESTE FALHOU 4.8B: Total divergente da soma não rejeitado: %', v_err_msg;
+        RAISE EXCEPTION 'TESTE FALHOU 4.9B: Total divergente da soma não rejeitado: %', v_err_msg;
     END IF;
-    RAISE NOTICE '✓ 4.8 Invariantes financeiros validados (subtotal e total validados com rigor).';
+    RAISE NOTICE '✓ 4.9 Invariantes financeiros validados (subtotal e total validados com rigor).';
 
     -- -------------------------------------------------------------------------
-    -- TEARDOWN CIRÚRGICO IMEDIATO (Mesma Sessão)
+    -- TEARDOWN CIRÚRGICO IMEDIATO COM CONFIRMAÇÃO DE AUSÊNCIA DE RESÍDUOS
     -- -------------------------------------------------------------------------
     DELETE FROM public.quote_items WHERE quote_id IN (SELECT id FROM public.quotes WHERE company_id IN (v_company_id, v_inv_comp_id));
     DELETE FROM public.quotes WHERE company_id IN (v_company_id, v_inv_comp_id);
@@ -465,8 +541,16 @@ BEGIN
     DELETE FROM public.customers WHERE company_id IN (v_company_id, v_inv_comp_id);
     DELETE FROM public.companies WHERE id IN (v_company_id, v_inv_comp_id);
 
+    -- Checagem de confirmação de 0 resíduos
+    SELECT COUNT(*) INTO v_c_quotes FROM public.quotes WHERE company_id IN (v_company_id, v_inv_comp_id);
+    SELECT COUNT(*) INTO v_c_items FROM public.quote_items WHERE company_id IN (v_company_id, v_inv_comp_id);
+
+    IF v_c_quotes > 0 OR v_c_items > 0 THEN
+        RAISE EXCEPTION 'VIOLAÇÃO DE TEARDOWN: Resíduos sintéticos detectados após exclusão!';
+    END IF;
+
     RAISE NOTICE '====================================================================';
-    RAISE NOTICE 'SUCESSO TOTAL: TODOS OS TESTES ACID PASSARAM E FIXTURES FORAM LIMPAS';
+    RAISE NOTICE 'SUCESSO TOTAL: TODOS OS TESTES ACID PASSARAM E ZERO RESÍDUOS DETECTADOS';
     RAISE NOTICE '====================================================================';
 END $$;
 
@@ -479,8 +563,9 @@ RESET ROLE;
 -- Para validar concorrência real entre duas conexões sem qualquer dependência
 -- de afinidade de sessão ou tabelas temporárias:
 --
--- MÉTODO 1 (RECOMENDADO):
+-- MÉTODO 1 (OFICIAL E RECOMENDADO):
 --   node scripts/run-real-postgres-atomic-test.mjs
+--   (Inspeciona pg_locks e valida o bloqueio determinístico do PID concorrente)
 --
 -- MÉTODO 2 (MANUAL VIA DOIS TERMINAIS PSQL OU DUAS ABAS):
 -- 1. Crie uma conversa dedicada com channel específico (ex: 'test_concorrencia_manual').
