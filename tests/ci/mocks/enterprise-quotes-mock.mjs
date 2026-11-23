@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 
 /**
  * Mock determinístico para a RPC save_enterprise_quote_atomic
- * Emula fielmente as regras de serialização, locks e unicidade parcial do PostgreSQL.
+ * Emula fielmente as regras de serialização, locks, validações financeiras e unicidade parcial do PostgreSQL.
  */
 export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
   const {
@@ -18,14 +18,30 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
   } = args
 
   if (!p_company_id) {
-    return { data: null, error: { message: 'company_id é obrigatório para persistir orçamento.' } }
+    return { data: null, error: { message: 'EMPRESA_OBRIGATORIA: company_id é obrigatório para persistir orçamento.' } }
+  }
+
+  if (p_status && !['draft', 'pending_validation', 'ready', 'approved', 'rejected', 'expired'].includes(p_status)) {
+    return { data: null, error: { message: `STATUS_INVALIDO: Status ${p_status} não é permitido para orçamentos comerciais.` } }
+  }
+
+  if (p_total === null || p_total === undefined || p_total < 0) {
+    return { data: null, error: { message: `TOTAL_INVALIDO: Total do orçamento não pode ser negativo ou nulo.` } }
   }
 
   if (!p_items || !Array.isArray(p_items) || p_items.length === 0) {
-    return { data: null, error: { message: 'O orçamento deve conter pelo menos um item.' } }
+    return { data: null, error: { message: 'ITENS_OBRIGATORIOS: O orçamento deve conter pelo menos um item.' } }
   }
 
-  // Validação consistente de vínculos de catálogo e multi-tenant
+  // Validação de conversa obrigatória para novos orçamentos comerciais
+  if (!p_existing_quote_id && !p_conversation_id) {
+    return {
+      data: null,
+      error: { message: 'CONVERSATION_ID_REQUIRED: conversation_id é obrigatório para criação de novos orçamentos comerciais.' }
+    }
+  }
+
+  // Validação consistente de vínculos de cliente e conversa
   if (mockDb.customers && p_customer_id) {
     const cust = mockDb.customers.find(c => c.id === p_customer_id)
     if (cust && cust.company_id !== p_company_id) {
@@ -54,6 +70,47 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
     }
   }
 
+  // Validação financeira de cada item
+  let sumSubtotals = 0
+  for (const it of p_items) {
+    if (!it.product_id) {
+      return { data: null, error: { message: 'PRODUTO_INVALIDO: product_id é obrigatório em cada item.' } }
+    }
+    if (it.quantity === null || it.quantity === undefined || it.quantity <= 0) {
+      return { data: null, error: { message: `FINANCEIRO_QUANTIDADE_INVALIDA: Quantidade deve ser maior que zero (recebido: ${it.quantity}).` } }
+    }
+    if (it.unit_price === null || it.unit_price === undefined || it.unit_price < 0) {
+      return { data: null, error: { message: `FINANCEIRO_PRECO_INVALIDO: Preço unitário não pode ser negativo (recebido: ${it.unit_price}).` } }
+    }
+    if (it.subtotal === null || it.subtotal === undefined || it.subtotal < 0) {
+      return { data: null, error: { message: `FINANCEIRO_SUBTOTAL_INVALIDO: Subtotal não pode ser negativo (recebido: ${it.subtotal}).` } }
+    }
+    const expectedSubtotal = Math.round(it.quantity * it.unit_price * 100) / 100
+    if (Math.abs(it.subtotal - expectedSubtotal) > 0.001) {
+      return {
+        data: null,
+        error: { message: `FINANCEIRO_SUBTOTAL_INCONSISTENTE: Subtotal ${it.subtotal} diverge do produto quantidade (${it.quantity}) x preço (${it.unit_price}) = ${expectedSubtotal}.` }
+      }
+    }
+    if (mockDb.products) {
+      const prod = mockDb.products.find(p => p.id === it.product_id)
+      if (!prod) {
+        return { data: null, error: { message: `PRODUTO_NOT_FOUND: Produto ${it.product_id} não localizado no banco de dados.` } }
+      }
+      if (prod.company_id && prod.company_id !== p_company_id) {
+        return { data: null, error: { message: `ORCAMENTO_CROSS_COMPANY_FORBIDDEN: O produto ${it.product_id} pertence a outra empresa.` } }
+      }
+    }
+    sumSubtotals += it.subtotal
+  }
+
+  if (Math.abs(sumSubtotals - p_total) > 0.001) {
+    return {
+      data: null,
+      error: { message: `FINANCEIRO_TOTAL_INCONSISTENTE: Total informado (${p_total}) diverge da soma dos itens (${sumSubtotals}).` }
+    }
+  }
+
   let targetQuote = null
 
   if (p_existing_quote_id) {
@@ -72,10 +129,18 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
       }
     }
 
-    if (p_conversation_id && targetQuote.metadata?.conversation_id && targetQuote.metadata.conversation_id !== p_conversation_id) {
-      return {
-        data: null,
-        error: { message: `ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN: Orçamento pertence à conversa ${targetQuote.metadata.conversation_id}.` }
+    if (targetQuote.metadata?.conversation_id) {
+      if (!p_conversation_id) {
+        return {
+          data: null,
+          error: { message: `ORCAMENTO_CONVERSATION_REQUIRED: O orçamento ${p_existing_quote_id} pertence a uma conversa e não pode ser atualizado sem conversation_id.` }
+        }
+      }
+      if (p_conversation_id !== targetQuote.metadata.conversation_id) {
+        return {
+          data: null,
+          error: { message: `ORCAMENTO_CROSS_CONVERSATION_FORBIDDEN: Orçamento pertence à conversa ${targetQuote.metadata.conversation_id}.` }
+        }
       }
     }
 
@@ -133,8 +198,11 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
   const quoteId = targetQuote ? targetQuote.id : crypto.randomUUID()
   const nowIso = new Date().toISOString()
 
-  // Sanitização de metadados
-  const cleanMetadata = { ...p_metadata }
+  // Preservação e Sanitização de Metadados
+  const cleanMetadata = targetQuote
+    ? { ...(targetQuote.metadata || {}), ...p_metadata }
+    : { ...p_metadata }
+
   delete cleanMetadata.version
   delete cleanMetadata.company_id
   delete cleanMetadata.customer_id
@@ -143,6 +211,7 @@ export function handleSaveEnterpriseQuoteAtomicMock(mockDb, args) {
   delete cleanMetadata.updated_at
   delete cleanMetadata.status
   delete cleanMetadata.total
+
   if (p_conversation_id) {
     cleanMetadata.conversation_id = p_conversation_id
   } else if (targetQuote?.metadata?.conversation_id) {

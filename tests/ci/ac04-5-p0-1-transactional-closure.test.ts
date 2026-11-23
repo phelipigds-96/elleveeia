@@ -42,6 +42,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
 
   const PROD_1 = '00000000-0000-0000-0000-000000000001'
   const PROD_2 = '00000000-0000-0000-0000-000000000002'
+  const PROD_3 = '00000000-0000-0000-0000-000000000003'
 
   let mockDb: any = null
   let simulateRpcFailure: boolean = false
@@ -143,9 +144,28 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
           unit: 'UN',
           active: true,
           metadata: {}
+        },
+        {
+          id: PROD_3,
+          company_id: TENANT_B,
+          name: 'PRODUTO EXCLUSIVO TENANT B',
+          sku: 'SKU-TB-001',
+          unit: 'UN',
+          active: true,
+          metadata: {}
         }
       ],
       prices: [
+        {
+          id: 'price-3-retail',
+          company_id: TENANT_B,
+          product_id: PROD_3,
+          price: 50.00,
+          price_type: 'retail',
+          min_quantity: 1,
+          max_quantity: 999,
+          active: true
+        },
         {
           id: 'price-1-retail',
           company_id: TENANT_A,
@@ -608,7 +628,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       companyId: TENANT_B,
       customerId: 'cust-b-1',
       conversationId: CONV_C,
-      items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+      items: [{ productId: PROD_3, quantity: 1, unit: 'UN' }]
     })
 
     const [qA, qB, qC] = await Promise.all([p1, p2, p3])
@@ -833,7 +853,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       companyId: TENANT_B,
       customerId: 'cust-b-1',
       conversationId: CONV_C,
-      items: [{ productId: PROD_1, quantity: 1, unit: 'UN' }]
+      items: [{ productId: PROD_3, quantity: 1, unit: 'UN' }]
     })
 
     // Tenant A tenta consultar o orçamento de Tenant B usando allowCrossConversation: true
@@ -888,6 +908,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       p_conversation_id: CONV_A,
       p_existing_quote_id: quote.id,
       p_expected_version: null, // Nulo proposital!
+      p_total: 35,
       p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
     })
 
@@ -901,6 +922,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       p_company_id: TENANT_A,
       p_customer_id: CUSTOMER_A,
       p_conversation_id: CONV_A,
+      p_total: 35,
       p_metadata: {
         conversation_id: 'fake-conversation-id',
         version: 999,
@@ -940,6 +962,7 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       p_company_id: TENANT_A,
       p_customer_id: 'cust-foreign',
       p_conversation_id: CONV_A,
+      p_total: 35,
       p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
     })
     assert.equal(resWrongCustomer.data, null)
@@ -950,9 +973,105 @@ describe('ELLEVEE IA — AC-04.5-P0.1 | FECHAMENTO TRANSACIONAL E CONCORRÊNCIA'
       p_company_id: TENANT_B,
       p_customer_id: 'cust-foreign',
       p_conversation_id: CONV_A,
+      p_total: 35,
       p_items: [{ product_id: PROD_1, quantity: 1, unit_price: 35, subtotal: 35 }]
     })
     assert.equal(resWrongConversation.data, null)
     assert.match(resWrongConversation.error.message, /ORCAMENTO_CROSS_COMPANY_FORBIDDEN.*conversa.*pertence a outra empresa/i)
+  })
+
+  test('AC-04.5-P0.3 — Cenário 19: Invariantes financeiros da RPC rejeitam inconsistências de subtotal e total', async () => {
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+
+    // 1. Subtotal inconsistente: 2 x 35 = 70, mas envia 80
+    const resBadSubtotal = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_total: 80,
+      p_items: [{ product_id: PROD_1, quantity: 2, unit_price: 35, subtotal: 80 }]
+    })
+    assert.equal(resBadSubtotal.data, null)
+    assert.match(resBadSubtotal.error.message, /FINANCEIRO_SUBTOTAL_INCONSISTENTE/i)
+
+    // 2. Total divergente da soma dos itens: soma = 70, mas envia total = 100
+    const resBadTotal = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_total: 100,
+      p_items: [{ product_id: PROD_1, quantity: 2, unit_price: 35, subtotal: 70 }]
+    })
+    assert.equal(resBadTotal.data, null)
+    assert.match(resBadTotal.error.message, /FINANCEIRO_TOTAL_INCONSISTENTE/i)
+  })
+
+  test('AC-04.5-P0.3 — Cenário 20: Preservação de metadados em atualização mantém histórico e notas anteriores', async () => {
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+
+    // 1. Criação inicial com metadados comerciais
+    const createRes = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_total: 70,
+      p_metadata: {
+        nota_comercial_inicial: 'Cliente solicitou entrega urgente',
+        canal_origem: 'whatsapp'
+      },
+      p_items: [{ product_id: PROD_1, quantity: 2, unit_price: 35, subtotal: 70 }]
+    })
+    assert.ok(createRes.data)
+
+    // 2. Atualização enviando apenas novo campo parcial de metadados
+    const updateRes = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_existing_quote_id: createRes.data.id,
+      p_expected_version: 1,
+      p_total: 105,
+      p_metadata: {
+        desconto_adicional: '3%'
+      },
+      p_items: [{ product_id: PROD_1, quantity: 3, unit_price: 35, subtotal: 105 }]
+    })
+    assert.ok(updateRes.data)
+    assert.equal(updateRes.data.version, 2)
+
+    const quoteInDb = mockDb.quotes.find(q => q.id === createRes.data.id)
+    assert.ok(quoteInDb)
+    // Campo anterior deve ter sido preservado
+    assert.equal(quoteInDb.metadata.nota_comercial_inicial, 'Cliente solicitou entrega urgente')
+    assert.equal(quoteInDb.metadata.canal_origem, 'whatsapp')
+    // Novo campo foi adicionado
+    assert.equal(quoteInDb.metadata.desconto_adicional, '3%')
+    // Versão foi incrementada
+    assert.equal(quoteInDb.metadata.version, 2)
+  })
+
+  test('AC-04.5-P0.3 — Cenário 21: Orçamento vinculado a conversa exige conversation_id na atualização', async () => {
+    const { handleSaveEnterpriseQuoteAtomicMock } = await import('./mocks/enterprise-quotes-mock.mjs')
+
+    const createRes = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: CONV_A,
+      p_total: 70,
+      p_items: [{ product_id: PROD_1, quantity: 2, unit_price: 35, subtotal: 70 }]
+    })
+
+    // Tenta atualizar sem conversation_id
+    const updateWithoutConv = handleSaveEnterpriseQuoteAtomicMock(mockDb, {
+      p_company_id: TENANT_A,
+      p_customer_id: CUSTOMER_A,
+      p_conversation_id: null, // Nulo!
+      p_existing_quote_id: createRes.data.id,
+      p_expected_version: 1,
+      p_total: 70,
+      p_items: [{ product_id: PROD_1, quantity: 2, unit_price: 35, subtotal: 70 }]
+    })
+    assert.equal(updateWithoutConv.data, null)
+    assert.match(updateWithoutConv.error.message, /ORCAMENTO_CONVERSATION_REQUIRED/i)
   })
 })
