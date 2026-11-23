@@ -483,7 +483,7 @@ async function setupFixtures(client1, client2, manifest) {
     INSERT INTO public.products (id, company_id, name, normalized_name, active)
     VALUES 
       ($1, $2, $3, $4, true),
-      ($5, $2, $6, $7, true);
+      ($5, $6, $7, $8, true);
   `, [
     prodA1, companyA, `Produto Sintético A ${runSuffix}`, `produto sintetico a ${runSuffix}`,
     prodA2, companyA, `Produto Sintético B ${runSuffix}`, `produto sintetico b ${runSuffix}`
