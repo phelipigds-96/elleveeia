@@ -13,12 +13,7 @@ import {
   Clock,
   Settings,
   HelpCircle,
-  Sun,
   ChevronDown,
-  Building2,
-  Headphones,
-  CheckCircle2,
-  Radio,
   Menu,
   X,
   BookOpen,
@@ -28,6 +23,7 @@ import {
 } from "lucide-react"
 import { logout } from "@/app/(auth)/actions"
 import { ElleveeLogo } from "@/components/ui/ellevee-logo"
+import { toast } from "@/components/ui/toast"
 
 interface DashboardShellProps {
   userRole?: string
@@ -103,7 +99,11 @@ export function DashboardShell({
     if (!mobileMenuOpen) return null
 
     return (
-      <div className="fixed inset-0 z-50 flex md:hidden" role="dialog" aria-modal="true">
+      <div
+        className={`fixed inset-0 z-50 flex ${isConversationsChat ? "lg:hidden" : "md:hidden"}`}
+        role="dialog"
+        aria-modal="true"
+      >
         {/* Backdrop escurecido com toque para fechar */}
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
@@ -125,7 +125,7 @@ export function DashboardShell({
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                className="h-11 w-11 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Fechar menu"
                 aria-label="Fechar menu de navegação"
               >
@@ -209,7 +209,7 @@ export function DashboardShell({
             <form action={logout}>
               <button
                 type="submit"
-                className="p-2 rounded-lg text-white/70 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                className="h-11 w-11 flex items-center justify-center rounded-lg text-white/70 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                 title="Sair da conta"
                 aria-label="Sair da conta"
               >
@@ -234,7 +234,7 @@ export function DashboardShell({
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
-                className="p-1.5 -ml-1 text-ellevee-ink hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                className="h-11 w-11 -ml-2 flex items-center justify-center text-ellevee-ink hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 title="Menu de navegação"
                 aria-label="Abrir menu de navegação"
               >
@@ -251,7 +251,7 @@ export function DashboardShell({
             <div className="flex items-center gap-2">
               <Link
                 href="/conversations"
-                className="h-8 px-3 rounded-full bg-[#005d4b] hover:bg-[#004738] text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-transform active:scale-95"
+                className="h-8 px-3 rounded-full bg-ellevee-deep-ink hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-transform active:scale-95"
                 title="Ir para o Chat de Atendimento"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
@@ -277,82 +277,66 @@ export function DashboardShell({
   }
 
   // =========================================================================
-  // MODO WHATSAPP OMNICHANNEL FULL-BLEED PARA /conversations
+  // MODO FLUENT CORPORATE WORKSPACE FULL-BLEED PARA /conversations
   // =========================================================================
   return (
-    <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden bg-[#efeae2] relative">
-      {/* 1. TOP BAR TEAL ESTILO WHATSAPP BUSINESS COM MENU MOBILE (Oculta em smartphones quando uma conversa está aberta) */}
-      <header className={`${hasActiveMobileChat ? "hidden lg:flex" : "flex"} h-14 bg-[#005d4b] text-white px-3 sm:px-4 items-center justify-between shrink-0 shadow-sm z-30 select-none`}>
-        {/* Esquerda: Botão Menu Mobile + Identidade da Empresa e Canal WhatsApp Conectado */}
-        <div className="flex items-center gap-2 sm:gap-3">
+    <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden bg-ellevee-warm-ivory relative">
+      {/* 1. TOP BAR CORPORATIVA ELLEVEE (Oculta em < lg quando uma conversa está aberta) */}
+      <header className={`${hasActiveMobileChat ? "hidden lg:flex" : "flex"} h-14 bg-white border-b border-ellevee-border text-ellevee-deep-ink px-3 sm:px-4 items-center justify-between shrink-0 shadow-2xs z-30 select-none`}>
+        {/* Esquerda: Botão Menu Mobile/Tablet (< lg) + Identidade da Empresa e Canal Conectado */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className="p-1.5 -ml-1 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+            className="lg:hidden h-11 w-11 -ml-2 flex items-center justify-center text-ellevee-deep-ink hover:bg-ellevee-stone-subtle rounded-lg transition-colors cursor-pointer shrink-0"
             title="Menu de navegação"
             aria-label="Abrir menu de navegação"
           >
-            <Menu className="h-6 w-6" />
+            <Menu className="h-5 w-5" />
           </button>
 
-          <div className="flex items-center gap-2 bg-white/10 hover:bg-white/15 px-2.5 sm:px-3 py-1.5 rounded-lg border border-white/20 transition-colors">
-            <span className="text-[#25d366]">
-              <WhatsAppHeaderIcon className="h-4 w-4" />
-            </span>
-            <span className="font-semibold text-xs sm:text-sm tracking-tight text-white truncate max-w-[120px] sm:max-w-none">
+          <div className="flex items-center gap-2 bg-ellevee-stone-subtle px-2.5 sm:px-3 py-1.5 rounded-lg border border-ellevee-border min-w-0">
+            <ElleveeLogo variant="icon" size="xs" />
+            <span className="font-display font-semibold text-xs sm:text-sm tracking-tight text-ellevee-deep-ink truncate max-w-[140px] sm:max-w-none">
               {companyName}
             </span>
-            <span className="hidden xs:inline-flex items-center gap-1 text-[11px] font-medium bg-[#25d366]/20 text-[#25d366] px-1.5 py-0.2 rounded border border-[#25d366]/30">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#25d366] animate-pulse" />
-              Online
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold bg-ellevee-success/10 text-ellevee-success-strong px-2 py-0.5 rounded-full border border-ellevee-success/25 shrink-0">
+              <WhatsAppHeaderIcon className="h-3 w-3 text-ellevee-success" />
+              <span>WhatsApp Online</span>
             </span>
           </div>
         </div>
 
-        {/* Direita: Seletor de Unidade, Tema, Notificações e Perfil */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          {/* Seletor de Empresa/Unidade */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white/90 bg-black/10 hover:bg-black/20 rounded-md cursor-pointer transition-colors">
-            <span>{companyName}</span>
-            <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-          </div>
-
-          {/* Ícone de Tema (Sun) */}
-          <button
-            type="button"
-            className="p-1.5 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors"
-            title="Alternar tema"
-          >
-            <Sun className="h-4 w-4" />
-          </button>
-
+        {/* Direita: Notificações e Perfil */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Notificações (Bell / Web Push PWA) */}
-          <PushNotificationsButton variant="dark" />
+          <PushNotificationsButton variant="light" />
 
           {/* Avatar / Perfil do Operador */}
-          <div className="flex items-center gap-2 pl-1 border-l border-white/20">
-            <div className="h-8 w-8 rounded-full bg-[#004738] border border-white/30 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+          <div className="flex items-center gap-2 pl-2 border-l border-ellevee-border">
+            <div className="h-8 w-8 rounded-full bg-ellevee-deep-ink text-white flex items-center justify-center font-bold text-xs shadow-2xs">
               {userInitials}
             </div>
-            <span className="hidden md:inline text-xs font-medium text-white/90 max-w-[120px] truncate">
+            <span className="hidden lg:inline text-xs font-semibold text-ellevee-deep-ink max-w-[140px] truncate">
               {displayName}
             </span>
           </div>
         </div>
       </header>
 
-      {/* 2. CORPO: SLIM ICON-RAIL (OCULTO EM MOBILE) + MAIN FULL-BLEED */}
+      {/* 2. CORPO: SLIM ICON-RAIL CORPORATIVO (OCULTO EM < lg) + MAIN FULL-BLEED */}
       <div className="flex flex-1 min-h-0 w-full overflow-hidden">
-        {/* Barra Lateral Estreita (Icon Rail) — oculta em mobile para liberar 100% da tela */}
-        <aside className="w-14 bg-[#004738] text-white hidden md:flex flex-col items-center justify-between py-3 shrink-0 border-r border-[#00382c] z-20">
+        {/* Rail Corporativo Compacto (Deep Ink #202520) com indicador Fluent */}
+        <aside className="w-14 bg-ellevee-deep-ink text-white/75 hidden lg:flex flex-col items-center justify-between py-3 shrink-0 border-r border-white/10 z-20">
           {/* Ícones de Navegação Superiores */}
           <div className="flex flex-col items-center gap-2 w-full">
-            {/* Conversas (Ativo) */}
+            {/* Conversas (Ativo com Pill Indicator Gradiente) */}
             <Link
               href="/conversations"
-              className="h-10 w-10 rounded-xl bg-[#005d4b] text-white flex items-center justify-center shadow-xs transition-transform active:scale-95"
+              className="relative h-10 w-10 rounded-xl bg-white/12 text-white flex items-center justify-center shadow-2xs transition-transform active:scale-95"
               title="Conversas em Andamento"
             >
+              <span aria-hidden="true" className="absolute -left-2 h-5 w-[3px] rounded-full bg-ellevee-gradient" />
               <MessageSquare className="h-5 w-5" />
             </Link>
 
@@ -415,9 +399,15 @@ export function DashboardShell({
             </Link>
             <button
               type="button"
-              className="h-10 w-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+              className="h-10 w-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
               title="Ajuda e Suporte"
-              onClick={() => alert("Central de Ajuda Ellevee IA")}
+              aria-label="Ajuda e Suporte"
+              onClick={() =>
+                toast.info(
+                  "Central de Ajuda Ellevee IA",
+                  "Consulte Configurações da organização ou acione o suporte administrativo."
+                )
+              }
             >
               <HelpCircle className="h-5 w-5" />
             </button>
@@ -425,7 +415,7 @@ export function DashboardShell({
         </aside>
 
         {/* Área Central / Chat sem Padding (Full Bleed) */}
-        <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-[#efeae2]">
+        <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-ellevee-warm-ivory">
           {children}
         </main>
       </div>

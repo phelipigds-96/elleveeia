@@ -24,30 +24,30 @@ export type StatusView = {
 const VIEWS: Record<StatusViewKey, StatusView> = {
   waiting: {
     key: "waiting",
-    label: "Aguardando atendimento",
-    chipClass: "bg-ellevee-warning/10 text-ellevee-warning-strong border-ellevee-warning/40",
+    label: "Aguardando",
+    chipClass: "bg-ellevee-warning/10 text-ellevee-warning-strong border-ellevee-warning/35",
     dotClass: "bg-ellevee-warning",
     Icon: Hourglass,
   },
   in_progress: {
     key: "in_progress",
-    label: "Em atendimento",
-    chipClass: "bg-ellevee-success/10 text-ellevee-success-strong border-ellevee-success/40",
+    label: "Com operador",
+    chipClass: "bg-ellevee-success/10 text-ellevee-success-strong border-ellevee-success/35",
     dotClass: "bg-ellevee-success",
     Icon: MessageSquare,
   },
   ai: {
     key: "ai",
-    label: "Em aberto",
-    chipClass: "bg-ellevee-info/10 text-ellevee-info-strong border-ellevee-info/40",
-    dotClass: "bg-ellevee-info",
+    label: "IA ativa",
+    chipClass: "bg-[#F3EEFE] text-[#5F1EC2] border-[#7028D9]/25",
+    dotClass: "bg-ellevee-purple",
     Icon: Bot,
   },
   closed: {
     key: "closed",
     label: "Finalizado",
-    chipClass: "bg-ellevee-stone-subtle text-ellevee-ink-muted border-ellevee-stone",
-    dotClass: "bg-ellevee-stone",
+    chipClass: "bg-ellevee-stone-subtle text-ellevee-text-secondary border-ellevee-border",
+    dotClass: "bg-ellevee-text-secondary",
     Icon: CheckCircle2,
   },
 }
@@ -77,13 +77,21 @@ export function StatusChip({
   className?: string
 }) {
   const Icon = view.Icon
+  const cleanDetail = detail?.trim()
+  const isRedundantDetail =
+    !cleanDetail ||
+    cleanDetail.toLowerCase() === view.label.trim().toLowerCase() ||
+    (view.key === "ai" && /^(ia|ai|ia ativa|agente|agente ia|bot)$/i.test(cleanDetail))
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-meta font-medium ${view.chipClass} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${view.chipClass} ${className}`}
     >
       <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="truncate">{view.label}</span>
-      {detail ? <span className="font-mono opacity-80">· {detail}</span> : null}
+      {!isRedundantDetail ? (
+        <span className="font-mono text-[10.5px] opacity-85 truncate">· {cleanDetail}</span>
+      ) : null}
     </span>
   )
 }

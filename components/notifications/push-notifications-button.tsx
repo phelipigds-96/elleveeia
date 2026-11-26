@@ -311,8 +311,8 @@ export function PushNotificationsButton({ variant = 'dark' }: PushNotificationsB
 
   const buttonClasses =
     variant === 'dark'
-      ? 'p-1.5 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors relative cursor-pointer'
-      : 'h-8 w-8 rounded-lg border border-ellevee-border bg-white hover:bg-slate-50 text-ellevee-text-secondary hover:text-ellevee-deep-ink flex items-center justify-center transition-colors relative cursor-pointer shadow-2xs'
+      ? 'h-11 w-11 lg:h-9 lg:w-9 rounded-full flex items-center justify-center hover:bg-white/10 text-white/90 hover:text-white transition-colors relative cursor-pointer'
+      : 'h-10 w-10 sm:h-8 sm:w-8 rounded-lg border border-ellevee-border bg-white hover:bg-slate-50 text-ellevee-text-secondary hover:text-ellevee-deep-ink flex items-center justify-center transition-colors relative cursor-pointer shadow-2xs'
 
   return (
     <div className="relative">
@@ -367,7 +367,7 @@ export function PushNotificationsButton({ variant = 'dark' }: PushNotificationsB
           <div
             role="dialog"
             aria-label="Configurações de notificação"
-            className="fixed inset-x-3 top-14 sm:inset-x-auto sm:right-4 sm:top-14 sm:w-80 z-50 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl p-4 space-y-3.5"
+            className="fixed inset-x-3 top-14 sm:inset-x-auto sm:right-4 sm:top-14 sm:w-80 max-h-[calc(var(--ellevee-vvh,100dvh)-4.5rem)] overflow-y-auto overscroll-contain scroll-slim z-50 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl p-4 space-y-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -399,7 +399,7 @@ export function PushNotificationsButton({ variant = 'dark' }: PushNotificationsB
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="h-11 w-11 sm:h-8 sm:w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 aria-label="Fechar"
               >
                 <X className="h-4 w-4" />

@@ -110,4 +110,36 @@ runSuite('Etapa AC-04.5-P0.5 — Guardas de Segurança e Confiabilidade do Runne
   'tests/ci/ac04-5-p0-5-runner-offline-guards.test.ts',
 ])
 
+runSuite('Etapa UI-01 — Fundações Responsivas e Experiência Chrome Android (5 Cenários)', [
+  'tests/ci/ui-01-conversations-responsive.test.ts',
+])
+
+runSuite('Etapa UI-02 — Ellevee Workspace Fluent Inspired na Rota /conversations (7 Cenários)', [
+  'tests/ci/ui-02-conversations-fluent.test.ts',
+])
+
+runSuite('Etapa UI-03.1 — Extração Modular da Lista de Conversas (4 Cenários)', [
+  'tests/ci/ui-03-1-conversation-list.test.ts',
+])
+
+runSuite('Etapa UI-03.2 — Modularização do Cabeçalho e Controles de Atendimento (3 Cenários)', [
+  'tests/ci/ui-03-2-conversation-header.test.ts',
+])
+
+runSuite('Etapa UI-03.3 — Modularização do Histórico de Mensagens (4 Cenários)', [
+  'tests/ci/ui-03-3-message-stream.test.ts',
+])
+
+runSuite('Etapa UI-03.4 — Modularização do Composer de Mensagens e Integridade (6 Cenários)', [
+  'tests/ci/ui-03-4-composer-integrity.test.ts',
+])
+
+runSuite('Etapa UI-03.5 — Modularização do Inspector e Modais Operacionais (5 Cenários)', [
+  'tests/ci/ui-03-5-inspector-dialogs.test.ts',
+])
+
+runSuite('Etapa UI-03.6 — Confiabilidade Consolidada e Contratos Arquiteturais UI-03 (8 Cenários)', [
+  'tests/ci/ui-03-6-consolidated-reliability.test.ts',
+])
+
 console.log('\n✅ Todas as suítes do Gate de CI passaram com sucesso.')

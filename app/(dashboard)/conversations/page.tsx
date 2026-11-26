@@ -42,6 +42,7 @@ export default async function ConversationsPage({
         initialConversations={initialConversations}
         initialMessages={initialMessages}
         initialSelectedId={initialSelectedId}
+        hasExplicitSelection={Boolean(matchedRequested)}
         currentUser={currentUser}
         initialCloseReasons={chatOps.closeReasons}
         requireCloseReason={chatOps.requireCloseReason}

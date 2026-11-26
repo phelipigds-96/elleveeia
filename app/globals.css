@@ -254,30 +254,29 @@
   }
 
   /* Balões de mensagem com tipografia e ritmo vertical confortáveis */
-    /* Papel de parede autêntico WhatsApp Doodle */
+  /* Fundo corporativo do feed de conversas (Ellevee Stone Subtle) */
   .whatsapp-chat-bg {
-    background-color: #efeae2;
-    background-image: radial-gradient(#d4cdc3 1px, transparent 1px), radial-gradient(#d4cdc3 1px, #efeae2 1px);
-    background-size: 24px 24px;
-    background-position: 0 0, 12px 12px;
+    background-color: #f8f8f6;
   }
 
-  /* Balões de mensagem estilo WhatsApp */
+  /* Balões de mensagem corporativos (Ellevee Workspace) */
   .msg-bubble {
-    border-radius: 8px;
-    padding: 8px 12px;
+    border-radius: 12px;
+    padding: 10px 14px;
     font-size: 14px;
     line-height: 1.5;
-    box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+    box-shadow: 0 1px 2px rgba(32, 37, 32, 0.05);
     word-break: break-word;
   }
   .msg-bubble-in {
     background-color: #ffffff;
-    color: #111827;
+    border: 1px solid #e5e5df;
+    color: #202520;
   }
   .msg-bubble-out {
-    background-color: #d9fdd3;
-    color: #111827;
+    background-color: #202520;
+    border: 1px solid #202520;
+    color: #ffffff;
   }
   .msg-bubble-system {
     background-color: #F3F2ED;

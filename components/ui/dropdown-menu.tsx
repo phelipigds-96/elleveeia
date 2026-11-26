@@ -3,6 +3,7 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
+import { computeDropdownPosition, type ComputedDropdownCoords } from "@/lib/ui/conversations-viewport"
 
 interface DropdownMenuProps {
   trigger: React.ReactNode
@@ -14,38 +15,41 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
   const [open, setOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLDivElement>(null)
   const menuRef = React.useRef<HTMLDivElement>(null)
-  const [coords, setCoords] = React.useState<{ top: number; left?: number; right?: number } | null>(null)
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const [coords, setCoords] = React.useState<ComputedDropdownCoords | null>(null)
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
 
   const updatePosition = React.useCallback(() => {
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - rect.bottom
-    const estimatedHeight = 240
+    const vv = window.visualViewport
+    const viewportWidth = vv?.width ?? window.innerWidth
+    const viewportHeight = vv?.height ?? window.innerHeight
+    const offsetTop = vv?.offsetTop ?? 0
+    const offsetLeft = vv?.offsetLeft ?? 0
 
-    let top = rect.bottom + 4
-    if (spaceBelow < estimatedHeight && rect.top > estimatedHeight) {
-      top = rect.top - estimatedHeight - 4
-    }
+    const measuredRect = menuRef.current?.getBoundingClientRect()
+    const menuWidth = measuredRect?.width && measuredRect.width > 0 ? measuredRect.width : 208
+    const menuHeight = measuredRect?.height && measuredRect.height > 0 ? measuredRect.height : 240
 
-    if (align === "right") {
-      setCoords({
-        top,
-        right: Math.max(8, window.innerWidth - rect.right),
+    setCoords(
+      computeDropdownPosition({
+        triggerRect: rect,
+        menuWidth,
+        menuHeight,
+        viewportWidth,
+        viewportHeight,
+        offsetTop,
+        offsetLeft,
+        align,
       })
-    } else {
-      setCoords({
-        top,
-        left: Math.max(8, rect.left),
-      })
-    }
+    )
   }, [align])
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (open) {
       updatePosition()
     }
@@ -53,6 +57,10 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
 
   React.useEffect(() => {
     if (!open) return
+
+    const rafId = window.requestAnimationFrame(() => {
+      updatePosition()
+    })
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node
@@ -64,20 +72,34 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
       }
     }
 
-    const handleScrollOrResize = () => {
-      setOpen(false)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+      }
     }
 
+    const handleScrollOrResize = () => {
+      updatePosition()
+    }
+
+    const vv = window.visualViewport
     document.addEventListener("mousedown", handleClickOutside)
+    window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("scroll", handleScrollOrResize, true)
     window.addEventListener("resize", handleScrollOrResize)
+    vv?.addEventListener("resize", handleScrollOrResize)
+    vv?.addEventListener("scroll", handleScrollOrResize)
 
     return () => {
+      window.cancelAnimationFrame(rafId)
       document.removeEventListener("mousedown", handleClickOutside)
+      window.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("scroll", handleScrollOrResize, true)
       window.removeEventListener("resize", handleScrollOrResize)
+      vv?.removeEventListener("resize", handleScrollOrResize)
+      vv?.removeEventListener("scroll", handleScrollOrResize)
     }
-  }, [open])
+  }, [open, updatePosition])
 
   return (
     <div className="relative inline-block text-left">
@@ -95,14 +117,16 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
       {open && coords && mounted && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
+          role="menu"
           onClick={() => setOpen(false)}
           style={{
             position: "fixed",
             top: coords.top,
+            maxHeight: coords.maxHeight,
             ...(coords.right !== undefined ? { right: coords.right } : { left: coords.left }),
           }}
           className={cn(
-            "z-[9999] min-w-[13rem] overflow-hidden rounded-xl border border-ellevee-stone/90 bg-white p-1.5 text-ellevee-ink shadow-xl shadow-black/10 animate-in fade-in-80 zoom-in-95"
+            "z-[9999] min-w-[13rem] max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain scroll-slim rounded-xl border border-ellevee-stone/90 bg-white p-1.5 text-ellevee-ink shadow-xl shadow-black/10 animate-in fade-in-80 zoom-in-95"
           )}
         >
           {children}
@@ -128,13 +152,22 @@ export function DropdownMenuItem({
 }) {
   return (
     <div
-      onClick={(e) => {
+      role="menuitem"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      onClick={() => {
         if (!disabled && onClick) {
           onClick()
         }
       }}
+      onKeyDown={(e) => {
+        if (!disabled && onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault()
+          onClick()
+        }
+      }}
       className={cn(
-        "relative flex select-none items-center rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors",
+        "relative flex select-none items-center rounded-lg px-2.5 min-h-[44px] sm:min-h-0 py-2 sm:py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ellevee-ink/40",
         disabled
           ? "opacity-50 cursor-not-allowed text-ellevee-sage pointer-events-none"
           : "cursor-pointer",
