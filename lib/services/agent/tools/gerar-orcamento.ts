@@ -31,6 +31,9 @@ export const gerarOrcamentoTool: ToolDefinition = {
     let quoteItems: Array<{ productId: string; quantity: number }> = []
 
     if (items && items.length > 0) {
+      const cartItems = context.workingMemory?.activeCart || []
+      const cartMap = new Map(cartItems.map((ci: any) => [ci.productId, ci]))
+
       for (const item of items) {
         if (!item.product_id || !UUID_REGEX.test(item.product_id.trim())) {
           return {
@@ -46,9 +49,18 @@ export const gerarOrcamentoTool: ToolDefinition = {
           }
         }
 
+        const cartItem: any = cartMap.get(item.product_id.trim())
+        const pkgFactor = cartItem?.packageFactor
+        let qty = item.quantity
+        if (pkgFactor && pkgFactor > 1 && cartItem?.requestedUnit && /^(?:cx|caixa|caixas|fardo|fardos|fd)$/i.test(cartItem.requestedUnit) && qty < pkgFactor) {
+          qty = qty * pkgFactor
+        } else if (cartItem?.internalQuantity && cartItem.internalQuantity > qty) {
+          qty = cartItem.internalQuantity
+        }
+
         quoteItems.push({
           productId: item.product_id.trim(),
-          quantity: item.quantity
+          quantity: qty
         })
       }
     } else {
@@ -58,6 +70,16 @@ export const gerarOrcamentoTool: ToolDefinition = {
         return {
           success: false,
           error: 'O carrinho está vazio. Adicione produtos com preços confirmados antes de gerar o orçamento.'
+        }
+      }
+
+      // Validação estrita: não gerar orçamento se houver pendência de confirmação no carrinho
+      const unconfirmed = cartItems.filter((i: any) => !i.isPriceConfirmed || i.status === 'pending' || i.status === 'ambiguous' || i.status === 'unavailable')
+      if (unconfirmed.length > 0) {
+        const itemNames = unconfirmed.map((i: any) => i.name).join(', ')
+        return {
+          success: false,
+          error: `Não é possível gerar o orçamento formal: existem itens no carrinho com pendência de preço ou embalagem (${itemNames}). Esclareça a dúvida comercial antes de formalizar.`
         }
       }
 
@@ -71,7 +93,7 @@ export const gerarOrcamentoTool: ToolDefinition = {
 
       quoteItems = confirmed.map((i: any) => ({
         productId: i.productId.trim(),
-        quantity: i.quantity
+        quantity: i.internalQuantity ?? i.quantity
       }))
     }
 

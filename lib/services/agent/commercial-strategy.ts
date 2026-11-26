@@ -508,12 +508,23 @@ export function applyCommercialStrategy(
       return decorateConsultativePayload(basePayload, searchResult, candidatePrices, parsedQuery)
     }
 
-    const isWholesaleQuery = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
-    const nonWholesaleMatches = targetMatches.filter(m => !/\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(m.name || ''))
-    const displayMatches = (!isWholesaleQuery && nonWholesaleMatches.length > 0) ? nonWholesaleMatches : targetMatches
+    const isTierComparison = Boolean(searchResult.parsedQuery?.isPriceTierComparison || parsedQuery?.isPriceTierComparison)
+    const effectiveSaleUnit = searchResult.parsedQuery?.saleUnit || parsedQuery?.saleUnit
+    const isWholesaleQuery =
+      effectiveSaleUnit === 'CX' ||
+      effectiveSaleUnit === 'FD' ||
+      /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
+    const isWholesaleName = (name: string) => /\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(name || '')
+    const wholesaleMatches = targetMatches.filter(m => isWholesaleName(m.name || '') || (m.packageFactor && m.packageFactor > 1))
+    const nonWholesaleMatches = targetMatches.filter(m => !isWholesaleName(m.name || ''))
+    const displayMatches = isTierComparison
+      ? targetMatches
+      : isWholesaleQuery
+      ? (wholesaleMatches.length > 0 ? wholesaleMatches : targetMatches)
+      : (nonWholesaleMatches.length > 0 ? nonWholesaleMatches : targetMatches)
 
-    const segments = detectProductSegments(targetMatches)
-    const isBroadSegmented = segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery)
+    const segments = detectProductSegments(displayMatches)
+    const isBroadSegmented = !isWholesaleQuery && !isTierComparison && segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete|uht)\b/i.test(normalizedQuery)
 
     const payload: any = {
       strategy: 'brand_specific_discovery',
@@ -548,16 +559,27 @@ export function applyCommercialStrategy(
 
   // 5. GENERIC DISCOVERY
   const isGeneric = isGenericProductQuery(normalizedQuery, uniqueBrands)
-  const isWholesaleQuery = /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|atacado|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
-  const nonWholesaleMatches = searchResult.matches.filter(m => !/\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(m.name || ''))
-  const displayMatches = (!isWholesaleQuery && nonWholesaleMatches.length > 0) ? nonWholesaleMatches : searchResult.matches
+  const isTierComparisonGeneric = Boolean(searchResult.parsedQuery?.isPriceTierComparison || parsedQuery?.isPriceTierComparison)
+  const effectiveSaleUnitGeneric = searchResult.parsedQuery?.saleUnit || parsedQuery?.saleUnit
+  const isWholesaleQuery =
+    effectiveSaleUnitGeneric === 'CX' ||
+    effectiveSaleUnitGeneric === 'FD' ||
+    /\b(?:caixa|caixas|cx|cxs|fardo|fardos|display|displays|revenda)\b|\b\d+\s*x\b/i.test(normalizedQuery)
+  const isWholesaleName = (name: string) => /\b\d+\s*x\s*\d+|\b(?:cx|caixa|fardo|display|fd)\b/i.test(name || '')
+  const wholesaleMatches = searchResult.matches.filter(m => isWholesaleName(m.name || '') || (m.packageFactor && m.packageFactor > 1))
+  const nonWholesaleMatches = searchResult.matches.filter(m => !isWholesaleName(m.name || ''))
+  const displayMatches = isTierComparisonGeneric
+    ? searchResult.matches
+    : isWholesaleQuery
+    ? (wholesaleMatches.length > 0 ? wholesaleMatches : searchResult.matches)
+    : (nonWholesaleMatches.length > 0 ? nonWholesaleMatches : searchResult.matches)
 
-  const segments = detectProductSegments(searchResult.matches)
+  const segments = detectProductSegments(displayMatches)
   const availableSizes = extractAvailableSizes(displayMatches)
 
   // É consulta ampla se o cliente fez uma pergunta genérica (sem marca/tamanho) E há mais de 2 produtos,
   // ou se o catálogo possui segmentos com finalidades distintas
-  const isBroadQuery = (isGeneric && searchResult.matches.length > 2) || (segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete)\b/i.test(normalizedQuery))
+  const isBroadQuery = !isWholesaleQuery && !isTierComparisonGeneric && ((isGeneric && searchResult.matches.length > 2) || (segments.segmentLabels.length > 1 && !/\b(?:1kg|2kg|cx|caixa|\d+g|barra|tablete|uht)\b/i.test(normalizedQuery)))
 
   const payload: any = {
     strategy: 'generic_discovery',

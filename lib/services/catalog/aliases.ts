@@ -11,7 +11,9 @@ export const STOP_WORDS = new Set([
   'favor', 'por', 'acaso', 'gentileza',
   'ai', 'aqui', 'la', 'ainda', 'tambem',
   'algum', 'alguma', 'alguns', 'algumas',
-  'amigo', 'amiga', 'moco', 'veja', 'olha'
+  'amigo', 'amiga', 'moco', 'veja', 'olha',
+  'nesse', 'nessa', 'neste', 'nesta', 'desse', 'dessa', 'deste', 'desta',
+  'orcamento', 'pedido', 'carrinho', 'acrescenta', 'adiciona', 'coloca'
 ])
 
 export interface MultiWordToken {
@@ -30,7 +32,7 @@ export const MULTI_WORD_TOKENS: MultiWordToken[] = [
   { canonical: 'creme de leite', variants: ['creme de leite', 'creme leite', 'crem de leite'], category: 'Laticínios' },
   { canonical: 'doce de leite', variants: ['doce de leite', 'doce leite'], category: 'Doces' },
   { canonical: 'leite em po', variants: ['leite em po', 'leite em pó', 'leite po', 'leitepo'], category: 'Laticínios' },
-  { canonical: 'semi desnatado', variants: ['semi desnatado', 'semi-desnatado', 'semidesnatado'], flavor: 'semidesnatado' },
+  { canonical: 'semidesnatado', variants: ['semi desnatado', 'semi-desnatado', 'semidesnatado'], flavor: 'semidesnatado' },
   { canonical: 'zero lactose', variants: ['zero lactose', '0 lactose', 'sem lactose', 'zero lact', '0% lactose', 'zero lactos'], flavor: 'zero lactose' },
   { canonical: 'chocolate em po', variants: ['chocolate em po', 'choc em po', 'chocolate em pó', 'choc em pó', 'choc po'], category: 'Chocolate em Pó', form: 'po' },
   { canonical: 'pasta americana', variants: ['pasta americana', 'pasta americ'], category: 'Confeitaria', form: 'pasta' },

@@ -19,6 +19,8 @@ const InputSchema = z.object({
     .describe('Identificador, SKU, nome do produto ou referência ordinal ("1", "2", "primeiro", "segundo", "último", etc.)'),
   quantity: z.number().int().positive().optional()
     .describe('Nova quantidade inteira desejada (obrigatório para "update_quantity")'),
+  unit: z.string().optional()
+    .describe('Unidade da nova quantidade (ex: "caixa", "cx", "fardo", "fd", "unidade"). Se caixa ou fardo, o sistema converte automaticamente para o fator de embalagem.'),
   replacement_query: z.string().optional()
     .describe('Termo de busca para o produto substituto (obrigatório para "replace_item")'),
   price_type: z.string().optional()
@@ -31,7 +33,7 @@ export const gerenciarCarrinhoTool: ToolDefinition = {
   metadata: { category: 'cart', capabilities: ['cart.manage', 'cart.update'] },
   schema: InputSchema,
   execute: async (input, context) => {
-    const { action, product_reference, quantity, replacement_query, price_type } = input as z.infer<typeof InputSchema>
+    const { action, product_reference, quantity, unit, replacement_query, price_type } = input as z.infer<typeof InputSchema>
     const currentMemory = context.workingMemory
     const cart = currentMemory?.activeCart || []
 
@@ -117,12 +119,51 @@ export const gerenciarCarrinhoTool: ToolDefinition = {
         }
       }
 
-      // Reprecificação via motor oficial em lote (avalia faixas de atacado e regras vigentes)
+      // Detecção de unidade de embalagem (caixa / fardo) e conversão para unidades-base
+      const normUnit = (unit || '').toLowerCase().trim()
+      const isWholesaleUnit = /^(?:cx|caixa|caixas|fardo|fardos|fd|display|displays)$/i.test(normUnit)
+      const targetPkgFactor = targetItem.packageFactor
+      const isTargetWholesale = Boolean(targetItem.requestedUnit && /^(?:cx|caixa|caixas|fardo|fardos|fd)$/i.test(targetItem.requestedUnit))
+
+      let effectiveBaseQty = quantity
+      let newRequestedQty = quantity
+      let newRequestedUnit = targetItem.requestedUnit || 'UN'
+
+      if (targetPkgFactor && targetPkgFactor > 1) {
+        const isAlreadyMultiplied =
+          quantity >= targetPkgFactor &&
+          quantity % targetPkgFactor === 0 &&
+          Boolean(
+            context.currentUserMessage &&
+            new RegExp(`\\b${quantity / targetPkgFactor}\\b`).test(context.currentUserMessage) &&
+            !new RegExp(`\\b${quantity}\\b`).test(context.currentUserMessage)
+          )
+
+        if (isAlreadyMultiplied) {
+          effectiveBaseQty = quantity
+          newRequestedQty = quantity / targetPkgFactor
+          newRequestedUnit = isWholesaleUnit
+            ? (/^(?:fd|fardo|fardos)$/i.test(normUnit) ? 'FD' : 'CX')
+            : (targetItem.requestedUnit || 'CX')
+        } else if (isWholesaleUnit) {
+          effectiveBaseQty = quantity * targetPkgFactor
+          newRequestedQty = quantity
+          newRequestedUnit = /^(?:fd|fardo|fardos)$/i.test(normUnit) ? 'FD' : 'CX'
+        } else if (isTargetWholesale && quantity < targetPkgFactor) {
+          // Se o item já estava em caixa/fardo e a nova quantidade solicitada é pequena (ex: 3 caixas em vez de 2 caixas),
+          // o número refere-se à quantidade de caixas, e não unidades avulsas
+          effectiveBaseQty = quantity * targetPkgFactor
+          newRequestedQty = quantity
+          newRequestedUnit = targetItem.requestedUnit || 'UN'
+        }
+      }
+
+      // Reprecificação via motor oficial em lote com a quantidade base convertida
       const batchResult = await resolveBatchProductPrices({
         companyId: context.companyId,
         items: [{
           productId: targetItem.productId,
-          quantity,
+          quantity: effectiveBaseQty,
           priceType: price_type
         }]
       })
@@ -130,13 +171,17 @@ export const gerenciarCarrinhoTool: ToolDefinition = {
       const priceResult = batchResult.items[0]
       const isConfirmed = priceResult?.status === 'confirmed' && (priceResult.unitPriceCents > 0 || priceResult.unitPrice > 0)
       const unitPriceCents = priceResult?.unitPriceCents ?? Math.round((priceResult?.unitPrice || 0) * 100)
-      const subtotalCents = priceResult?.subtotalCents ?? (unitPriceCents * quantity)
+      const subtotalCents = priceResult?.subtotalCents ?? (unitPriceCents * effectiveBaseQty)
       const unitPrice = unitPriceCents / 100
       const subtotal = subtotalCents / 100
 
       const updatedItem = {
         ...targetItem,
-        quantity,
+        quantity: effectiveBaseQty,
+        requestedQuantity: newRequestedQty,
+        requestedUnit: newRequestedUnit,
+        packageFactor: targetPkgFactor,
+        internalQuantity: effectiveBaseQty,
         unitPrice,
         subtotal,
         unitPriceCents,
@@ -147,7 +192,7 @@ export const gerenciarCarrinhoTool: ToolDefinition = {
         status: isConfirmed ? ('confirmed' as const) : ('pending' as const)
       }
 
-      const tempMemory = updateCartItemQuantity(currentMemory, targetItem.productId, quantity)
+      const tempMemory = updateCartItemQuantity(currentMemory, targetItem.productId, effectiveBaseQty)
       const totals = calculateCartTotal({
         ...tempMemory,
         activeCart: (tempMemory.activeCart || []).map(i => i.productId === targetItem.productId ? updatedItem : i)
@@ -162,7 +207,10 @@ export const gerenciarCarrinhoTool: ToolDefinition = {
           total_confirmed: totals.total,
           total_confirmed_cents: totals.totalConfirmedCents,
           total_pending_cents: totals.totalPendingCents,
-          has_pending_items: totals.hasPendingItems
+          has_pending_items: totals.hasPendingItems,
+          consultative_hint: targetPkgFactor && targetPkgFactor > 1 && newRequestedQty !== effectiveBaseQty
+            ? `Quantidade atualizada para ${newRequestedQty} ${newRequestedQty === 1 ? 'caixa' : 'caixas'} (${effectiveBaseQty} unidades no total) a R$ ${unitPrice.toFixed(2)} cada = R$ ${subtotal.toFixed(2)}. Total geral do carrinho: R$ ${totals.total.toFixed(2)}.`
+            : `Quantidade atualizada para ${effectiveBaseQty} unidades a R$ ${unitPrice.toFixed(2)} cada = R$ ${subtotal.toFixed(2)}. Total geral do carrinho: R$ ${totals.total.toFixed(2)}.`
         }
       }
     }

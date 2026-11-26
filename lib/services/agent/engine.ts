@@ -479,7 +479,8 @@ export async function runAgentEngine({
             conversationId,
             customerId: conversation?.customer_id || undefined,
             workingMemory: currentWorkingMemory, // Propagação viva da memória de trabalho atualizada
-            adminClient: supabase
+            adminClient: supabase,
+            currentUserMessage: userMessage
           })
           const toolDuration = Date.now() - toolStart
           toolTimings.push({ tool: call.toolName, duration_ms: toolDuration, success: result.success })

@@ -48,6 +48,7 @@ export interface StructuredParsedQuery {
   phoneticTokens: string[]
   isCostBenefitQuery: boolean
   isCheapestQuery: boolean
+  isPriceTierComparison?: boolean
   multiProducts?: StructuredParsedQuery[]
 }
 
@@ -183,9 +184,14 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
     workingText = workingText.replace(recipeActionMatch[0], ' ')
   }
 
-  // 4. Detecção de Intenções Especiais (Custo-Benefício, Mais Barato, Casquinha/Aplicação)
+  // 4. Detecção de Intenções Especiais (Custo-Benefício, Mais Barato, Casquinha/Aplicação, Comparação Varejo vs Atacado)
   const isCostBenefitQuery = /\b(?:qual\s+compensa\s+mais|compensa\s+mais|mais\s+em\s+conta|melhor\s+custo\s+beneficio|mais\s+economico|economizar|qual\s+compensa)\b/i.test(normalized)
   const isCheapestQuery = /\b(?:o\s+mais\s+barato|mais\s+barato|mais\s+barata|menor\s+preco|mais\s+em\s+conta)\b/i.test(normalized)
+  const mentionsRetailModality = /\b(?:varejo|unitario|avulso)\b/i.test(normalized)
+  const mentionsWholesaleModality = /\b(?:atacado|maior\s+quantidade|em\s+quantidade)\b/i.test(normalized)
+  const isPriceTierComparison =
+    (mentionsRetailModality && mentionsWholesaleModality) ||
+    /\b(?:faixas?\s+de\s+preco|tabela\s+de\s+preco|preco\s+(?:no\s+)?varejo\s+e\s+(?:no\s+)?atacado)\b/i.test(normalized)
 
   let application: StructuredParsedQuery['application'] = 'geral'
   if (/\b(?:casquinha|casquinhas|ovo\s+de\s+pascoa|ovos\s+de\s+pascoa|moldar|moldagem|banhar|banho)\b/i.test(normalized)) {
@@ -198,11 +204,12 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
     application = 'receita_festa'
   }
 
-  // 5. Unidade de Venda e Intenção de Embalagem / Atacado / Caixa Fechada vs Varejo
+  // 5. Unidade de Venda e Intenção de Embalagem / Caixa Fechada vs Unidade
+  // Nota: "atacado" isoladamente indica modalidade de preço e não deve forçar solicitação de caixa/fardo
   let saleUnit: StructuredParsedQuery['saleUnit'] = 'UN'
   if (/\b(?:fardo|fardos|fd)\b/i.test(normalized)) {
     saleUnit = 'FD'
-  } else if (/\b(?:caixa\s+fechada|display|displays|atacado|revenda)\b/i.test(normalized) || /\b(?:cx|caixa|caixas)\b/i.test(normalized)) {
+  } else if (/\b(?:caixa\s+fechada|display|displays|revenda)\b/i.test(normalized) || /\b(?:cx|caixa|caixas)\b/i.test(normalized)) {
     saleUnit = 'CX'
   } else if (/\b(?:pacote|pacotes|pct|pcts|pc)\b/i.test(normalized)) {
     saleUnit = 'PC'
@@ -249,7 +256,7 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
       if (brand) break
 
       // Checagem fonética e typo em cada palavra do workingText
-      const words = workingText.split(/\s+/).filter(w => w.length >= 4)
+      const words = workingText.split(/\s+/).filter(w => w.length >= 4 && !STOP_WORDS.has(w))
       for (const w of words) {
         const eq = areTokensEquivalent(w, key)
         if (eq.isMatch) {
@@ -345,10 +352,11 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
   }
 
   // 13. Tokens Significativos e Fonéticos Restantes
+  const MODALITY_WORDS = new Set(['varejo', 'atacado', 'unitario', 'avulso', 'faixa', 'faixas', 'tabela', 'modalidade'])
   const words = workingText
     .split(/\s+/)
     .map(w => w.trim())
-    .filter(w => w.length > 0 && !STOP_WORDS.has(w))
+    .filter(w => w.length > 0 && !STOP_WORDS.has(w) && !MODALITY_WORDS.has(w))
 
   const significantTokens: string[] = []
   const phoneticTokens: string[] = []
@@ -419,6 +427,7 @@ export function parseStructuredQuery(query: string): StructuredParsedQuery {
     phoneticTokens,
     isCostBenefitQuery,
     isCheapestQuery,
+    isPriceTierComparison,
     multiProducts
   }
 }

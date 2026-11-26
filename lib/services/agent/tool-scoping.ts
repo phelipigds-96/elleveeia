@@ -120,7 +120,7 @@ const QUOTE_PATTERNS = [
  * Padrões de fechamento de pedido, escolha de retirada/entrega ou pagamento.
  */
 export const ORDER_CLOSURE_PATTERNS = [
-  /\b(?:fechar?|finalizar?|concluir?|terminar?)\s+(?:o|meu)?\s*(?:pedido|orcamento|compra)\b/i,
+  /\b(?:fechar?|finalizar?|concluir?|terminar?)\s+(?:o|meu)?\s*(?:pedido|compra)\b/i,
   /\b(?:retirar?|retirada|pegar|buscar)\s+(?:na|em|no|pela)?\s*(?:loja|balcao|estabelecimento)\b/i,
   /\b(?:vou|quero|pode)\s+(?:retirar|ir\s+buscar|pegar)\b/i,
   /\b(?:pagar?|pagamento|pago)\s+(?:no|na|em|via|com|pelo|ato)\b/i,
@@ -133,6 +133,10 @@ export const ORDER_CLOSURE_PATTERNS = [
 export function isOrderClosureIntent(text?: string, hasCartOrQuote: boolean = false): boolean {
   if (!text || !hasCartOrQuote) return false
   const msg = normalizeText(text)
+  // Menção a orçamento ou cotação refere-se à formalização da proposta e NÃO a fechamento definitivo de pedido
+  if (/\b(?:orcamento|cotacao)\b/i.test(msg)) {
+    return false
+  }
   return ORDER_CLOSURE_PATTERNS.some(p => p.test(msg))
 }
 
@@ -402,7 +406,7 @@ export function resolveToolScope(
   }
 
   // Padrões de fechamento de pedido / checkout / retirada / pagamento
-  const hasOrderClosureIntent = hasCartOrQuote && ORDER_CLOSURE_PATTERNS.some(p => p.test(msg))
+  const hasOrderClosureIntent = isOrderClosureIntent(userMessage, hasCartOrQuote)
   if (hasOrderClosureIntent) {
     hasQuoteIntent = true
     hasHandoffIntent = true
@@ -473,7 +477,7 @@ export function resolveToolScope(
       selectedTools.add(tool)
     }
 
-    if (name === 'transferir_para_humano' && (hasHandoffIntent || hasOrderClosureIntent || hasCartOrQuote)) {
+    if (name === 'transferir_para_humano' && (hasHandoffIntent || hasOrderClosureIntent)) {
       selectedTools.add(tool)
     }
     

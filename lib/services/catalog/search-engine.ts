@@ -300,26 +300,54 @@ export function evaluateCandidateScore(
   }
 
   // 8. Avaliação de Embalagem (Unidade Avulsa vs Caixa Fechada / Atacado / Fardo)
-  const isWholesalePack = /\b\d+\s*x\s*\d+|\b(?:cx|caixa|caixas|fardo|fardos|display|displays|fd)\b/i.test(cleanName) || candidate.unit === 'CX' || candidate.unit === 'FD'
+  const isDualPack = /\bpacote\b/i.test(candidate.package_description || '') && /\bcaixa\b/i.test(candidate.package_description || '')
+  const isWholesalePack = !isDualPack && (/\b\d+\s*x\s*\d+|\b(?:cx|caixa|caixas|fardo|fardos|display|displays|fd)\b/i.test(cleanName) || candidate.unit === 'CX' || candidate.unit === 'FD')
   const requestedWholesale = parsed.saleUnit === 'CX' || parsed.saleUnit === 'FD'
   const hasConfirmedFactor = Boolean(candidate.package_factor && candidate.package_factor > 1)
 
-  if (isWholesalePack && !requestedWholesale) {
-    penalty += 45 // Penaliza caixa fechada para cliente de varejo
-    reasons.push(`Embalagem de atacado/caixa para solicitação de unidade avulsa (-45)`)
+  // 8.1 Tipo específico UHT vs Leite Condensado (evita equivalência indevida entre produtos distintos)
+  const queryWantsUht = /\buht\b/i.test(parsed.normalizedQuery)
+  const queryWantsCondensado = /\bcondensad[oa]\b/i.test(parsed.normalizedQuery)
+  const prodIsUht = /\buht\b/i.test(normName)
+  const prodIsCondensado = /\bcondensad[oa]\b/i.test(normName)
+
+  if (queryWantsUht) {
+    if (prodIsUht) {
+      score += 40
+      reasons.push(`Tipo UHT confirmado (+40)`)
+    } else if (prodIsCondensado) {
+      penalty += 55
+      reasons.push(`Leite condensado incompatível com busca explícita por leite UHT (-55)`)
+    } else {
+      penalty += 45
+      reasons.push(`Produto sem especificação UHT (-45)`)
+    }
+  } else if (queryWantsCondensado && prodIsUht && !prodIsCondensado) {
+    penalty += 55
+    reasons.push(`Leite UHT incompatível com busca por leite condensado (-55)`)
+  }
+
+  if (isWholesalePack && !requestedWholesale && !parsed.isPriceTierComparison) {
+    // Se o cliente pediu pacote (PC) ou unidade (UN), não penaliza produtos com venda por pacote
+    if (parsed.saleUnit === 'PC' && /\bpacote|pct|pc\b/i.test(candidate.package_description || '')) {
+      // Produto em pacote: compatível com venda unitária de pacote
+    } else {
+      penalty += 25 // Penaliza caixa/fardo fechado para solicitação de varejo sem eliminar produto único do catálogo
+      reasons.push(`Embalagem de atacado/caixa para solicitação de unidade avulsa (-25)`)
+    }
   } else if (!isWholesalePack && requestedWholesale) {
     if (hasConfirmedFactor) {
-      score += 25
+      score += 35
       verifiedAttributes.packaging = 'wholesale'
-      reasons.push(`Fator de embalagem confirmado no catálogo (${candidate.package_factor} un/cx) (+25)`)
+      reasons.push(`Fator de embalagem confirmado no catálogo (${candidate.package_factor} un/cx) (+35)`)
     } else {
-      penalty += 15 // Unidade avulsa sem fator cadastrado: penalidade moderada (-15)
-      reasons.push(`Unidade avulsa para solicitação de caixa/atacado (fator não cadastrado) (-15)`)
+      penalty += 25 // Unidade avulsa sem fator quando o cliente pediu caixa/fardo
+      reasons.push(`Unidade avulsa sem fator de embalagem cadastrado para solicitação de atacado (-25)`)
     }
   } else if (isWholesalePack && requestedWholesale) {
-    score += 30
+    score += 50
     verifiedAttributes.packaging = 'wholesale'
-    reasons.push(`Embalagem de atacado/caixa confirmada (+30)`)
+    reasons.push(`Embalagem de atacado/caixa confirmada (+50)`)
   }
 
   // 9. Aplicação Pretendida (Casquinha de Páscoa / Moldagem vs Recheio)
@@ -336,8 +364,8 @@ export function evaluateCandidateScore(
     }
   }
 
-  // 10. Produtos Derivados Indesejados (ex: "bombom de leite condensado" para busca "leite condensado")
-  const DERIVATIVE_PREFIXES = /\b(?:bombom|bombons|bala|balas|cocada|cocadas|fondant|picole|picoles|biscoito|biscoitos|cookies)\b/i
+  // 10. Produtos Derivados Indesejados (ex: "granulado" ou "bombom" para busca de "chocolate")
+  const DERIVATIVE_PREFIXES = /\b(?:bombom|bombons|bala|balas|cocada|cocadas|fondant|picole|picoles|biscoito|biscoitos|cookies|granulado|granulados)\b/i
   const isDerivative = DERIVATIVE_PREFIXES.test(cleanName)
   const requestedDerivative = DERIVATIVE_PREFIXES.test(parsed.originalQuery)
 
@@ -367,8 +395,8 @@ export function evaluateCandidateScore(
     }
 
     if (!tokenMatched && !isCompatibleAlternative) {
-      // Se o token for longo (>= 4 caracteres) e não bateu em nada
-      if (token.length >= 4) {
+      // Se o token for específico (>= 4 caracteres ou sigla comercial como 'uht') e não bateu em nada
+      if (token.length >= 4 || token === 'uht') {
         penalty += 10
       }
     }
@@ -393,9 +421,16 @@ export function evaluateCandidateScore(
  */
 export function rankProductsIntelligently(
   query: string,
-  candidates: StructuredProductCandidate[]
+  candidates: StructuredProductCandidate[],
+  options?: { forcedSaleUnit?: 'UN' | 'CX' | 'FD' | 'PC'; isPriceTierComparison?: boolean }
 ): IntelligentSearchResponse {
   const parsed = parseStructuredQuery(query)
+  if (options?.forcedSaleUnit) {
+    parsed.saleUnit = options.forcedSaleUnit
+  }
+  if (options?.isPriceTierComparison !== undefined) {
+    parsed.isPriceTierComparison = options.isPriceTierComparison
+  }
 
   if (!candidates || candidates.length === 0) {
     return {

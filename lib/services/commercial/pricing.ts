@@ -671,3 +671,106 @@ export function isPriceQuoteValid(
 
   return true
 }
+
+export interface ProductPriceTier {
+  id: string
+  priceType: string
+  price: number
+  minQuantity: number
+  maxQuantity: number | null
+  effectiveMaxQuantity: number | null
+  active: boolean
+}
+
+/**
+ * Lista todas as faixas de preço ativas e vigentes de uma lista de produtos no tenant,
+ * incluindo price_type (retail/wholesale), min_quantity e limites efetivos de cada faixa.
+ */
+export async function resolveProductPriceTiers(params: {
+  companyId: string
+  productIds: string[]
+  isClubEligible?: boolean
+  branchId?: string
+  channel?: string
+}): Promise<Map<string, ProductPriceTier[]>> {
+  const { companyId, productIds, isClubEligible = false, branchId, channel } = params
+  const tiersMap = new Map<string, ProductPriceTier[]>()
+
+  if (!companyId || !Array.isArray(productIds) || productIds.length === 0) {
+    return tiersMap
+  }
+
+  const supabase = createAdminClient()
+  const uniqueIds = Array.from(new Set(productIds))
+
+  const { data: rawPrices, error } = await supabase
+    .from('product_prices')
+    .select('*')
+    .eq('company_id', companyId)
+    .in('product_id', uniqueIds)
+    .eq('active', true)
+
+  if (error || !rawPrices) {
+    return tiersMap
+  }
+
+  const now = new Date()
+
+  for (const pid of uniqueIds) {
+    const validForProduct = rawPrices.filter(p => {
+      if (p.product_id !== pid || p.company_id !== companyId) return false
+      if (p.active === false) return false
+      if (p.price_type === 'club' && !isClubEligible) return false
+
+      const vFrom = parseCommercialValidityDate(p.valid_from, false)
+      if (vFrom === 'INVALID' || (vFrom && vFrom > now)) return false
+
+      const vUntil = parseCommercialValidityDate(p.valid_until, true)
+      if (vUntil === 'INVALID' || (vUntil && vUntil < now)) return false
+
+      if (vFrom && vUntil && vFrom > vUntil) return false
+      if (branchId && p.metadata?.branch_id && p.metadata.branch_id !== branchId) return false
+      if (channel && p.metadata?.channel && p.metadata.channel !== channel) return false
+      return true
+    })
+
+    // Ordena por min_quantity crescente (varejo 1+ seguido de atacado N+)
+    validForProduct.sort((a, b) => {
+      const minA = a.min_quantity != null ? Number(a.min_quantity) : 1
+      const minB = b.min_quantity != null ? Number(b.min_quantity) : 1
+      if (minA !== minB) return minA - minB
+      return Number(b.price) - Number(a.price)
+    })
+
+    const mapped: ProductPriceTier[] = validForProduct.map((p, idx) => {
+      const minQty = p.min_quantity != null ? Number(p.min_quantity) : 1
+      const explicitMax = p.max_quantity != null ? Number(p.max_quantity) : null
+      let effectiveMax = explicitMax
+
+      if (effectiveMax == null && idx + 1 < validForProduct.length) {
+        const nextMin = validForProduct[idx + 1].min_quantity != null
+          ? Number(validForProduct[idx + 1].min_quantity)
+          : null
+        if (nextMin !== null && nextMin > minQty) {
+          effectiveMax = nextMin - 1
+        }
+      }
+
+      return {
+        id: String(p.id),
+        priceType: String(p.price_type || 'retail'),
+        price: Math.round(Number(p.price) * 100) / 100,
+        minQuantity: minQty,
+        maxQuantity: explicitMax,
+        effectiveMaxQuantity: effectiveMax,
+        active: p.active !== false
+      }
+    })
+
+    if (mapped.length > 0) {
+      tiersMap.set(pid, mapped)
+    }
+  }
+
+  return tiersMap
+}

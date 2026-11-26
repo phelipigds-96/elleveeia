@@ -782,11 +782,18 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
         // o cliente solicitou uma quantidade específica com precificação confirmada, sincronizamos o item no carrinho.
         // Consultas puras de produto (specific_product, exact_match sem quantidade) NÃO inserem no carrinho automaticamente.
         if (res.data.strategy === 'quantity_pricing' && next.activeProduct && typeof next.activeQuantity === 'number' && next.activePrice) {
-          const subtotal = pricingData?.subtotal ?? Math.round(next.activePrice.unitPrice * next.activeQuantity * 100) / 100
+          const baseQty = res.data.base_quantity ?? next.activeQuantity
+          const subtotal = pricingData?.subtotal ?? Math.round(next.activePrice.unitPrice * baseQty * 100) / 100
           next = addItemToCart(next, {
             productId: next.activeProduct.id,
             name: next.activeProduct.name,
-            quantity: next.activeQuantity,
+            quantity: baseQty,
+            unit: res.data.base_unit ?? 'UN',
+            requestedQuantity: res.data.requested_quantity ?? next.activeQuantity,
+            requestedUnit: res.data.requested_unit ?? 'UN',
+            packageFactor: res.data.package_factor ?? null,
+            internalQuantity: baseQty,
+            internalUnit: res.data.base_unit ?? 'UN',
             unitPrice: next.activePrice.unitPrice,
             subtotal,
             priceType: next.activePrice.priceType,
@@ -805,6 +812,11 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
                 name: it.name,
                 quantity: it.quantity || 1,
                 unit: it.unit,
+                requestedQuantity: it.requestedQuantity ?? it.quantity,
+                requestedUnit: it.requestedUnit ?? it.unit,
+                packageFactor: it.packageFactor ?? null,
+                internalQuantity: it.internalQuantity ?? it.quantity,
+                internalUnit: it.unit,
                 unitPrice: it.unitPrice,
                 subtotal: it.subtotal,
                 unitPriceCents: it.unitPriceCents,
@@ -844,6 +856,21 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
             priceType: item.priceType
           })
         }
+        if (Array.isArray(next.activeCart)) {
+          next.activeCart = next.activeCart.map(ci =>
+            ci.productId === item.productId
+              ? {
+                  ...ci,
+                  requestedQuantity: item.requestedQuantity ?? ci.requestedQuantity,
+                  requestedUnit: item.requestedUnit ?? ci.requestedUnit,
+                  packageFactor: item.packageFactor ?? ci.packageFactor,
+                  internalQuantity: item.internalQuantity ?? item.quantity,
+                  unitPriceCents: item.unitPriceCents ?? (typeof item.unitPrice === 'number' ? Math.round(item.unitPrice * 100) : ci.unitPriceCents),
+                  subtotalCents: item.subtotalCents ?? (typeof item.subtotal === 'number' ? Math.round(item.subtotal * 100) : ci.subtotalCents)
+                }
+              : ci
+          )
+        }
       } else if (action === 'replace_item' && res.data.replaced_product_id && res.data.new_item) {
         next = replaceCartItem(next, res.data.replaced_product_id, res.data.new_item)
       }
@@ -868,14 +895,20 @@ export function applyWorkingMemoryUpdate(previous: WorkingMemory | null | undefi
           next.activeCart?.find(i => i.productId === prodId)?.name
 
         if (prodName && typeof unitPrice === 'number') {
-          const qty = res.data.quantity ?? next.activeQuantity ?? 1
+          const qty = res.data.base_quantity ?? res.data.quantity ?? next.activeQuantity ?? 1
           const subtotal = res.data.subtotal ?? Math.round(unitPrice * qty * 100) / 100
           next = addItemToCart(next, {
             productId: prodId,
             name: prodName,
             quantity: qty,
+            requestedQuantity: res.data.requested_quantity ?? qty,
+            requestedUnit: res.data.requested_unit ?? 'UN',
+            packageFactor: res.data.package_factor ?? null,
+            internalQuantity: qty,
             unitPrice,
             subtotal,
+            unitPriceCents: Math.round(unitPrice * 100),
+            subtotalCents: Math.round(subtotal * 100),
             priceType,
             isPriceConfirmed: true
           })

@@ -24,9 +24,15 @@ export function extractProductPackageFactor(product: {
   unit?: string | null
   package_description?: string | null
   metadata?: any
+  units_per_package?: number | null
 }): PackageFactorResult {
   if (!product) {
     return { factor: null, source: null, confidence: 'unconfirmed' }
+  }
+
+  // 0. Campo units_per_package direto no produto (coluna do banco de dados)
+  if (typeof product.units_per_package === 'number' && product.units_per_package > 1 && product.units_per_package <= 1000) {
+    return { factor: Math.round(product.units_per_package), source: 'metadata', confidence: 'exact' }
   }
 
   // 1. Metadata explícito do produto (ex: { package_factor: 27 }, { units_per_package: 27 }, { fator_conversao: 27 })
@@ -105,10 +111,17 @@ export interface StructuredSearchResponse {
 export async function searchProducts(
   companyId: string, 
   query: string, 
-  limit: number = 10
+  limit: number = 10,
+  options?: { forcedSaleUnit?: 'UN' | 'CX' | 'FD' | 'PC'; isPriceTierComparison?: boolean }
 ): Promise<StructuredSearchResponse> {
   const supabase = createAdminClient()
   const structuredParsed = parseStructuredQuery(query)
+  if (options?.forcedSaleUnit) {
+    structuredParsed.saleUnit = options.forcedSaleUnit
+  }
+  if (options?.isPriceTierComparison !== undefined) {
+    structuredParsed.isPriceTierComparison = options.isPriceTierComparison
+  }
   const parsed = parseQuery(query)
 
   if (!structuredParsed.normalizedQuery || structuredParsed.normalizedQuery.trim() === '') {
@@ -242,7 +255,7 @@ export async function searchProducts(
 
   // 3. Execução do Intelligent Search Engine com Ranking Determinístico
   const candidates: StructuredProductCandidate[] = validProducts.map(mapCandidateRow)
-  const rankedResponse = rankProductsIntelligently(query, candidates)
+  const rankedResponse = rankProductsIntelligently(query, candidates, options)
 
   // Mapeia os matches para a interface ProductSearchResult com compatibilidade total
   const matches: ProductSearchResult[] = rankedResponse.matches.slice(0, maxLimit).map(m => ({
@@ -277,7 +290,8 @@ function mapCandidateRow(row: any): StructuredProductCandidate {
     name: row.name,
     unit: row.unit,
     package_description: row.package_description,
-    metadata: row.metadata
+    metadata: row.metadata,
+    units_per_package: row.units_per_package
   })
 
   return {

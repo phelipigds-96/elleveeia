@@ -110,6 +110,18 @@ runSuite('Etapa AC-04.5-P0.5 — Guardas de Segurança e Confiabilidade do Runne
   'tests/ci/ac04-5-p0-5-runner-offline-guards.test.ts',
 ])
 
+runSuite('Etapa AC-04.6.1 — Compatibilidade de Preços e Segurança do Seed QA (12 Cenários)', [
+  'tests/ci/ac04-6-1-catalog-pricing-safety.test.ts',
+])
+
+runSuite('Etapa AC-04.6.4 — Correção dos Defeitos Comerciais Reais da Sofia (7 Cenários)', [
+  'tests/ci/ac04-6-4-commercial-fixes.test.ts',
+])
+
+runSuite('Etapa AC-04.6.6 — Precificação Varejo/Atacado e Clareza de Subtotal (4 Cenários)', [
+  'tests/ci/ac04-6-6-pricing-clarity-fixes.test.ts',
+])
+
 runSuite('Etapa UI-01 — Fundações Responsivas e Experiência Chrome Android (5 Cenários)', [
   'tests/ci/ui-01-conversations-responsive.test.ts',
 ])

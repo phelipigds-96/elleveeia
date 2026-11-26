@@ -646,24 +646,38 @@ describe('ELLEVEE IA — AC-04.4.1 | CORREÇÕES DE INTEGRIDADE COMERCIAL', () =
   // DOMÍNIO 3: VALIDADE DO ORÇAMENTO E PERSISTÊNCIA NO POSTGRESQL
   // ============================================================================
 
-  test('Cenário 8: calculateQuoteValidityDate respeita expressamente America/Sao_Paulo (23:59:59.999-03:00) sem drift UTC', () => {
-    // Simula execução às 22:30 BRT do dia 2026-11-22 (que em UTC já é 2026-11-23T01:30:00Z)
-    const lateNightBrt = new Date('2026-11-22T22:30:00-03:00')
-    const val3Days = calculateQuoteValidityDate(3, lateNightBrt)
+  test('Cenário 8: calculateQuoteValidityDate respeita expressamente America/Sao_Paulo (23:59:59.999-03:00) sem drift UTC', (t) => {
+    // Congela o relógio determinístico em 2026-11-24T12:00:00-03:00 sem alterar lógica de produção
+    t.mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2026-11-24T12:00:00-03:00').getTime(),
+    })
 
-    // 22 de novembro + 3 dias = 25 de novembro no calendário civil de Brasília
-    assert.equal(val3Days, '2026-11-25T23:59:59.999-03:00')
+    try {
+      // Simula execução às 22:30 BRT do dia 2026-11-22 (que em UTC já é 2026-11-23T01:30:00Z)
+      const lateNightBrt = new Date('2026-11-22T22:30:00-03:00')
+      const val3Days = calculateQuoteValidityDate(3, lateNightBrt)
 
-    // Simula execução no início da manhã às 08:00 BRT
-    const morningBrt = new Date('2026-11-22T08:00:00-03:00')
-    const valMorning = calculateQuoteValidityDate(3, morningBrt)
-    assert.equal(valMorning, '2026-11-25T23:59:59.999-03:00')
+      // 22 de novembro + 3 dias = 25 de novembro no calendário civil de Brasília
+      assert.equal(val3Days, '2026-11-25T23:59:59.999-03:00')
 
-    // isQuoteExpired avalia corretamente antes e depois do vencimento
-    const notExpired = isQuoteExpired({ validUntil: '2026-11-25T23:59:59.999-03:00' })
-    assert.equal(notExpired, false)
-    const expired = isQuoteExpired({ validUntil: '2026-11-20T23:59:59.999-03:00' })
-    assert.equal(expired, true)
+      // Simula execução no início da manhã às 08:00 BRT
+      const morningBrt = new Date('2026-11-22T08:00:00-03:00')
+      const valMorning = calculateQuoteValidityDate(3, morningBrt)
+      assert.equal(valMorning, '2026-11-25T23:59:59.999-03:00')
+
+      // isQuoteExpired avalia corretamente antes e depois do vencimento no tempo determinístico
+      const notExpired = isQuoteExpired({ validUntil: '2026-11-25T23:59:59.999-03:00' })
+      assert.equal(notExpired, false)
+      const expired = isQuoteExpired({ validUntil: '2026-11-20T23:59:59.999-03:00' })
+      assert.equal(expired, true)
+
+      // Avança para a virada do dia 26 em Brasília: orçamento de 25/11 passa a expirado
+      t.mock.timers.setTime(new Date('2026-11-26T00:00:00-03:00').getTime())
+      assert.equal(isQuoteExpired({ validUntil: '2026-11-25T23:59:59.999-03:00' }), true)
+    } finally {
+      t.mock.timers.reset()
+    }
   })
 
   test('Cenário 9: Concorrência otimista (Optimistic Concurrency) rejeita versão defasada e aceita versão esperada', async () => {

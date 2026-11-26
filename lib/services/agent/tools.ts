@@ -8,6 +8,7 @@ export interface ToolExecutionContext {
   customerId?: string
   workingMemory?: any
   adminClient?: any
+  currentUserMessage?: string
 }
 
 export interface InternalToolCall {
